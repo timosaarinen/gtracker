@@ -67,6 +67,18 @@ python tools/dev.py editor examples/campfire.gtrk.json
 Choose **Render + Play**, click a fret number, edit it in the inspector, and render
 again. Save your own work under `.local/`. See [editor controls](docs/editor.md).
 
+After configuring the desktop profile, make a local developer ZIP with:
+
+```sh
+python tools/dev.py package --profile desktop
+```
+
+The ZIP is under `.local/packages/`; it includes the tools, original example,
+scripts and dependency notices. Extract the whole folder and move it as needed.
+The packaged editor resolves resources beside its executable and suggests a
+per-user save folder, so the installation can be read-only. System runtime
+libraries remain prerequisites. This command does not publish a release.
+
 The initial phrase is original test material. The renderer produces the audio;
 there are no committed sample recordings or sound banks.
 

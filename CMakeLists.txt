@@ -156,6 +156,7 @@ if(GT_BUILD_TESTS)
       target_link_libraries(gtracker_editor_ui_tests PRIVATE gtracker_editor_state gtracker_scripts gtracker_imgui Threads::Threads)
       add_test(NAME editor_ui COMMAND gtracker_editor_ui_tests "${CMAKE_CURRENT_SOURCE_DIR}")
       add_test(NAME editor_smoke COMMAND gtracker_editor "${CMAKE_CURRENT_SOURCE_DIR}/examples/campfire.gtrk.json"
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/editor-data" --resource-dir "${CMAKE_CURRENT_SOURCE_DIR}"
         --smoke-test --frames 8 --screenshot "${CMAKE_CURRENT_BINARY_DIR}/editor-smoke.bmp")
       set_tests_properties(editor_ui editor_smoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_RENDER_DRIVER=software;SDL_AUDIODRIVER=dummy" TIMEOUT 40)

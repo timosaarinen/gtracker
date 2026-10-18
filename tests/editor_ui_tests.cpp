@@ -145,6 +145,26 @@ void render_and_dummy_audio(const Arguments& args) {
     check_ui(!editor.playing && !editor.current_audio() && SDL_GetAudioStreamQueued(editor.audio_stream) == 0,
              "undo did not stop/invalidate playback");
 }
+
+void writable_defaults(const Arguments& args) {
+    Arguments fresh = args;
+    fresh.document.clear();
+    Editor editor(fresh);
+    const auto save_path = std::filesystem::u8path(editor.path.data());
+    check_ui(save_path.parent_path() == std::filesystem::absolute(args.data_dir),
+             "new document save path is not in user data");
+    check_ui(std::filesystem::u8path(editor.script_path.data()) ==
+             std::filesystem::absolute(args.resource_dir) / "scripts/soften.lua",
+             "bundled script did not resolve from resource directory");
+    editor.run_script();
+    const auto edited = editor.document.pattern();
+    editor.save();
+    check_ui(!editor.document.dirty(), "default save did not succeed");
+    fresh.document = save_path;
+    Editor reopened(fresh);
+    check_ui(gtracker::pattern_json(reopened.document.pattern()) == gtracker::pattern_json(edited),
+             "user-data save/reopen changed musical content");
+}
 }
 
 int main(int argc, char** argv) {
@@ -153,6 +173,8 @@ int main(int argc, char** argv) {
         const auto directory = std::filesystem::current_path() / "editor-ui-test-output";
         std::filesystem::create_directories(directory);
         Arguments args;
+        args.data_dir = directory / "data";
+        args.resource_dir = std::filesystem::path(argv[1]);
         args.document = directory / std::filesystem::u8path(u8"yö-音楽.gtrk.json");
         std::filesystem::copy_file(std::filesystem::path(argv[1]) / "examples/campfire.gtrk.json", args.document,
                                    std::filesystem::copy_options::overwrite_existing);
@@ -161,6 +183,7 @@ int main(int argc, char** argv) {
         grouped_widget(host, args);
         guarded_interface(host, args);
         render_and_dummy_audio(args);
+        writable_defaults(args);
         std::filesystem::remove_all(directory);
         std::cout << "editor UI: synthetic controls/modal, stale rendering and dummy playback passed\n";
         return 0;

@@ -68,6 +68,22 @@ The full local CI command configures/builds/tests the headless preset, runs thes
 Python tests, and renders `examples/campfire.gtrk.json` to `.local/demo.wav`.
 It stops at the first failed command and retains its real return code and log.
 
+## Developer packages
+
+`python tools/dev.py package --profile desktop` incrementally builds the configured
+profile and writes `.local/packages/gtracker-<profile>-<system>-<architecture>.zip`. Use
+`--profile headless` for CLI-only packaging or `--output .local/PATH.zip` to choose
+another ignored location. Packages include resources, notices and a manifest
+with per-file SHA-256, source revision/dirty state/fingerprint, and build platform.
+A failed build or a source change during assembly leaves any previous ZIP intact.
+These are local developer bundles; no release is created and no repository
+visibility or distribution license is changed. Native system runtimes remain
+prerequisites; see the packaged README.
+
+The editor's `--data-dir` and `--resource-dir` separate writable work from bundled
+resources. The developer runner supplies `.local/` and the repository root; direct
+packaged startup uses SDL's per-user data folder and the executable directory.
+
 ## What the CI receipt proves
 
 Each attempt writes `.local/ci/runs/<UTC-and-id>/report.json`, one log per executed
@@ -101,9 +117,10 @@ model fidelity should be inferred from a green build.
 
 The `Manual cross-platform qualification` workflow is `workflow_dispatch` only.
 It supplements local checks on Linux, Windows, and an Intel macOS runner, running
-the local headless suite and compiling the desktop target. Its artifact contains
-the local CI logs and example render, not a qualified release package. Desktop
-compilation in hosted CI does not exercise a display or microphone. There are no
+the local headless suite, compiling/testing the desktop target with dummy video/
+audio, and assembling a developer ZIP. Its artifact contains local CI logs, UI
+test images, the example render and that developer bundle. Dummy checks do not
+qualify a physical display, output device or microphone. There are no
 automatic push/PR jobs, scheduled jobs, or mandatory installed Git hooks.
 
 ## Publish a small, finished change

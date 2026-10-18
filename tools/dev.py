@@ -401,6 +401,11 @@ def main(argv: list[str] | None = None) -> int:
     editor.add_argument("--smoke-test", action="store_true")
     editor.add_argument("--frames", type=int)
     editor.add_argument("--screenshot")
+    editor.add_argument("--data-dir", default=".local")
+    editor.add_argument("--resource-dir", default=str(ROOT))
+    package = commands.add_parser("package", help="Build a local relocatable developer ZIP; does not publish a release.")
+    package.add_argument("--profile", choices=PROFILES, default="desktop")
+    package.add_argument("--output")
     status = commands.add_parser("ci-status")
     status.add_argument("--json", action="store_true")
     ci = commands.add_parser("ci")
@@ -435,11 +440,14 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.json:
                 command.append("--json")
+        elif args.command == "package":
+            output = args.output or f".local/packages/gtracker-{args.profile}-{platform.system()}-{platform.machine()}.zip"
+            command = [sys.executable, str(ROOT / "tools/package.py"), "--profile", args.profile, "--output", output]
         else:
             command = [str(executable(ROOT, "desktop", "gtracker_editor")), args.file]
-            for option in ("script", "frames", "screenshot"):
+            for option in ("script", "frames", "screenshot", "data_dir", "resource_dir"):
                 if getattr(args, option) is not None:
-                    command += ["--" + option, str(getattr(args, option))]
+                    command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
         return run_command(ROOT, command, echo=not (args.command == "render" and args.json))["returncode"]

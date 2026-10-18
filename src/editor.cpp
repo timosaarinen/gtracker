@@ -38,6 +38,8 @@ struct Arguments {
     std::filesystem::path document;
     std::filesystem::path script;
     std::filesystem::path screenshot;
+    std::filesystem::path data_dir;
+    std::filesystem::path resource_dir;
     int frames = 0;
     bool smoke = false;
     bool help = false;
@@ -57,6 +59,10 @@ Arguments arguments(int argc, char* argv[]) {
             result.script = std::filesystem::u8path(value());
         } else if (argument == "--screenshot") {
             result.screenshot = std::filesystem::u8path(value());
+        } else if (argument == "--data-dir") {
+            result.data_dir = std::filesystem::u8path(value());
+        } else if (argument == "--resource-dir") {
+            result.resource_dir = std::filesystem::u8path(value());
         } else if (argument == "--frames") {
             const std::string frame_count = value();
             std::size_t consumed = 0;
@@ -111,6 +117,24 @@ Pattern initial_pattern() {
     return pattern;
 }
 
+std::filesystem::path editor_data_directory(const Arguments& args) {
+    if (!args.data_dir.empty()) return std::filesystem::absolute(args.data_dir);
+    char* location = SDL_GetPrefPath("LustOfWar", "gtracker");
+    if (!location) {
+        throw std::runtime_error(std::string("Cannot find a writable user-data folder; pass --data-dir: ") + SDL_GetError());
+    }
+    const auto path = std::filesystem::u8path(location);
+    SDL_free(location);
+    return path;
+}
+
+std::filesystem::path editor_resource_directory(const Arguments& args) {
+    if (!args.resource_dir.empty()) return std::filesystem::absolute(args.resource_dir);
+    const char* location = SDL_GetBasePath();
+    if (!location) throw std::runtime_error(std::string("Cannot find application resources: ") + SDL_GetError());
+    return std::filesystem::u8path(location);
+}
+
 struct CompletedRender {
     RenderResult audio;
     std::vector<float> times;
@@ -140,6 +164,8 @@ CompletedRender render_snapshot(const Pattern& pattern) {
 
 struct Editor {
     gtracker::EditorDocument document{initial_pattern()};
+    std::filesystem::path data_directory;
+    std::filesystem::path resource_directory;
     std::uint64_t pending_generation = 0;
     std::uint64_t rendered_generation = 0;
     std::uint64_t rendered_revision = 0;
@@ -161,8 +187,12 @@ struct Editor {
     std::array<char, 1024> confirmation_save_path{};
 
     explicit Editor(const Arguments& args) {
-        const std::string document_text = args.document.empty() ? ".local/sketch.gtrk.json" : args.document.u8string();
-        const std::string script_text = args.script.empty() ? "scripts/soften.lua" : args.script.u8string();
+        data_directory = editor_data_directory(args);
+        resource_directory = editor_resource_directory(args);
+        const std::string document_text = args.document.empty()
+            ? (data_directory / "sketch.gtrk.json").u8string() : args.document.u8string();
+        const std::string script_text = args.script.empty()
+            ? (resource_directory / "scripts/soften.lua").u8string() : args.script.u8string();
         if (document_text.size() >= path.size() || script_text.size() >= script_path.size()) {
             throw std::invalid_argument("Editor paths must fit within 1023 bytes; launch path was not loaded or applied.");
         }
@@ -413,7 +443,7 @@ void unsaved_dialog(Editor& editor) {
     if (editor.document.pending() == Pending::none) return;
     if (!ImGui::IsPopupOpen("Unsaved changes")) {
         const auto destination = editor.document.filename().empty()
-            ? std::string(".local/sketch.gtrk.json") : editor.document.filename().u8string();
+            ? (editor.data_directory / "sketch.gtrk.json").u8string() : editor.document.filename().u8string();
         std::fill(editor.confirmation_save_path.begin(), editor.confirmation_save_path.end(), '\0');
         std::copy(destination.begin(), destination.end(), editor.confirmation_save_path.begin());
         editor.message("Choose whether to save the current pattern before continuing.");
@@ -1054,7 +1084,10 @@ int main(int argc, char* argv[]) {
         const Arguments args = arguments(argc, argv);
         if (args.help) {
             std::cout << "gtracker_editor [pattern.gtrk.json] [--script PATH]\n"
+                         "                [--data-dir PATH] [--resource-dir PATH]\n"
                          "                [--smoke-test] [--frames N] [--screenshot PATH.bmp]\n\n"
+                         "Default saves go to the per-user application data folder.\n"
+                         "Bundled scripts resolve beside the executable; explicit paths use the working directory.\n"
                          "The smoke test renders a pattern and draws at least N frames (default 8).\n"
                          "Use SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software for headless smoke.\n"
                          "Screenshots are BMP files. --screenshot implies --frames 8 if omitted.\n"

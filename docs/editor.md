@@ -16,8 +16,12 @@ python tools/dev.py editor examples/campfire.gtrk.json
 
 The direct executable is `.local/build/desktop/bin/gtracker_editor` (`.exe` on
 Windows). With no pattern argument it opens a built-in eight-beat sketch and
-suggests `.local/sketch.gtrk.json` as the save path. Relative pattern and script
-paths resolve against the process working directory. The prototype's path fields
+suggests `sketch.gtrk.json` in SDL's per-user gtracker application-data folder.
+`--data-dir PATH` overrides that folder. Bundled scripts resolve beside the
+executable; `--resource-dir PATH` overrides that resource root. Explicit pattern,
+script and override paths resolve against the process working directory.
+`tools/dev.py editor` supplies the repository resource root and `.local/` data
+folder for development, so generated work stays ignored. The prototype's path fields
 hold at most 1,023 bytes; longer launch paths are rejected before loading or
 applying anything, so the displayed save/script path is never silently truncated.
 Pattern, WAV and Lua filenames round-trip through UTF-8 on Windows as well as
@@ -122,6 +126,7 @@ The executable accepts these flags:
 
 ```text
 gtracker_editor [pattern.gtrk.json] [--script PATH]
+                [--data-dir PATH] [--resource-dir PATH]
                 [--smoke-test] [--frames N] [--screenshot PATH.bmp]
 ```
 

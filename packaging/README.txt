@@ -1,0 +1,35 @@
+gtracker developer package
+
+This is a development build, not a qualified public release. The project has
+not selected its own distribution license. See THIRD_PARTY_NOTICES.md and the
+licenses directory for dependency notices; they do not license gtracker itself.
+
+Extract the whole gtracker folder. A headless package contains the CLI only.
+In a desktop package, on Windows double-click gtracker_editor.exe; on Linux/macOS
+run ./gtracker_editor. The editor opens an original built-in
+sketch. Render + Play generates its audio. See docs/editor.md for controls.
+
+Scripts are found beside the executable, regardless of the working directory.
+With no explicit document, the suggested save location is the per-user gtracker
+application-data folder, outside the installation. Use --data-dir PATH to choose
+another writable directory. Save editable copies there when opening bundled
+examples from a read-only installation. --resource-dir PATH overrides resources.
+
+Command-line examples (use .exe on Windows):
+
+  ./gtracker_cli validate examples/campfire.gtrk.json --json
+  ./gtracker_cli render examples/campfire.gtrk.json --output /writable/path/demo.wav --json
+  ./gtracker_editor --data-dir /writable/path
+
+This package includes native tools, an original score, a Lua example, schema,
+controls/model documentation and notices. It contains no recordings or weights.
+An optional Python research worker is not required to render/play authored music.
+
+Platform runtime libraries are prerequisites, not bundled here. Windows builds
+using MSVC/Clang require the Microsoft Visual C++ 2015-2022 x64 runtime. Linux
+desktop builds require the system windowing/audio libraries used by their build.
+The package manifest records the source fingerprint and build platform; that is
+provenance, not evidence that another operating system or physical device passed.
+
+Patterns, script filenames and CLI JSON use UTF-8. The bundled UI font has limited
+glyph coverage. This prototype has no microphone capture or automatic transcript.

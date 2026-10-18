@@ -1,91 +1,62 @@
 # Current handoff
 
-## Editor safeguards — 2026-10-18
+## Night shift — 2026-10-18 (in progress)
 
-Issue #1 now has Save/Discard/Cancel protection for loading/closing, grouped
-control edits and content-based savepoints (undoing to saved content clears the
-dirty marker). The UI-independent `EditorDocument` owns the same state exercised
-by headless tests. A separate desktop regression test injects synthetic input
-into native ImGui frames and checks the modal, shortcuts, drag grouping, stale
-renders and dummy audio queuing. This does not qualify physical interaction,
-listening or microphone capture; #1 remains open for those and other platforms.
+The requested work window ends at 09:51 UTC. Read README.md and AGENTS.md for
+architecture and working rules; issues #1–#7 contain the planned milestones.
 
-Windows 11 AMD64 / Clang 18.1.8: `cmake --build --preset headless --config Release`
-and the desktop equivalent passed; `ctest --preset desktop --build-config Release
---output-on-failure` passed all nine tests. A UTF-8 filename test first failed on
-Windows locale conversions in path diagnostics; those now use UTF-8, and the
-regression passes. The UI checks include dummy playback and preserve an actual
-modal framebuffer. Logs/source fingerprints are under `.local/nightshift/`.
-No DSP change was made; the original 48 kHz demo remains in `.local/demo.wav`.
+Shipped on main: `ff2e36f` adds guarded load/close, grouped control undo,
+content-based savepoints and native/synthetic UI regressions. `e3390ef` fixes
+Windows UTF-8 CLI/Lua paths and JSON failures that previously terminated on
+missing Unicode files or arbitrary-byte Lua errors. BOM/shebang script line
+numbers are retained. No instrument/DSP change has been made in these commits.
 
-CLI and Lua path handling now also use UTF-8 on Windows, including wide CRT
-arguments and native-path script reads (BOM/shebang line numbers retained).
-`python -m unittest discover -s tests -p test_cli.py -v` passes four native CLI
-integration cases. Missing Unicode paths and arbitrary-byte Lua errors originally
-crashed JSON error reporting; failures now return valid JSON and exit 2. These
-Python tests explicitly skip if no headless CLI is built. The default editor
-font still lacks some non-Latin glyphs; byte-preserving paths are not a full
-internationalized text-layout claim.
+The developer-package increment adds `python tools/dev.py package`, per-user
+save paths and executable-relative resources. The development runner explicitly
+uses ignored `.local/` for user work and the repository for resources. ZIPs carry
+source fingerprints, build options/toolchain, per-file hashes and dependency
+notices. Failed builds/source changes preserve the prior ZIP. Native system
+runtime libraries remain prerequisites; this is not a public release.
 
-## Initial bootstrap — 2026-10-18
+## Actual local evidence
 
-The starting architecture is implemented: independent C++ instrument/C ABI,
-JSON document layer, offline CLI, SDL3/ImGui/ImPlot tab editor, embedded Lua editing,
-and a Python analysis-result interface. Read README.md for the exact commands and
-current scope; AGENTS.md carries the working rules adapted from MMO.
+Windows 11 AMD64, Clang 18.1.8, CMake 3.30.0-rc4, Ninja 1.11.1, Python 3.12.6:
 
-The example is an original eight-beat phrase. At 90 BPM and a two-second render
-tail it produces 352,000 mono samples at 48 kHz (about 7.33 seconds). No recorded
-sound, weights, binary dependencies or caches are committed.
+- Headless/desktop Release builds passed. After the history refactor,
+  `ctest --preset desktop --build-config Release --output-on-failure` passed all
+  nine tests. Focused project/CLI/Lua tests passed after the UTF-8 changes.
+- The current editor-path changes passed focused `editor_ui` and `editor_smoke`.
+  The native UI test injects synthetic mouse/keyboard input, tests guarded close,
+  grouped undo, stale-render rejection, dummy audio queuing, and writable-data
+  save/reopen. Actual modal/render framebuffer captures were inspected.
+- `python -m unittest discover -s tests -p 'test_*.py' -v` passed 22 tests,
+  including native Unicode CLI execution and developer-package preservation.
+- A moved developer ZIP passed from an unrelated working directory with Windows
+  ACL write/create denial enforced on its private extracted copy. CLI
+  transform/save/reopen/render and editor dummy smoke succeeded; bundled bytes
+  stayed unchanged. Temporary ACLs were restored. Evidence, exact commands and
+  source fingerprints are in ignored `.local/nightshift/`, including
+  `relocation-96d5365c/report.json`. That report records a dirty source fingerprint,
+  not a claim that the pre-edit commit alone contained the package changes.
 
-## Verification boundary
+The original `.local/demo.wav` remains playable: renderer 0.1.0, seed 42,
+90 BPM, 48 kHz/16-bit mono, eight beats plus a two-second tail (352,000 frames).
+Generated audio, builds, ZIPs and local reports remain ignored.
 
-Bootstrap verification is on Linux x86-64 with GCC 13.3, CMake 3.31.6 and Ninja.
-The source archives are pinned and checked by SHA-256. The headless targets cover
-core behavior, the real C header/link boundary, pattern validation and persistence,
-sample timing, WAV export, and successful/failed Lua transactions. Python checks
-cover PCM analysis, actual failure receipts, CI cadence/qualification and staged
-repository-guard semantics. See the current local receipt for exact run evidence.
+## Limits and next work
 
-The native desktop target has compiled here. Its window backend was explicitly
-configured without X11/Wayland development libraries and exercised using SDL's
-dummy video driver and software renderer. An actual 1152×760 UI image was captured
-and inspected, including the string/body lanes, selected event inspector and
-rendered waveform. The bounded smoke rendered the score and completed its frames.
-This does not prove interactive input, physical playback, microphone capture,
-hardware graphics, Windows behavior or Intel Mac behavior.
+No physical window interaction, hardware playback/listening or microphone capture
+is claimed. The default UI font lacks some non-Latin glyphs even though Unicode
+filenames round-trip. The analyzer is metadata-only; no transcription exists.
+The baseline still has independent strings, static frets, damping and body taps.
 
-Core ASan/UBSan checks passed with leak detection disabled. LeakSanitizer's process
-inspection was blocked by the bootstrap environment; no leak-check result is
-claimed. Other platforms and actual musical listening remain qualification work.
-Hosted workflow configuration alone is not a cross-platform pass.
+The manual hosted workflow now includes dummy desktop tests and developer ZIPs,
+but the current GitHub CLI token received HTTP 403 listing Actions. No hosted
+night-shift result is claimed. Bootstrap Linux GCC 13.3 headless/core/dummy-UI and
+ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
+LeakSanitizer was blocked there. Intel Mac and current cross-platform
+qualification remain outstanding. Keep issue #1 open for those real checks.
 
-## Next useful work
-
-Start with [platform qualification (#1)](https://github.com/timosaarinen/gtracker/issues/1)
-on the Windows development machine and Intel Mac, then add
-[short-take recording (#2)](https://github.com/timosaarinen/gtracker/issues/2)
-with source-sample timing and an analysis proposal workflow.
-Use [the roadmap](roadmap.md) and GitHub issues for bounded tasks and acceptance
-criteria. The near-term musical target is one recorded phrase becoming editable
-tabs and then resynthesizing through this same C++ instrument.
-
-The analyzer intentionally returns metadata only, not a transcript. The current
-physical model has independent strings, static frets, damping and body taps.
-Continuous gestures, realistic contact/body coupling, paired courses, arrangement
-and room production are separate follow-up milestones.
-
-## Suggested first Codex session
-
-```text
-Work in timosaarinen/gtracker. Read AGENTS.md, README.md, docs/handoff.md and the
-selected issue. Run doctor and ci-status, then ci --if-due when required. Inspect
-the current source before changing it. Make one small usable improvement, expose
-new experimental behavior through files/CLI options, verify the actual affected
-behavior, and commit/push finished work to main. Keep personal recordings, model
-weights and generated output under .local/. Report commands actually run, the
-commit, remaining limits, and the next useful step.
-```
-
-Keep this handoff short and current. Put model details and durable designs in the
-specialist docs; put transient machine paths/process IDs in ignored local notes.
+Next: advance issue #2 with a small source-preserving take/import and explicit
+sample-to-beat workflow, then a bounded end-to-end musical feature or polish.
+Real takes, clock/latency calibration and transcription need separate evidence.

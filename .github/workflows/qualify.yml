@@ -44,6 +44,10 @@ jobs:
         run: python tools/dev.py configure --profile desktop
       - name: Compile desktop (does not exercise a real window or audio device)
         run: python tools/dev.py build --profile desktop
+      - name: Run desktop regression tests with dummy video/audio
+        run: python tools/dev.py test --profile desktop
+      - name: Assemble local developer package
+        run: python tools/dev.py package --profile desktop
       - name: Preserve qualification evidence and example render
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -52,6 +56,10 @@ jobs:
           path: |
             .local/ci/
             .local/demo.wav
+            .local/packages/*.zip
+            .local/build/desktop/Testing/Temporary/LastTest.log
+            .local/build/desktop/editor-smoke.bmp
+            .local/build/desktop/editor-unsaved-dialog.bmp
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
