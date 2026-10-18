@@ -48,25 +48,27 @@ work; no hosted workflow, public release or issue communication was triggered.
 
 ## Verified source and platforms
 
-The last clean fully qualified checkpoint is **9b01b08**. Subsequent layout
-polish passed Windows desktop29, then focused editor UI/fixtures3 after the
-sanitizer-only timeout adjustment. Its source fingerprint and framebuffer names
-are in `.local/nightshift/layout-checks.json`; clean platform runs follow its
-committed checkpoint.
+The last clean native/UI checkpoint is **44ed22e**, including the layout polish
+and sanitizer-only editor timeout adjustment. Its framebuffer names and focused
+source fingerprint are in `.local/nightshift/layout-checks.json`. The subsequent
+optional evaluation command passed five focused Python tests and its complete
+seven-case experiment in the standard-library analysis venv; fresh full Python
+checks follow that separate commit.
 
-| Platform/toolchain | Actual evidence at 9b01b08 |
+| Platform/toolchain | Actual evidence at 44ed22e |
 | --- | --- |
 | Windows 11 AMD64, i7-10700K, Clang18.1.8 Release, Python3.12.6 | Headless21; Python96 with one POSIX-only interrupt skip; desktop29; dependency-free core-only7 |
 | Ubuntu20.04.6 WSL x86_64, GCC9.4 Release, Python3.11.9 | Headless21; Python96 without skips; desktop29 |
-| Same Ubuntu, Clang10 Debug ASan/UBSan | Headless21; separately compiled actual editor UI passed under an explicit180-second bound |
+| Same Ubuntu, Clang10 Debug ASan/UBSan | Headless21; separately compiled actual editor UI/fixtures3 passed CTest with the180-second limit (UI50.18s) |
 
-Windows CI receipt: `.local/ci/runs/20261018T083236Z-0244117f/report.json`.
-Ubuntu CI receipt: `.local/qualification/ubuntu/.local/ci/runs/20261018T083259Z-7be952f2/report.json`.
-Other logs: `.local/nightshift/windows-final-{ci,core}.log`,
-`.local/qualification/ubuntu/.local/final-{desktop,clang}.log`,
-`.local/qualification/ubuntu/.local/desktop-asan-ui-direct.log`.
+Windows CI receipt: `.local/ci/runs/20261018T085704Z-26b9dba3/report.json`.
+Ubuntu CI receipt: `.local/qualification/ubuntu/.local/ci/runs/20261018T085759Z-ce545e54/report.json`.
+Other logs: `.local/nightshift/windows-layout-{ci,desktop}.log`,
+`.local/qualification/ubuntu/.local/layout-{desktop,clang}.log`,
+`.local/qualification/ubuntu/.local/layout-editor-asan-ui.log`.
+The core-only7 check last ran at9b01b08; subsequent edits are editor/config/Python.
 
-Both 53-file Windows/Linux desktop ZIPs passed manifest/hash checks after moving
+At9b01b08, both 53-file Windows/Linux desktop ZIPs passed manifest/hash checks after moving
 into Unicode/space paths and launching from an unrelated directory. Windows ACL
 write/create denial was enforced on private extracted copies; the Linux audit
 also proved that denial through WSL. CLI transform/save/validate, exact song
@@ -115,7 +117,13 @@ exposed an extra octave-low attack candidate, and a chord yielded misleading
 notes. These failures remain in
 `.local/nightshift/proposal-evaluation-eb243d7b/report.json` and `docs/proposals.md`.
 Nothing is preaccepted. No ML weights were downloaded or real-guitar accuracy
-claimed. Known-score model probes are conditioned on expected pitch and their
+claimed. `python -m analysis.evaluate --output .local/evaluations/NEW --json` now
+repeats the seven conditions, source/engine provenance and explicit pitch/onset
+metrics. `.local/evaluations/proposals-nightshift-venv-0907/report.json` completed
+all seven cases; its separate oracle reconstruction uses authored labels to
+reject the extra candidate and restore pitch/onsets/strength/damping. The result
+is byte-identical only after those known-label corrections, which are neither
+inference nor human review and are excluded from accuracy metrics. Known-score model probes are conditioned on expected pitch and their
 20dB RMS-drop measurement is not T60. Performance measurements name the Windows
 machine/workload in `docs/retained.md` and local receipts.
 

@@ -119,6 +119,44 @@ means this implemented experiment found no qualifying region, not that the
 recording is silent. This differs from the metadata worker's unavailable
 transcription capability.
 
+## Repeatable generated evaluation
+
+After building the native CLI, run:
+
+```sh
+python -m analysis.evaluate --output .local/evaluations/proposals-001 --json
+```
+
+Use a new ignored directory each time; existing output is never merged or
+removed. `--profile desktop` selects that CLI instead of the default headless
+build. No model downloads or third-party Python packages are required. The tool
+renders the original `monophonic-study.gtrk.json` and evaluates clean16/44.1/48kHz,
+duplicated-channel stereo24-bit, seeded Gaussian noise (standard deviation0.003),
+silence and an explicitly unsupported two-string chord. The stereo case copies
+one mono channel twice; it is not a real stereo capture or independent channel
+test. All PCM, preserved bundles, raw jobs, selections and results stay local.
+
+`report.json` uses `gtracker.proposal-evaluation` v1 and records source before/
+after, renderer/engine identities, interpreter/platform, source hashes, labels,
+conditions and command/job timing. Compatible pitch/onset matches are unique,
+nearest in authored-label order, within50 cents and120ms. Precision/recall and
+false/missed counts describe these generated notes; known-fingering coverage in
+the alternatives is separate from detected-string accuracy. Silence has undefined
+precision/recall, and unsupported chords have no accuracy metric. A completed
+experiment means the workflow ran, not that proposal quality passed. Failures
+retain a partial report and their owned generated files for inspection.
+
+The current experiment finds four matching notes at16/44.1kHz; 48kHz, stereo24 and
+the noise case each retain an extra octave-low attack candidate (precision0.8,
+recall1 under these tolerances). Raw jobs remain unchanged. The report's optional
+**oracle demonstration** uses known authored labels to select four candidates,
+reject extras, restore pitch/onsets/strength and add the original damping. Its
+separate score/WAV demonstrate native acceptance and correction round-trips;
+those corrections are neither inferred nor human-reviewed and are excluded from
+accuracy metrics. The report records whether that known-label reconstruction is
+byte-identical to the authored source. Real takes need separate consented data,
+labels and listening evaluation.
+
 ## Research environment and candidates
 
 Use a separate optional environment: `python -m venv .local/venvs/analysis`.
