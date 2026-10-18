@@ -246,6 +246,11 @@ struct Editor {
     std::optional<gtracker::NoteProposals> proposals;
     std::vector<int> proposal_alternatives; // -1 skips a note until explicitly chosen.
     float proposal_strength = 0.6f;
+    struct AudioOutput { SDL_AudioDeviceID id; std::string name; };
+    std::vector<AudioOutput> audio_outputs;
+    SDL_AudioDeviceID audio_output = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
+    std::string audio_output_name = "System default";
+    bool audio_outputs_queried = false, audio_output_available = true;
     SDL_AudioStream* audio_stream = nullptr;
     int audio_rate = 0;
     int audio_channels = 0;
@@ -354,6 +359,59 @@ struct Editor {
         }
         playing = false;
         play_after_render = false;
+    }
+
+    void close_audio_output() {
+        stop();
+        if (audio_stream) SDL_DestroyAudioStream(audio_stream);
+        audio_stream = nullptr;
+        audio_rate = audio_channels = 0;
+    }
+
+    void initialize_audio() {
+        if (!(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO))
+            throw std::runtime_error(std::string("Audio initialization: ")+SDL_GetError());
+    }
+
+    void refresh_audio_outputs() {
+        audio_outputs_queried = true;
+        initialize_audio();
+        int count = 0;
+        std::unique_ptr<SDL_AudioDeviceID,decltype(&SDL_free)> devices(SDL_GetAudioPlaybackDevices(&count),SDL_free);
+        if (!devices) throw std::runtime_error(std::string("Audio output discovery: ")+SDL_GetError());
+        std::vector<AudioOutput> found;
+        for (int i=0;i<count;++i) {
+            const auto name = SDL_GetAudioDeviceName(devices.get()[i]);
+            if (name) found.push_back({devices.get()[i],name});
+        }
+        audio_outputs = std::move(found);
+        audio_output_available = audio_output == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK ||
+            std::any_of(audio_outputs.begin(),audio_outputs.end(),[&](const auto& output) { return output.id == audio_output; });
+        if (!audio_output_available) {
+            close_audio_output();
+            message("Selected audio output is unavailable. Choose an output and press Play.",true);
+        }
+    }
+
+    void select_audio_output(SDL_AudioDeviceID id) {
+        std::string name = "System default";
+        if (id != SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
+            const auto found = std::find_if(audio_outputs.begin(),audio_outputs.end(),[&](const auto& output) { return output.id == id; });
+            if (found == audio_outputs.end() || !SDL_GetAudioDeviceName(id))
+                throw std::runtime_error("That audio output is unavailable. Refresh the output list.");
+            name = found->name;
+        }
+        if (id == audio_output && audio_output_available) return;
+        close_audio_output();
+        audio_output = id; audio_output_name = std::move(name); audio_output_available = true;
+        message("Audio output: "+audio_output_name+". Press Play when ready.");
+    }
+
+    void audio_device_removed(const SDL_AudioDeviceEvent& event) {
+        if (event.recording || audio_output == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK || event.which != audio_output) return;
+        close_audio_output(); audio_output_available = false;
+        audio_outputs.erase(std::remove_if(audio_outputs.begin(),audio_outputs.end(),[&](const auto& output) { return output.id == event.which; }),audio_outputs.end());
+        message("Selected audio output disconnected. Refresh outputs and choose a device.",true);
     }
 
     void changed() {
@@ -887,19 +945,21 @@ struct Editor {
         if (count > static_cast<std::size_t>(std::numeric_limits<int>::max()) / sizeof(float))
             throw std::runtime_error("Audio exceeds this prototype's playback queue limit.");
         stop();
+        if (!audio_output_available || (audio_output != SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK && !SDL_GetAudioDeviceName(audio_output))) {
+            close_audio_output(); audio_output_available = false;
+            throw std::runtime_error("Selected audio output is unavailable. Refresh outputs and choose a device.");
+        }
         if (!audio_stream || audio_rate != rate || audio_channels != channels) {
             if (audio_stream) {
                 SDL_DestroyAudioStream(audio_stream);
                 audio_stream = nullptr;
             }
-            if (!(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO)) {
-                throw std::runtime_error(std::string("Audio initialization: ") + SDL_GetError());
-            }
+            initialize_audio();
             SDL_AudioSpec spec{};
             spec.format = SDL_AUDIO_F32;
             spec.channels = channels;
             spec.freq = rate;
-            audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
+            audio_stream = SDL_OpenAudioDeviceStream(audio_output, &spec, nullptr, nullptr);
             if (!audio_stream) {
                 throw std::runtime_error(std::string("Audio output: ") + SDL_GetError());
             }
@@ -909,7 +969,9 @@ struct Editor {
         const auto bytes = count * sizeof(float);
         if (!SDL_PutAudioStreamData(audio_stream, samples, static_cast<int>(bytes)) ||
             !SDL_FlushAudioStream(audio_stream) || !SDL_ResumeAudioStreamDevice(audio_stream)) {
-            throw std::runtime_error(std::string("Audio playback: ") + SDL_GetError());
+            const std::string error = SDL_GetError();
+            close_audio_output();
+            throw std::runtime_error("Audio playback: " + error);
         }
         playing = true;
     }
@@ -1399,6 +1461,30 @@ void recovery_inspector(Editor& editor) {
     if (editor.recovery) ImGui::TextWrapped("Folder: %s",editor.recovery->directory().u8string().c_str());
 }
 
+void audio_output_options(Editor& editor) {
+    if (ImGui::Selectable("System default",editor.audio_output == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK))
+        editor.attempt([&] { editor.select_audio_output(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK); });
+    for (const auto& output : editor.audio_outputs) {
+        ImGui::PushID(static_cast<int>(output.id));
+        if (ImGui::Selectable(output.name.c_str(),editor.audio_output == output.id))
+            editor.attempt([&] { editor.select_audio_output(output.id); });
+        ImGui::PopID();
+    }
+}
+
+void audio_output_inspector(Editor& editor) {
+    if (!editor.audio_outputs_queried) editor.attempt([&] { editor.refresh_audio_outputs(); });
+    if (ImGui::Button("Refresh outputs",ImVec2(-1,0))) editor.attempt([&] { editor.refresh_audio_outputs(); });
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::BeginCombo("##audio_output",editor.audio_output_name.c_str())) {
+        audio_output_options(editor);
+        ImGui::EndCombo();
+    }
+    ImGui::TextWrapped("%s",editor.audio_output_name.c_str());
+    if (!editor.audio_output_available) ImGui::TextWrapped("Selected output is unavailable. Refresh and choose a device.");
+    ImGui::TextWrapped("Changing output stops playback. This session's choice applies to source and synth; press Play to resume.");
+}
+
 void inspector(Editor& editor) {
     const bool slide = editor.selected_gesture >= 0 && editor.selected_gesture < static_cast<int>(editor.document.pattern().gestures.size());
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), slide ? "SLIDE" : "EVENT");
@@ -1492,6 +1578,10 @@ void inspector(Editor& editor) {
         ImGui::TextUnformatted("Body mix");
         ImGui::SetNextItemWidth(-1.0f);
         edit(ImGui::SliderFloat("##body", &body_mix, 0.0f, 1.0f, "%.2f"));
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Audio output")) {
+        audio_output_inspector(editor);
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Production / room")) {
@@ -1941,6 +2031,7 @@ int run(const Arguments& args) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL3_ProcessEvent(&event);
+            if (event.type == SDL_EVENT_AUDIO_DEVICE_REMOVED) editor.audio_device_removed(event.adevice);
             if (event.type == SDL_EVENT_QUIT ||
                 (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(host.window))) {
                 editor.document.request_close();

@@ -81,6 +81,22 @@ before a pending Load does not overwrite the pattern being loaded. Failed saves
 or loads keep the current document and dialog available. Explicit bounded
 `--frames` runs still exit at the requested limit for unattended checks.
 
+## Audio output
+
+Expand **Audio output** in the inspector and use **Refresh outputs** to list
+playback devices. Choose **System default** or a named device. Discovery does
+not open a playback stream; the next **Play** opens the chosen output. Changing
+the choice stops queued sound and clears pending automatic playback, while
+keeping the score and completed render. The same choice handles source/synth
+comparison at each input's original sample rate and channel count; SDL handles
+conversion to the device format.
+
+The choice lasts for this editor session and is not part of the pattern or WAV.
+System default follows SDL's default-output routing. If a named device
+disconnects, playback stops and the editor asks for another choice. It does not
+silently select another device. Refresh after reconnecting, choose the output,
+and press Play. Dummy-driver checks do not establish physical routing or sound.
+
 ## Recovery copies
 
 While the app runs, changed unsaved scores get a normal pattern copy every five

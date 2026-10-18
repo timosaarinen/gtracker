@@ -338,3 +338,13 @@ its dummy editor after a checkpoint, validates/reopens the copy and checks the
 original bytes. Synthetic UI covers guarded recovery, undo/save/reopen and
 direct recovery-file launch; `editor-recovery-copies.bmp` was inspected. This is
 application recovery evidence, not power-loss durability or physical GUI input.
+
+The editor now offers a session-only named/default playback selector shared by
+source and synth. Discovery opens no stream; changing output stops queued sound
+and pending autoplay without changing the score or completed preview. Named
+device removal stops playback and requires an explicit new choice, with no
+silent fallback. Windows desktop29 passed; `.local/nightshift/output-checks.json`
+records the source fingerprint and synthetic/dummy-only scope. The UI test
+clicks the actual shared selector rows, checks missing/invalid outputs and input
+removal isolation, and preserves the choice across original source/synth formats.
+`editor-audio-output.bmp` was inspected. Physical routing remains unqualified.

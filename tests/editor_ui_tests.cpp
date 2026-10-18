@@ -149,6 +149,54 @@ void render_and_dummy_audio(const Arguments& args) {
              "undo did not stop/invalidate playback");
 }
 
+void output_selection(Host& host,const Arguments& args) {
+    Editor editor(args);
+    const auto generation = editor.document.generation();
+    const auto score = gtracker::pattern_json(editor.document.pattern());
+    editor.refresh_audio_outputs();
+    check_ui(!editor.audio_stream && !editor.audio_outputs.empty(),"output discovery opened a stream or found no dummy device");
+    const auto device = editor.audio_outputs.front().id;
+    bool invalid = false;
+    try { editor.select_audio_output(0); } catch (const std::exception&) { invalid = true; }
+    check_ui(invalid && editor.audio_output == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK && !editor.audio_stream,"invalid output changed the selection or opened audio");
+    editor.select_audio_output(device);
+    editor.request_render(); editor.pending.wait(); editor.poll_render(); editor.play();
+    check_ui(editor.playing && editor.audio_stream,"explicit dummy output did not receive synth audio");
+    const auto pcm = editor.rendered.audio.samples;
+    editor.play_after_render = true;
+    editor.select_audio_output(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK);
+    check_ui(!editor.playing && !editor.play_after_render && !editor.audio_stream && editor.current_audio(),"changing output kept queued audio or invalidated rendered PCM");
+    editor.play(); editor.select_audio_output(device); editor.play();
+    SDL_AudioDeviceEvent removed{}; removed.which = device; removed.recording = true;
+    editor.audio_device_removed(removed);
+    check_ui(editor.playing,"input-device removal stopped output playback");
+    removed.recording = false; editor.audio_device_removed(removed);
+    check_ui(!editor.playing && !editor.audio_stream && !editor.audio_output_available && editor.audio_output == device,"removed explicit output was silently replaced");
+    bool rejected = false;
+    try { editor.play(); } catch (const std::exception&) { rejected = true; }
+    check_ui(rejected && !editor.playing && !editor.audio_stream,"missing output fell back to the system device");
+    editor.refresh_audio_outputs(); editor.select_audio_output(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK);
+    // Click the same selectable rows used by the real output combo.
+    ImVec2 choice_min{},choice_max{};
+    auto draw = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20,20)); ImGui::SetNextWindowSize(ImVec2(500,300));
+        ImGui::Begin("Audio output regression");
+        audio_output_options(editor);
+        choice_min = ImGui::GetItemRectMin(); choice_max = ImGui::GetItemRectMax();
+        audio_output_inspector(editor);
+        ImGui::End();
+    };
+    auto click = [&](ImVec2 a,ImVec2 b,bool down) { auto& io=ImGui::GetIO(); io.AddMousePosEvent((a.x+b.x)/2,(a.y+b.y)/2); io.AddMouseButtonEvent(0,down); };
+    frame(host,draw); frame(host,draw);
+    frame(host,draw,[&] { click(choice_min,choice_max,true); });
+    frame(host,draw,[&] { click(choice_min,choice_max,false); });
+    check_ui(editor.audio_output == editor.audio_outputs.back().id,"output choice did not select the named device");
+    host.screenshot(std::filesystem::current_path()/"editor-audio-output.bmp");
+    editor.play();
+    check_ui(editor.playing && editor.current_audio() && editor.rendered.audio.samples == pcm && editor.document.generation() == generation &&
+        gtracker::pattern_json(editor.document.pattern()) == score && !editor.document.dirty(),"output routing changed score/history/render bytes");
+}
+
 void writable_defaults(const Arguments& args) {
     Arguments fresh = args;
     fresh.document.clear();
@@ -213,6 +261,9 @@ void source_workflow(Host& host, const Arguments& args, const std::filesystem::p
     source_args.document.clear();
     source_args.take = manifest;
     Editor editor(source_args);
+    editor.refresh_audio_outputs();
+    const auto output_device = editor.audio_outputs.front().id;
+    editor.select_audio_output(output_device);
     check_ui(editor.source && editor.source->take.audio.channels == 2 && editor.source->take.audio.sample_rate == 44100,
              "stereo take did not load at its original rate");
     check_ui(editor.source_playback_range().first == 44100, "source playback did not honor aligned beat zero");
@@ -237,6 +288,7 @@ void source_workflow(Host& host, const Arguments& args, const std::filesystem::p
     check_ui(editor.audio_channels == 1 && editor.audio_rate == 48000, "synth A/B did not reopen the mono renderer stream");
     editor.play_source();
     check_ui(editor.audio_channels == 2 && editor.audio_rate == 44100, "source A/B did not restore source rate/channels");
+    check_ui(editor.audio_output == output_device && editor.audio_output_available,"source/synth format changes lost the selected output");
     auto next = editor.document.pattern();
     next.bpm = 100;
     editor.commit(std::move(next), "Edited source pattern");
@@ -754,6 +806,7 @@ int main(int argc, char** argv) {
         grouped_widget(host, args);
         guarded_interface(host, args);
         render_and_dummy_audio(args);
+        output_selection(host,args);
         render_cancellation(host, args);
         writable_defaults(args);
         source_workflow(host, args, std::filesystem::path(argv[2]));
