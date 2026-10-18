@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 #include "gtracker/production.hpp"
+#include "gtracker/renderer.hpp"
 
 namespace gtracker {
 
@@ -81,6 +82,7 @@ std::string pattern_json(const Pattern& pattern);
 Pattern load_pattern(const std::filesystem::path& path);
 void save_pattern(const Pattern& pattern, const std::filesystem::path& path);
 RenderResult render_pattern(const Pattern& pattern, const RenderOptions& options = {});
+NativePerformance compile_pattern(const Pattern& pattern, int sample_rate);
 std::string render_identity(const Pattern& pattern, const RenderOptions& options = {});
 void write_wav(const std::filesystem::path& path, const std::vector<float>& samples, int sample_rate, int channels = 1);
 // Store application-captured PCM samples exactly, retaining interleaved channels.

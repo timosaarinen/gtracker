@@ -155,3 +155,15 @@ exclude instrument setup, metrics, WAV I/O and process startup. No listening
 observations or inferred performance improvement are claimed. Full settings,
 hashes, metrics and source identity are in
 `.local/nightshift/production-measurements.json`; see docs/production.md.
+
+Linux production checkpoint `abc20a0` passed headless CI (14 native, Python59
+with13 desktop skips), all21 desktop tests and14 Clang10 ASan/UBSan native tests.
+Logs: `.local/qualification/ubuntu/.local/production-{ci,desktop,sanitize}.log`.
+
+The next issue #6 foundation extracts the shared `gtracker_renderer` with copied
+absolute-frame schedules, persistent core/room state, bounded block requests,
+reset and EOF. Pattern CLI/editor now use it too; the original dry and wet WAV
+bytes remain identical. `examples/runtime_render.cpp` builds with the core-only
+profile and no authoring/desktop dependencies. Six core-only/example tests and
+focused pattern/production integration tests pass. See docs/runtime.md. Song
+arrangement, streamed WAV writing and persistent caching are the next increments.

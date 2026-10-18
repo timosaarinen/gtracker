@@ -36,6 +36,11 @@ The project layer owns optional v2 production settings, shared CLI/editor
 rendering, bounded stereo output, explicit dry bypass and declarative SHA-256
 render identities. This identity is not yet a stored audio cache or checkpoint.
 
+**gtracker_renderer** retains one core and optional production instance across
+all scheduled blocks. It consumes copied absolute-frame performance data and
+has no authoring dependencies. The project layer compiles patterns into that
+same runtime path. See [the game/runtime example](runtime.md).
+
 **gtracker_capture_io** is an SDL3 device/file-simulation layer outside the core.
 Explicit selectors, original application PCM16 and nominal sample timing are
 reported separately from real-device qualification. Python's `record-take`

@@ -4,13 +4,11 @@
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <limits>
-#include <memory>
 #include <set>
 #include <stdexcept>
 #include <system_error>
@@ -95,10 +93,6 @@ template<typename Writer> void write_file(const std::filesystem::path& path, Wri
         std::filesystem::remove(temporary, ignored);
         throw;
     }
-}
-
-void check_core(gt_result result) {
-    if (result != GT_OK) throw std::runtime_error(std::string("Synthesizer: ") + gt_result_string(result));
 }
 
 json production_value(const ProductionSettings& s) {
@@ -333,6 +327,61 @@ std::string render_identity(const Pattern& p, const RenderOptions& options) {
     return sha256(identity.dump());
 }
 
+NativePerformance compile_pattern(const Pattern& p, int sample_rate) {
+    validate_pattern(p);
+    require(sample_rate >= 8000 && sample_rate <= 192000, "sample_rate must be in 8000..192000");
+    const double seconds_per_beat = 60.0 / p.bpm;
+    auto config = gt_default_config();
+    config.sample_rate = static_cast<std::uint32_t>(sample_rate);
+    config.string_count = static_cast<std::uint32_t>(p.tuning_midi.size());
+    config.seed = p.seed;
+    config.decay_seconds = p.decay_seconds;
+    config.brightness = p.brightness;
+    config.body_mix = p.body_mix;
+    for (std::size_t i = 0; i < p.tuning_midi.size(); ++i)
+        config.tuning_hz[i] = static_cast<float>(440.0 * std::pow(2.0, (p.tuning_midi[i] - 69.0) / 12.0));
+    auto ordered = p.events;
+    std::stable_sort(ordered.begin(), ordered.end(), [](const Event& a, const Event& b) { return a.beat < b.beat; });
+    std::vector<gt_event> events;
+    const auto musical_frames = static_cast<std::uint64_t>(std::ceil(p.length_beats * seconds_per_beat * sample_rate));
+    for (const auto& source : ordered) {
+        if (source.type == "pluck") {
+            const double frequency = config.tuning_hz[source.string_index] * std::pow(2.0, source.fret / 12.0);
+            require(frequency <= sample_rate / 4.0, "Pluck '" + source.id + "' exceeds this sample rate's pitch limit; use a higher sample rate or lower fret");
+        }
+        gt_event event{};
+        event.frame = std::min(static_cast<std::uint64_t>(std::llround(source.beat * seconds_per_beat * sample_rate)), musical_frames - 1);
+        event.type = source.type == "pluck" ? GT_EVENT_PLUCK : source.type == "damp" ? GT_EVENT_DAMP : GT_EVENT_BODY_HIT;
+        event.string_index = source.type == "body_hit" ? 0 : static_cast<std::uint32_t>(source.string_index);
+        event.fret = source.fret;
+        event.strength = source.strength;
+        events.push_back(event);
+    }
+    auto ordered_gestures = p.gestures;
+    std::stable_sort(ordered_gestures.begin(), ordered_gestures.end(), [](const Gesture& a, const Gesture& b) { return a.beat < b.beat; });
+    std::vector<ScheduledSlide> slides;
+    slides.reserve(ordered_gestures.size());
+    for (const auto& gesture : ordered_gestures) {
+        ScheduledSlide slide{};
+        slide.frame = static_cast<std::uint64_t>(std::llround(gesture.beat * seconds_per_beat * sample_rate));
+        slide.string_index = static_cast<std::uint32_t>(gesture.string_index);
+        require(slide.frame < musical_frames, "Slide '" + gesture.id + "' starts beyond the pattern after sample rounding");
+        auto& points = slide.points;
+        for (const auto& source : gesture.points) {
+            const double frequency = config.tuning_hz[slide.string_index] * std::exp2(static_cast<double>(source.fret) / 12.0);
+            require(frequency <= sample_rate / 4.0, "Slide '" + gesture.id + "' exceeds this sample rate's pitch limit");
+            const auto frame = static_cast<std::uint64_t>(std::llround((gesture.beat + source.beat) * seconds_per_beat * sample_rate));
+            require(frame <= musical_frames, "Slide '" + gesture.id + "' ends beyond the pattern after sample rounding");
+            require(frame >= slide.frame && (points.empty() || frame - slide.frame > points.back().frame_offset),
+                    "Slide '" + gesture.id + "' has points closer than one sample frame; increase sample rate or separate the points");
+            points.push_back({frame - slide.frame, source.fret});
+        }
+        slides.push_back(std::move(slide));
+    }
+    return {config, p.model == "contact_0_2" ? GT_MODEL_CONTACT_0_2 : GT_MODEL_BASELINE_0_1,
+            std::move(events), std::move(slides)};
+}
+
 RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     validate_pattern(p);
     require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
@@ -346,63 +395,8 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     const double room_tail = production_tail_seconds(production);
     const double frame_count = dry_frame_count + std::ceil(room_tail * options.sample_rate);
     require(frame_count >= 1 && frame_count * channels <= max_render_samples, "Render exceeds the prototype's 32 Mi-sample buffer limit; render a shorter pattern or lower sample rate");
-    const auto dry_frames = static_cast<std::size_t>(dry_frame_count);
-    auto config = gt_default_config();
-    config.sample_rate = static_cast<std::uint32_t>(options.sample_rate);
-    config.string_count = static_cast<std::uint32_t>(p.tuning_midi.size());
-    config.seed = p.seed;
-    config.decay_seconds = p.decay_seconds;
-    config.brightness = p.brightness;
-    config.body_mix = p.body_mix;
-    for (std::size_t i = 0; i < p.tuning_midi.size(); ++i)
-        config.tuning_hz[i] = static_cast<float>(440.0 * std::pow(2.0, (p.tuning_midi[i] - 69.0) / 12.0));
-    gt_synth* raw = nullptr;
-    check_core(gt_create_model(&config, p.model == "contact_0_2" ? GT_MODEL_CONTACT_0_2 : GT_MODEL_BASELINE_0_1, &raw));
-    std::unique_ptr<gt_synth, decltype(&gt_destroy)> synth(raw, gt_destroy);
-    auto ordered = p.events;
-    std::stable_sort(ordered.begin(), ordered.end(), [](const Event& a, const Event& b) { return a.beat < b.beat; });
-    std::vector<gt_event> events;
-    const auto musical_frames = static_cast<std::uint64_t>(std::ceil(p.length_beats * seconds_per_beat * options.sample_rate));
-    for (const auto& source : ordered) {
-        if (source.type == "pluck") {
-            const double frequency = config.tuning_hz[source.string_index] * std::pow(2.0, source.fret / 12.0);
-            require(frequency <= options.sample_rate / 4.0, "Pluck '" + source.id + "' exceeds this sample rate's pitch limit; use a higher sample rate or lower fret");
-        }
-        gt_event event{};
-        event.frame = std::min(static_cast<std::uint64_t>(std::llround(source.beat * seconds_per_beat * options.sample_rate)), musical_frames - 1);
-        event.type = source.type == "pluck" ? GT_EVENT_PLUCK : source.type == "damp" ? GT_EVENT_DAMP : GT_EVENT_BODY_HIT;
-        event.string_index = source.type == "body_hit" ? 0 : static_cast<std::uint32_t>(source.string_index);
-        event.fret = source.fret;
-        event.strength = source.strength;
-        events.push_back(event);
-    }
-    auto ordered_gestures = p.gestures;
-    std::stable_sort(ordered_gestures.begin(), ordered_gestures.end(), [](const Gesture& a, const Gesture& b) { return a.beat < b.beat; });
-    std::vector<std::vector<gt_fret_point>> point_storage;
-    std::vector<gt_slide> slides;
-    point_storage.reserve(ordered_gestures.size()); slides.reserve(ordered_gestures.size());
-    for (const auto& gesture : ordered_gestures) {
-        gt_slide slide{};
-        slide.frame = static_cast<std::uint64_t>(std::llround(gesture.beat * seconds_per_beat * options.sample_rate));
-        slide.string_index = static_cast<std::uint32_t>(gesture.string_index);
-        require(slide.frame < musical_frames, "Slide '" + gesture.id + "' starts beyond the pattern after sample rounding");
-        point_storage.emplace_back();
-        auto& points = point_storage.back();
-        for (const auto& source : gesture.points) {
-            const double frequency = config.tuning_hz[slide.string_index] * std::exp2(static_cast<double>(source.fret) / 12.0);
-            require(frequency <= options.sample_rate / 4.0, "Slide '" + gesture.id + "' exceeds this sample rate's pitch limit");
-            const auto frame = static_cast<std::uint64_t>(std::llround((gesture.beat + source.beat) * seconds_per_beat * options.sample_rate));
-            require(frame <= musical_frames, "Slide '" + gesture.id + "' ends beyond the pattern after sample rounding");
-            require(frame >= slide.frame && (points.empty() || frame - slide.frame > points.back().frame_offset),
-                    "Slide '" + gesture.id + "' has points closer than one sample frame; increase sample rate or separate the points");
-            points.push_back({frame - slide.frame, source.fret});
-        }
-        slide.points = points.data(); slide.point_count = points.size();
-        slides.push_back(slide);
-    }
-    const auto loaded = gt_set_performance(synth.get(), events.data(), events.size(), slides.data(), slides.size());
-    require(loaded != GT_INVALID_ARGUMENT, "Performance curves/events conflict after sample rounding; increase sample rate or separate them");
-    check_core(loaded);
+    const auto dry_frames = static_cast<std::uint64_t>(dry_frame_count);
+    NativeRenderer renderer(compile_pattern(p, options.sample_rate), dry_frames, production);
     RenderResult result;
     result.sample_rate = options.sample_rate;
     result.channels = channels;
@@ -410,19 +404,8 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     result.identity = render_identity(p, options);
     result.samples.resize(static_cast<std::size_t>(frame_count) * static_cast<std::size_t>(channels));
     const auto start = std::chrono::steady_clock::now();
-    if (channels == 1) {
-        for (std::size_t offset = 0; offset < result.frames(); offset += 1024)
-            check_core(gt_render(synth.get(), result.samples.data() + offset, std::min<std::size_t>(1024, result.frames() - offset)));
-    } else {
-        ProductionProcessor processor(options.sample_rate, production);
-        std::array<float, 1024> dry{};
-        for (std::size_t offset = 0; offset < result.frames(); offset += dry.size()) {
-            const auto count = std::min(dry.size(), result.frames() - offset);
-            std::fill(dry.begin(), dry.end(), 0);
-            if (offset < dry_frames) check_core(gt_render(synth.get(), dry.data(), std::min(count, dry_frames - offset)));
-            processor.process(dry.data(), result.samples.data() + offset * 2, count);
-        }
-    }
+    for (std::size_t offset = 0; offset < result.frames(); offset += 1024)
+        require(renderer.read(result.samples.data() + offset * channels, std::min<std::size_t>(1024, result.frames() - offset)) > 0, "Unexpected renderer EOF");
     result.elapsed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     double squares = 0;
     const auto end_begin = result.samples.size() - std::min(result.samples.size(), static_cast<std::size_t>(options.sample_rate / 20 * channels));
