@@ -96,3 +96,9 @@ queues and saves that reference on the nominal input timeline. Generated routed
 comparison tests recover the injected sample delay while leaving the take
 uncalibrated. Equal rates, matched files and the one-frame search resolution do
 not qualify physical input/output latency or drift. See docs/alignment.md.
+
+Issue #3 core increment: `gt_create_model` explicitly selects `contact_0_2`;
+the legacy factory preserves `baseline_0_1`. Copied per-string slide points move
+contact without re-exciting vibration; damping, reset and render partitioning
+are covered by native tests. Core-only builds remain dependency-free. This is
+an experimental moving-delay model; pattern v2, Lua and editor authoring follow.

@@ -89,6 +89,26 @@ reset, how to arrange patterns, and how much tail to render.
 
 ## Deliberate limits and next research
 
+The 0.2 native core also exposes an explicitly selected experimental
+`contact_0_2` model through `gt_create_model`. `gt_create` always keeps
+`baseline_0_1`. The original `gt_config`/`gt_event` layouts and entry points are
+unchanged; new callers can use `gt_set_performance` with copied `gt_slide`
+descriptors and relative-frame fret points. No C/C++ memory layout is a file
+format. Pattern/CLI/editor support is a separate layer.
+
+The contact prototype linearly interpolates fret points at native sample
+resolution and changes a ringing string's delay length without replucking it.
+It retains damping and the final fret. A contact curve alone makes no sound.
+Same-string curves cannot overlap; conflicting plucks inside a curve are rejected.
+At a curve's end, a same-frame pluck takes precedence. Reset/copy/partition
+behavior remains deterministic within a build, with no render-time allocations.
+With no curves the explicit contact model renders the same samples as baseline.
+
+This moving-delay experiment is not a physical fret/finger collision model. It
+can introduce modulation artifacts and energy loss while delay length changes.
+Tests establish retained vibration, initial/final pitch, silence without
+excitation, damping and transport behavior, not realistic slide timbre.
+
 This baseline provides an audible, editable target for the first recording and
 tab experiments. It does **not** implement physical fret/finger contact, continuous
 slides or bends, hammer-ons, pull-offs, string collisions, pick or nail geometry,

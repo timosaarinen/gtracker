@@ -9,6 +9,7 @@
 #include <memory>
 #include <new>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -16,6 +17,8 @@ namespace {
 constexpr double kPi = 3.1415926535897932384626433832795;
 constexpr double kLogSilence = -6.9077552789821370521; // log(0.001), -60 dB.
 constexpr std::size_t kMaxEvents = 1000000;
+constexpr std::size_t kMaxSlides = 16384;
+constexpr std::size_t kMaxFretPoints = 65536;
 constexpr std::uint32_t kZeroSeedReplacement = 0x6d2b79f5u;
 
 template <typename Enum>
@@ -79,6 +82,16 @@ struct StringState {
     double previous_delayed = 0.0;
     double feedback = 0.0;
     bool active = false;
+    double contact_fret = 0.0;
+    double damping_factor = 1.0;
+    std::size_t slide_index = kMaxSlides;
+    std::size_t point_index = 0;
+};
+
+struct Slide {
+    std::uint64_t frame = 0;
+    std::uint32_t string_index = 0;
+    std::vector<gt_fret_point> points;
 };
 
 struct BodyMode {
@@ -94,9 +107,12 @@ struct BodyMode {
 
 struct gt_synth {
     gt_config config{};
+    gt_model model = GT_MODEL_BASELINE_0_1;
     std::array<StringState, GT_MAX_STRINGS> strings;
     std::array<BodyMode, 6> body;
     std::vector<gt_event> events;
+    std::vector<Slide> slides;
+    std::size_t slide_cursor = 0;
     std::size_t event_cursor = 0;
     std::uint64_t frame = 0;
     std::uint32_t rng_state = kZeroSeedReplacement;
@@ -106,6 +122,7 @@ namespace {
 
 void reset_state(gt_synth& synth) noexcept {
     synth.event_cursor = 0;
+    synth.slide_cursor = 0;
     synth.frame = 0;
     synth.rng_state = synth.config.seed == 0 ? kZeroSeedReplacement : synth.config.seed;
     for (auto& string : synth.strings) {
@@ -114,6 +131,10 @@ void reset_state(gt_synth& synth) noexcept {
         string.previous_delayed = 0.0;
         string.feedback = 0.0;
         string.active = false;
+        string.contact_fret = 0.0;
+        string.damping_factor = 1.0;
+        string.slide_index = kMaxSlides;
+        string.point_index = 0;
     }
     for (auto& mode : synth.body) {
         mode.x = 0.0;
@@ -139,6 +160,8 @@ void pluck(gt_synth& synth, const gt_event& event) noexcept {
     string.write_index = 0;
     string.previous_delayed = 0.0;
     string.active = event.strength > 0.0f;
+    string.contact_fret = event.fret;
+    string.damping_factor = 1.0;
 
     // A seeded, zero-mean initial displacement. This baseline reinitializes the
     // addressed string on a pluck; independent ringing strings are untouched.
@@ -162,6 +185,7 @@ void damp(gt_synth& synth, const gt_event& event) noexcept {
     }
     string.previous_delayed *= remaining;
     string.feedback *= remaining;
+    string.damping_factor *= remaining;
     if (event.strength == 1.0f) {
         string.active = false;
     }
@@ -182,6 +206,37 @@ void apply_event(gt_synth& synth, const gt_event& event) noexcept {
         break;
     default:
         break; // Events are validated before entering the render queue.
+    }
+}
+
+void update_contacts(gt_synth& synth) noexcept {
+    while (synth.slide_cursor < synth.slides.size() && synth.slides[synth.slide_cursor].frame == synth.frame) {
+        const auto index = synth.slide_cursor++;
+        auto& string = synth.strings[synth.slides[index].string_index];
+        string.slide_index = index;
+        string.point_index = 0;
+    }
+    for (std::uint32_t index = 0; index < synth.config.string_count; ++index) {
+        auto& string = synth.strings[index];
+        if (string.slide_index == kMaxSlides) continue;
+        const auto& slide = synth.slides[string.slide_index];
+        const auto relative = synth.frame - slide.frame;
+        while (string.point_index + 1 < slide.points.size() && slide.points[string.point_index + 1].frame_offset <= relative)
+            ++string.point_index;
+        const auto& point = slide.points[string.point_index];
+        double fret = point.fret;
+        if (string.point_index + 1 < slide.points.size()) {
+            const auto& next = slide.points[string.point_index + 1];
+            const double t = static_cast<double>(relative - point.frame_offset) / static_cast<double>(next.frame_offset - point.frame_offset);
+            fret += (static_cast<double>(next.fret) - point.fret) * t;
+        } else string.slide_index = kMaxSlides;
+        if (fret != string.contact_fret) {
+            string.contact_fret = fret;
+            const double frequency = synth.config.tuning_hz[index] * std::exp2(fret / 12.0);
+            const double filter_delay = (1.0 - static_cast<double>(synth.config.brightness)) * 0.5;
+            string.delay_samples = synth.config.sample_rate / frequency - filter_delay;
+            string.feedback = std::exp(kLogSilence / (frequency * synth.config.decay_seconds)) * string.damping_factor;
+        }
     }
 }
 
@@ -255,16 +310,30 @@ gt_config gt_default_config(void) {
 }
 
 gt_result gt_create(const gt_config* config, gt_synth** out_synth) {
+    return gt_create_model(config, GT_MODEL_BASELINE_0_1, out_synth);
+}
+
+const char* gt_model_name(gt_model model) {
+    switch (enum_value(model)) {
+    case GT_MODEL_BASELINE_0_1: return "baseline_0_1";
+    case GT_MODEL_CONTACT_0_2: return "contact_0_2";
+    default: return "unknown_model";
+    }
+}
+
+gt_result gt_create_model(const gt_config* config, gt_model model, gt_synth** out_synth) {
     if (out_synth == nullptr) {
         return GT_INVALID_ARGUMENT;
     }
     *out_synth = nullptr;
-    if (config == nullptr || !valid_config(*config)) {
+    const auto model_value = enum_value(model);
+    if (config == nullptr || !valid_config(*config) || (model_value != GT_MODEL_BASELINE_0_1 && model_value != GT_MODEL_CONTACT_0_2)) {
         return GT_INVALID_ARGUMENT;
     }
     try {
         auto synth = std::make_unique<gt_synth>();
         synth->config = *config;
+        synth->model = model;
         for (std::uint32_t i = 0; i < config->string_count; ++i) {
             const auto capacity = static_cast<std::size_t>(
                 std::ceil(static_cast<double>(config->sample_rate) / config->tuning_hz[i])) + 4;
@@ -298,13 +367,48 @@ void gt_destroy(gt_synth* synth) {
 }
 
 gt_result gt_set_events(gt_synth* synth, const gt_event* events, size_t count) {
+    return gt_set_performance(synth, events, count, nullptr, 0);
+}
+
+gt_result gt_set_performance(gt_synth* synth, const gt_event* events, size_t count,
+                             const gt_slide* slides, size_t slide_count) {
     if (synth == nullptr || (count != 0 && events == nullptr) || count > kMaxEvents) {
         return GT_INVALID_ARGUMENT;
     }
+    if ((slide_count && (!slides || synth->model != GT_MODEL_CONTACT_0_2)) || slide_count > kMaxSlides) return GT_INVALID_ARGUMENT;
     for (std::size_t i = 0; i < count; ++i) {
         if (!valid_event(synth->config, events[i]) ||
             (i != 0 && events[i].frame < events[i - 1].frame)) {
             return GT_INVALID_ARGUMENT;
+        }
+    }
+    std::array<std::uint64_t, GT_MAX_STRINGS> ends{};
+    std::array<bool, GT_MAX_STRINGS> used{};
+    std::size_t total_points = 0;
+    for (std::size_t i = 0; i < slide_count; ++i) {
+        const auto& slide = slides[i];
+        if (!slide.points || slide.point_count < 2 || slide.point_count > 256 || slide.string_index >= synth->config.string_count ||
+            (i && slide.frame < slides[i - 1].frame) || slide.points[0].frame_offset != 0 ||
+            (used[slide.string_index] && slide.frame < ends[slide.string_index]) || total_points > kMaxFretPoints - slide.point_count)
+            return GT_INVALID_ARGUMENT;
+        total_points += slide.point_count;
+        for (std::size_t p = 0; p < slide.point_count; ++p) {
+            const auto& point = slide.points[p];
+            if (!in_range(point.fret, 0, 36) || (p && point.frame_offset <= slide.points[p - 1].frame_offset) ||
+                point.frame_offset >= std::numeric_limits<std::uint64_t>::max() - slide.frame ||
+                synth->config.tuning_hz[slide.string_index] * std::exp2(static_cast<double>(point.fret) / 12.0) > synth->config.sample_rate * 0.25)
+                return GT_INVALID_ARGUMENT;
+        }
+        const auto end = slide.frame + slide.points[slide.point_count - 1].frame_offset;
+        used[slide.string_index] = true; ends[slide.string_index] = end;
+        // Events are sorted, so inspect only plucks in this slide's interval.
+        if (count) {
+            const auto first = std::lower_bound(events, events + count, slide.frame,
+                [](const gt_event& event, std::uint64_t frame) { return event.frame < frame; });
+            for (auto event = first; event != events + count && event->frame < end; ++event) {
+                if (enum_value(event->type) == GT_EVENT_PLUCK && event->string_index == slide.string_index &&
+                    (event->frame != slide.frame || event->fret != slide.points[0].fret)) return GT_INVALID_ARGUMENT;
+            }
         }
     }
     try {
@@ -312,7 +416,16 @@ gt_result gt_set_events(gt_synth* synth, const gt_event* events, size_t count) {
         if (count != 0) {
             replacement.assign(events, events + count);
         }
+        std::vector<Slide> replacement_slides;
+        replacement_slides.reserve(slide_count);
+        for (std::size_t i = 0; i < slide_count; ++i) {
+            Slide copied;
+            copied.frame = slides[i].frame; copied.string_index = slides[i].string_index;
+            copied.points.assign(slides[i].points, slides[i].points + slides[i].point_count);
+            replacement_slides.push_back(std::move(copied));
+        }
         synth->events.swap(replacement);
+        synth->slides.swap(replacement_slides);
         reset_state(*synth);
         return GT_OK;
     } catch (const std::bad_alloc&) {
@@ -336,6 +449,7 @@ gt_result gt_render(gt_synth* synth, float* mono, size_t frames) {
         return GT_INVALID_ARGUMENT;
     }
     for (std::size_t i = 0; i < frames; ++i) {
+        if (synth->model == GT_MODEL_CONTACT_0_2) update_contacts(*synth);
         while (synth->event_cursor < synth->events.size() &&
                synth->events[synth->event_cursor].frame == synth->frame) {
             apply_event(*synth, synth->events[synth->event_cursor++]);

@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define GT_VERSION "0.1.0"
+#define GT_VERSION "0.2.0"
 #define GT_VERSION_MAJOR 0
-#define GT_VERSION_MINOR 1
+#define GT_VERSION_MINOR 2
 #define GT_VERSION_PATCH 0
 #define GT_MAX_STRINGS 12
 
@@ -47,6 +47,23 @@ typedef struct gt_event {
 
 typedef struct gt_synth gt_synth;
 
+typedef enum gt_model {
+    GT_MODEL_BASELINE_0_1 = 0,
+    GT_MODEL_CONTACT_0_2 = 1 /* Experimental moving-delay contact; not calibrated physics. */
+} gt_model;
+
+typedef struct gt_fret_point {
+    uint64_t frame_offset; /* Relative to the slide start; first must be zero. */
+    float fret;           /* 0..36; linearly interpolated at native sample frames. */
+} gt_fret_point;
+
+typedef struct gt_slide {
+    uint64_t frame;
+    uint32_t string_index;
+    const gt_fret_point* points; /* Copied by gt_set_performance; never retained. */
+    size_t point_count;         /* 2..256; offsets strictly increase. */
+} gt_slide;
+
 /* Static string, never NULL; unknown result codes return "unknown result". */
 const char* gt_result_string(gt_result result);
 
@@ -55,6 +72,9 @@ gt_config gt_default_config(void);
 
 /* On failure, *out_synth is NULL when out_synth is non-NULL. */
 gt_result gt_create(const gt_config* config, gt_synth** out_synth);
+/* Explicit model selection. gt_create always selects the preserved 0.1 baseline. */
+gt_result gt_create_model(const gt_config* config, gt_model model, gt_synth** out_synth);
+const char* gt_model_name(gt_model model);
 void gt_destroy(gt_synth* synth); /* NULL is allowed. */
 
 /*
@@ -66,6 +86,18 @@ void gt_destroy(gt_synth* synth); /* NULL is allowed. */
  * fret must be 0..36, and strength must be 0..1. A plucked pitch must be <= rate/4.
  */
 gt_result gt_set_events(gt_synth* synth, const gt_event* events, size_t count);
+
+/*
+ * Copy events plus <=16,384 slides / <=65,536 total points, sorted by slide start.
+ * Slides require CONTACT_0_2, retain vibration and do not excite a silent string.
+ * Same-string slides may touch but cannot overlap. A pluck at a slide start must
+ * have its first fret; plucks strictly inside a slide are rejected. At its end,
+ * a same-frame pluck takes precedence. Damping remains effective during slides.
+ * Failure preserves the entire prior performance/state. No pointers are retained.
+ * gt_set_events is equivalent to this call with no slides, clearing old curves.
+ */
+gt_result gt_set_performance(gt_synth* synth, const gt_event* events, size_t event_count,
+                             const gt_slide* slides, size_t slide_count);
 
 /* Rewind to frame zero, preserving configuration/events and restoring the seed. */
 gt_result gt_reset(gt_synth* synth);

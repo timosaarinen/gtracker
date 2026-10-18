@@ -27,5 +27,18 @@ int main(void) {
         return 4;
     }
     gt_destroy(synth);
-    return GT_VERSION_MAJOR != 0 || GT_VERSION_MINOR != 1;
+    {
+        const gt_fret_point points[2] = {{0, 0.0f}, {100, 2.0f}};
+        const gt_slide slide = {0, 0, points, 2};
+        if (gt_create_model(&config, GT_MODEL_CONTACT_0_2, &synth) != GT_OK) return 5;
+        if (gt_set_performance(synth, NULL, 0, &slide, 1) != GT_OK ||
+            strcmp(gt_model_name(GT_MODEL_CONTACT_0_2), "contact_0_2") != 0 ||
+            gt_render(synth, silence, 8) != GT_OK) {
+            gt_destroy(synth);
+            return 6;
+        }
+        for (i = 0; i < 8; ++i) if (silence[i] != 0.0f) { gt_destroy(synth); return 7; }
+        gt_destroy(synth);
+    }
+    return GT_VERSION_MAJOR != 0 || GT_VERSION_MINOR != 2;
 }
