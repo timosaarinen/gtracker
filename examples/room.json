@@ -1,0 +1,12 @@
+{
+  "schema": "gtracker.production",
+  "version": 1,
+  "algorithm": "room_v1",
+  "enabled": true,
+  "wet": 0.18,
+  "decay_seconds": 1.2,
+  "damping": 0.35,
+  "predelay_ms": 18,
+  "width": 0.9,
+  "output_gain_db": 0
+}

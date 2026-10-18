@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -16,7 +17,7 @@ void help() {
         "Usage:\n"
         "  gtracker_cli validate PATTERN [--json]\n"
         "  gtracker_cli render PATTERN --output WAV [--sample-rate HZ] [--tail SECONDS]\n"
-        "                       [--script LUA] [--json]\n"
+        "                       [--script LUA] [--production JSON] [--bypass-production] [--json]\n"
         "  gtracker_cli transform PATTERN --script LUA --output PATTERN [--json]\n"
         "  gtracker_cli take-info TAKE [--json]\n"
         "  gtracker_cli calibration-probe --output WAV [--sample-rate HZ] [--seed N] [--json]\n"
@@ -119,12 +120,13 @@ int cli_main(int argc, char** argv) {
         if (command != "validate" && command != "render" && command != "transform" && command != "take-info") throw std::runtime_error("Unknown command: " + command);
         if (argc < 3 || std::string(argv[2]).rfind("--", 0) == 0) throw std::runtime_error("A pattern/take path is required");
         const auto input = std::filesystem::u8path(argv[2]);
-        std::filesystem::path output, script;
+        std::filesystem::path output, script, production_path;
         gtracker::RenderOptions options;
         for (int i = 3; i < argc; ++i) {
             const std::string flag = argv[i];
             if (flag == "--json") continue;
             if (flag == "--help") { help(); return 0; }
+            if (flag == "--bypass-production" && command == "render") { options.bypass_production = true; continue; }
             if (i + 1 >= argc) throw std::runtime_error("Missing value for " + flag);
             const std::string value = argv[++i];
             if (flag == "--output" || flag == "-o") output = std::filesystem::u8path(value);
@@ -134,6 +136,16 @@ int cli_main(int argc, char** argv) {
                 if (rate < 8000 || rate > 192000 || std::floor(rate) != rate) throw std::runtime_error("Sample rate must be an integer in 8000..192000");
                 options.sample_rate = static_cast<int>(rate);
             } else if (flag == "--tail" && command == "render") options.tail_seconds = number(value, "--tail");
+            else if (flag == "--production" && command == "render") {
+                production_path = std::filesystem::u8path(value);
+                if (std::filesystem::file_size(production_path) > 65536) throw std::runtime_error("Production settings exceed 64 KiB");
+                std::ifstream in(production_path, std::ios::binary);
+                if (!in) throw std::runtime_error("Cannot open production settings: " + value);
+                std::string text(65537, '\0');
+                in.read(text.data(), static_cast<std::streamsize>(text.size()));
+                text.resize(static_cast<std::size_t>(in.gcount()));
+                options.production_override = gtracker::parse_production_json(text);
+            }
             else throw std::runtime_error("Unknown or inapplicable option: " + flag);
         }
         if ((command == "validate" || command == "take-info") && (!output.empty() || !script.empty())) throw std::runtime_error(command + " does not accept --output or --script");
@@ -156,10 +168,13 @@ int cli_main(int argc, char** argv) {
         if (command != "validate" && output.empty()) throw std::runtime_error("--output is required");
         if (command == "transform" && script.empty()) throw std::runtime_error("transform requires --script");
         if (command == "render") {
-            std::error_code error;
-            const bool same_existing_file = std::filesystem::equivalent(input, output, error);
-            if (same_existing_file || std::filesystem::weakly_canonical(input) == std::filesystem::weakly_canonical(output))
-                throw std::runtime_error("Render output must differ from the pattern input");
+            for (const auto& source_path : {input, script, production_path}) {
+                if (source_path.empty()) continue;
+                std::error_code error;
+                const bool same_existing_file = std::filesystem::equivalent(source_path, output, error);
+                if (same_existing_file || std::filesystem::weakly_canonical(source_path) == std::filesystem::weakly_canonical(output))
+                    throw std::runtime_error("Render output must differ from the pattern input, script and production settings");
+            }
         }
         auto pattern = gtracker::load_pattern(input);
         if (!script.empty()) gtracker::apply_lua(pattern, script);
@@ -169,13 +184,22 @@ int cli_main(int argc, char** argv) {
             {"strings", pattern.tuning_midi.size()}, {"seed", pattern.seed}};
         if (command == "render") {
             const auto rendered = gtracker::render_pattern(pattern, options);
-            gtracker::write_wav(output, rendered.mono, rendered.sample_rate);
+            gtracker::write_wav(output, rendered.samples, rendered.sample_rate, rendered.channels);
             report["output"] = output.u8string(); report["sample_rate"] = rendered.sample_rate;
-            report["frames"] = rendered.mono.size(); report["seconds"] = static_cast<double>(rendered.mono.size()) / rendered.sample_rate;
+            report["frames"] = rendered.frames(); report["seconds"] = static_cast<double>(rendered.frames()) / rendered.sample_rate;
             report["peak"] = rendered.peak; report["rms"] = rendered.rms; report["render_ms"] = rendered.elapsed_ms;
-            report["wav_encoding"] = "PCM_S16LE_MONO";
+            report["channels"] = rendered.channels;
+            report["wav_encoding"] = rendered.channels == 2 ? "PCM_S16LE_STEREO" : "PCM_S16LE_MONO";
+            report["render_identity_sha256"] = rendered.identity;
+            report["production_tail_seconds"] = rendered.production_tail_seconds;
+            report["clipped_samples"] = rendered.clipped_samples;
+            report["end_peak_last_50ms"] = rendered.end_peak;
+            report["production_bypassed"] = options.bypass_production;
+            report["production_active"] = rendered.channels == 2;
+            const auto settings = options.production_override ? options.production_override : pattern.production;
+            report["production"] = settings ? nlohmann::json::parse(gtracker::production_json(*settings)) : nlohmann::json(nullptr);
             if (!as_json) std::cout << "Rendered " << report["seconds"] << " s to " << output.u8string()
-                << " (" << rendered.elapsed_ms << " ms synthesis, peak " << rendered.peak << ")\n";
+                << " (" << rendered.elapsed_ms << " ms render, peak " << rendered.peak << ")\n";
         } else if (command == "transform") {
             gtracker::save_pattern(pattern, output);
             report["output"] = output.u8string();

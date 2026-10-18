@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker production settings v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "version", "algorithm", "enabled", "wet", "decay_seconds", "damping", "predelay_ms", "width", "output_gain_db"],
+  "properties": {
+    "schema": {"const": "gtracker.production"},
+    "version": {"const": 1},
+    "algorithm": {"const": "room_v1"},
+    "enabled": {"type": "boolean"},
+    "wet": {"type": "number", "minimum": 0, "maximum": 1},
+    "decay_seconds": {"type": "number", "minimum": 0.1, "maximum": 8},
+    "damping": {"type": "number", "minimum": 0, "maximum": 0.95},
+    "predelay_ms": {"type": "number", "minimum": 0, "maximum": 200},
+    "width": {"type": "number", "minimum": 0, "maximum": 1},
+    "output_gain_db": {"type": "number", "minimum": -24, "maximum": 6}
+  }
+}

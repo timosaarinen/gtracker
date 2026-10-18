@@ -129,3 +129,29 @@ middle-drag pan, compact resizing and display-only wave auto scale are available
 Native math and synthetic UI checks cover pixel alignment through navigation,
 unchanged document generation/history/source bytes and refused insertion in
 retained context. The inspector now uses the full side-column height.
+
+Issue #7 increment: renderer 0.3 has a separate dependency-free `room_v1`
+production chain, optional strict v2 settings, shared CLI/editor stereo output,
+explicit whole-chain dry bypass, measured clipping/tail diagnostics and a
+versioned declarative render identity. The original dry fixture SHA-256 is
+unchanged. Settings edit/undo/save/reopen, stale renders and stereo/mono dummy
+playback pass. No song cache or arrangement transport is implied yet.
+
+Windows verification: local CI `.local/ci/runs/20261018T045839Z-897eb352/report.json`
+passed 14 native and 59 Python tests against its recorded source fingerprint.
+The prior attempt caught a stale C-version assertion, which was corrected.
+All 21 desktop tests passed separately; see
+`.local/nightshift/production-desktop-checks.json`. Actual production controls
+were captured and inspected. Linux `b5b1ead` passed all 19 desktop and 12 Clang
+ASan/UBSan native tests in the isolated Ubuntu checkout; that precedes production.
+
+Original outputs: `.local/campfire-dry.wav`, `.local/campfire-room.wav` and
+`.local/slide-room.wav`. The wet examples are 48 kHz stereo PCM16, unclipped,
+with measured quiet endings. On Windows 11 / Intel i7-10700K (8 cores, 16 logical)
+/ Clang 18.1.8 Release, three-run median audio-generation times were 15.95 ms
+for 352,000 dry frames, 28.31 ms for 446,465 room frames, and 30.35 ms for the
+430,465-frame slide/room example. These include production initialization but
+exclude instrument setup, metrics, WAV I/O and process startup. No listening
+observations or inferred performance improvement are claimed. Full settings,
+hashes, metrics and source identity are in
+`.local/nightshift/production-measurements.json`; see docs/production.md.

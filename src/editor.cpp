@@ -157,17 +157,17 @@ struct CompletedRender {
 CompletedRender render_snapshot(const Pattern& pattern) {
     CompletedRender result;
     result.audio = gtracker::render_pattern(pattern);
-    result.end_beat = static_cast<double>(result.audio.mono.size()) / result.audio.sample_rate * pattern.bpm / 60.0;
-    const std::size_t count = std::min<std::size_t>(2048, result.audio.mono.size());
+    result.end_beat = static_cast<double>(result.audio.frames()) / result.audio.sample_rate * pattern.bpm / 60.0;
+    const std::size_t count = std::min<std::size_t>(2048, result.audio.frames());
     result.times.reserve(count);
     result.beats.reserve(count);
     result.minimum.reserve(count);
     result.maximum.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
-        const std::size_t begin = i * result.audio.mono.size() / count;
-        const std::size_t end = (i + 1) * result.audio.mono.size() / count;
-        auto bounds = std::minmax_element(result.audio.mono.begin() + begin,
-                                          result.audio.mono.begin() + end);
+        const std::size_t begin = i * result.audio.frames() / count;
+        const std::size_t end = (i + 1) * result.audio.frames() / count;
+        auto bounds = std::minmax_element(result.audio.samples.begin() + begin * result.audio.channels,
+                                          result.audio.samples.begin() + end * result.audio.channels);
         const double seconds = static_cast<double>(begin + end) * 0.5 / result.audio.sample_rate;
         result.times.push_back(seconds);
         result.beats.push_back(seconds * pattern.bpm / 60.0);
@@ -298,7 +298,7 @@ struct Editor {
 
     bool rendering() const { return pending.valid(); }
     bool current_audio() const {
-        return rendered_generation == document.generation() && !rendered.audio.mono.empty();
+        return rendered_generation == document.generation() && !rendered.audio.samples.empty();
     }
 
     void stop() {
@@ -351,6 +351,13 @@ struct Editor {
         const auto bounds = timeline_extent();
         view.pan(beats, bounds.first, bounds.last);
         follow_view_fit = false;
+    }
+
+    void set_production(const gtracker::ProductionSettings& settings, const std::string& key = {}) {
+        Pattern next = document.pattern();
+        next.schema_version = 2;
+        next.production = settings;
+        commit(std::move(next), "Edited production", key);
     }
 
     void commit(Pattern next, const char* action, const std::string& edit_key = {}) {
@@ -605,9 +612,10 @@ struct Editor {
             rendered_generation = document.generation();
             rendered_revision = document.pattern().revision;
             char text[256];
-            std::snprintf(text, sizeof(text), "Rendered revision %llu in %.1f ms. Peak %.3f; RMS %.3f.",
+            std::snprintf(text, sizeof(text), "Rendered revision %llu in %.1f ms (%s). Peak %.3f; RMS %.3f; clipped %llu.",
                           static_cast<unsigned long long>(rendered_revision), rendered.audio.elapsed_ms,
-                          rendered.audio.peak, rendered.audio.rms);
+                          rendered.audio.channels == 2 ? "stereo" : "mono", rendered.audio.peak, rendered.audio.rms,
+                          static_cast<unsigned long long>(rendered.audio.clipped_samples));
             message(text);
             if (play_after_render) {
                 play_after_render = false;
@@ -625,7 +633,7 @@ struct Editor {
             request_render(true);
             return;
         }
-        queue_audio(rendered.audio.mono.data(), rendered.audio.mono.size(), rendered.audio.sample_rate, 1);
+        queue_audio(rendered.audio.samples.data(), rendered.audio.samples.size(), rendered.audio.sample_rate, rendered.audio.channels);
         message("Playing rendered revision " + std::to_string(rendered_revision) + ".");
     }
 
@@ -1018,6 +1026,28 @@ void slide_inspector(Editor& editor) {
     ImGui::PopID();
 }
 
+void production_inspector(Editor& editor) {
+    auto settings = editor.document.pattern().production.value_or(gtracker::ProductionSettings{});
+    auto edit = [&](bool changed) {
+        edit_control(editor, changed, [&](const std::string& key) { editor.set_production(settings, key); });
+    };
+    edit(ImGui::Checkbox("Room enabled", &settings.enabled));
+    ImGui::TextDisabled("room_v1 / stereo when enabled");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Artistic algorithmic space, separate from the physical instrument. Disabling bypasses the whole chain, including gain, for an exact mono dry reference. Editing stores explicit v2 settings.");
+    auto slider = [&](const char* label, const char* id, float& value, float low, float high, const char* format) {
+        ImGui::TextUnformatted(label);
+        ImGui::SetNextItemWidth(-1);
+        edit(ImGui::SliderFloat(id, &value, low, high, format));
+    };
+    slider("Wet / dry", "##room_wet", settings.wet, 0, 1, "%.2f");
+    slider("Decay target (seconds)", "##room_decay", settings.decay_seconds, 0.1f, 8, "%.2f");
+    slider("High-frequency damping", "##room_damping", settings.damping, 0, 0.95f, "%.2f");
+    slider("Pre-delay (ms)", "##room_predelay", settings.predelay_ms, 0, 200, "%.1f");
+    slider("Stereo width", "##room_width", settings.width, 0, 1, "%.2f");
+    slider("Output gain (dB)", "##room_gain", settings.output_gain_db, -24, 6, "%.1f");
+    ImGui::TextWrapped("Render again after editing. Original source playback stays unchanged.");
+}
+
 void inspector(Editor& editor) {
     const bool slide = editor.selected_gesture >= 0 && editor.selected_gesture < static_cast<int>(editor.document.pattern().gestures.size());
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), slide ? "SLIDE" : "EVENT");
@@ -1111,6 +1141,10 @@ void inspector(Editor& editor) {
         edit(ImGui::SliderFloat("##body", &body_mix, 0.0f, 1.0f, "%.2f"));
         ImGui::TreePop();
     }
+    if (ImGui::TreeNode("Production / room")) {
+        production_inspector(editor);
+        ImGui::TreePop();
+    }
     if (ImGui::TreeNode("Lua command")) {
         ImGui::SetNextItemWidth(-1.0f);
         ImGui::InputText("##script", editor.script_path.data(), editor.script_path.size());
@@ -1143,7 +1177,7 @@ gtracker::TimelineGeometry waveform(Editor& editor, float height) {
     editor.sync_timeline();
     const auto origin = ImGui::GetCursorScreenPos();
     gtracker::TimelineGeometry geometry{editor.view, origin.x + 64, origin.x + ImGui::GetContentRegionAvail().x - 20};
-    const bool has_render = !editor.rendered.audio.mono.empty();
+    const bool has_render = !editor.rendered.audio.samples.empty();
     const bool current = editor.current_audio();
     const bool source = editor.source.has_value();
     const auto before = editor.view;
@@ -1404,7 +1438,7 @@ void interface(Editor& editor) {
     } else {
         ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "%s", editor.status.c_str());
     }
-    if (!editor.rendered.audio.mono.empty() && !editor.current_audio()) {
+    if (!editor.rendered.audio.samples.empty() && !editor.current_audio()) {
         ImGui::TextDisabled("Waveform: previous revision.  Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo");
     } else {
         ImGui::TextDisabled("Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo | Delete selection");
@@ -1565,7 +1599,7 @@ int run(const Arguments& args) {
             throw std::runtime_error("UI smoke closed before its render and frame checks completed");
         }
         std::cout << "gtracker_editor: smoke passed; frames=" << frames
-                  << "; rendered_samples=" << editor.rendered.audio.mono.size()
+                  << "; rendered_samples=" << editor.rendered.audio.samples.size()
                   << "; revision=" << editor.document.pattern().revision << '\n';
     }
     return 0;

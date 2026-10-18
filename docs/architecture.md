@@ -30,6 +30,12 @@ slide curves; beat-to-frame conversion preserves their points or rejects
 sub-frame collisions rather than flattening them. Model/control state lives in
 the core and is shared by CLI/editor renders.
 
+**gtracker_production** is an independent native mono-in/stereo-out room chain.
+It retains state across blocks and has no SDL, JSON, Lua or Python dependency.
+The project layer owns optional v2 production settings, shared CLI/editor
+rendering, bounded stereo output, explicit dry bypass and declarative SHA-256
+render identities. This identity is not yet a stored audio cache or checkpoint.
+
 **gtracker_capture_io** is an SDL3 device/file-simulation layer outside the core.
 Explicit selectors, original application PCM16 and nominal sample timing are
 reported separately from real-device qualification. Python's `record-take`

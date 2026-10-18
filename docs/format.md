@@ -58,10 +58,12 @@ also requires a plucked frequency no higher than sample_rate/4. A score can thus
 be valid yet require a higher rendering sample rate for its highest note.
 
 The prototype limits a document to 1 MiB and 16,384 events, and an in-memory render
-to 32 Mi frames of mono floats. These bounds keep the first application simple.
+to 32 Mi float samples across all output channels. These bounds keep the first application simple.
 Future arrangement/streaming work must extend whole-song use without assuming
-unbounded RAM. WAV output is mono signed 16-bit PCM with clipping at [-1,1]; the
-current core already bounds its output. Source recordings are separate files.
+unbounded RAM. WAV output is mono or stereo signed 16-bit PCM with clipping at
+[-1,1]; the CLI reports pre-export peak/RMS and full-scale sample counts. Source
+recordings are separate files. Optional v2 [production settings](production.md)
+are distinct from instrument parameters and gestures; v1 remains dry.
 
 The source is intentionally readable while gestures evolve. A future compact
 encoding should preserve the declared semantics and explicit format/model version;

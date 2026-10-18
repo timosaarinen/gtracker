@@ -47,20 +47,20 @@ int main(int argc, char** argv) {
         boolean_strength.replace(value_begin, value_end - value_begin, " true");
         rejects([&] { gtracker::parse_pattern_json(boolean_strength); }, "Boolean strength was coerced to a number");
         const auto rendered = gtracker::render_pattern(pattern, {24000, 0.25});
-        check(rendered.mono.size() == 134000, "Musical timing/decay tail frame count changed");
+        check(rendered.samples.size() == 134000, "Musical timing/decay tail frame count changed");
         check(rendered.peak > 0.001f && rendered.rms > 0.0001f, "Fixture rendered silence");
-        check(gtracker::render_pattern(pattern, {24000, 0.25}).mono == rendered.mono, "Renderer lost seed reproducibility");
+        check(gtracker::render_pattern(pattern, {24000, 0.25}).samples == rendered.samples, "Renderer lost seed reproducibility");
         auto reordered = pattern;
         std::swap(reordered.events.front(), reordered.events.back());
-        check(gtracker::render_pattern(reordered, {24000, 0.25}).mono == rendered.mono, "Unsorted score changed scheduled result");
+        check(gtracker::render_pattern(reordered, {24000, 0.25}).samples == rendered.samples, "Unsorted score changed scheduled result");
         const auto temp = std::filesystem::current_path() / "project-test-output";
         std::filesystem::create_directories(temp);
         gtracker::save_pattern(pattern, temp / "roundtrip.json");
         pattern.name = "Saved twice";
         gtracker::save_pattern(pattern, temp / "roundtrip.json");
         check(gtracker::load_pattern(temp / "roundtrip.json").name == pattern.name, "Replacing existing saved pattern failed");
-        gtracker::write_wav(temp / "test.wav", rendered.mono, rendered.sample_rate);
-        check(std::filesystem::file_size(temp / "test.wav") == 44 + rendered.mono.size() * 2, "WAV PCM/header length mismatch");
+        gtracker::write_wav(temp / "test.wav", rendered.samples, rendered.sample_rate);
+        check(std::filesystem::file_size(temp / "test.wav") == 44 + rendered.samples.size() * 2, "WAV PCM/header length mismatch");
 #if GT_HAS_LUA
         const auto before = pattern.events.front().strength;
         const auto revision = pattern.revision;

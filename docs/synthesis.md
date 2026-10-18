@@ -1,6 +1,7 @@
 # Synthesis baseline
 
-Renderer version: **0.1.0**. The dependency-free library exposes the C interface
+Renderer version: **0.3.0**, preserving the explicit **baseline_0_1** sound.
+The dependency-free instrument library exposes the C interface
 in `include/gtracker/core.h`. It is shared by the editor and command-line renderer;
 it has no dependency on SDL, Lua, JSON, Python, an audio device, or sampled audio.
 
@@ -29,12 +30,12 @@ Six synthetic damped modes provide a small body contribution. String vibration
 feeds these modes in one direction; a `body_hit` directly excites them. Their
 frequencies and weights are illustrative constants, not measurements of a real
 instrument. Setting `body_mix` to zero also makes body hits inaudible. The body
-is not coupled back into the strings. There is no room reverb in this library yet.
+is not coupled back into the strings. Room production is a separate native chain.
 
 The mixed signal passes through a gentle `tanh` output stage to keep dense chords
 and repeated hits bounded in `[-1,1]`. That safeguard is not part of the physical
-model. Audio is mono float PCM; stereo microphone placement and room production
-are future work.
+model. Instrument audio is mono float PCM. The optional [production chain](production.md)
+creates stereo output; physical stereo microphone placement remains future work.
 
 ## Configuration and events
 

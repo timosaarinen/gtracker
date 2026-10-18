@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define GT_VERSION "0.2.0"
+#define GT_VERSION "0.3.0"
 #define GT_VERSION_MAJOR 0
-#define GT_VERSION_MINOR 2
+#define GT_VERSION_MINOR 3
 #define GT_VERSION_PATCH 0
 #define GT_MAX_STRINGS 12
 

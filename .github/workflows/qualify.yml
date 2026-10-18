@@ -67,6 +67,7 @@ jobs:
             .local/build/desktop/editor-slide-smoke.bmp
             .local/build/desktop/editor-slide-controls.bmp
             .local/build/desktop/editor-timeline-compact.bmp
+            .local/build/desktop/editor-production-controls.bmp
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

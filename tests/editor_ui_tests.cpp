@@ -353,10 +353,67 @@ void slide_authoring(Host& host, const Arguments& original) {
     reopened.request_render();
     reopened.pending.wait();
     reopened.poll_render();
-    check_ui(reopened.rendered.audio.mono == gtracker::render_pattern(reopened.document.pattern()).mono, "editor used different curve renderer from native CLI/library");
+    check_ui(reopened.rendered.audio.samples == gtracker::render_pattern(reopened.document.pattern()).samples, "editor used different curve renderer from native CLI/library");
     frame(host, [&] { interface(reopened); });
     frame(host, [&] { interface(reopened); });
     host.screenshot(std::filesystem::current_path() / "editor-slide-controls.bmp");
+}
+
+void production_authoring(Host& host, const Arguments& original) {
+    Arguments args = original;
+    args.document = original.document.parent_path() / "production.gtrk.json";
+    std::filesystem::copy_file(original.resource_dir / "examples/campfire.gtrk.json", args.document,
+                               std::filesystem::copy_options::overwrite_existing);
+    Editor editor(args);
+    const auto dry = gtracker::render_pattern(editor.document.pattern());
+    ImVec2 checkbox;
+    auto controls = [&] {
+        ImGui::SetNextWindowPos(ImVec2(30, 30));
+        ImGui::SetNextWindowSize(ImVec2(430, 570));
+        ImGui::Begin("Production control regression");
+        checkbox = ImGui::GetCursorScreenPos();
+        production_inspector(editor);
+        ImGui::End();
+    };
+    frame(host, controls); frame(host, controls);
+    frame(host, controls, [&] {
+        auto& io = ImGui::GetIO();
+        io.AddMousePosEvent(checkbox.x + 6, checkbox.y + 6);
+        io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    });
+    frame(host, controls, [&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false); });
+    check_ui(editor.document.pattern().production && editor.document.pattern().production->enabled && editor.document.pattern().schema_version == 2,
+             "real room checkbox did not create explicit production settings");
+    editor.undo();
+    check_ui(!editor.document.pattern().production && editor.document.pattern().schema_version == 1 && !editor.document.dirty(),
+             "room checkbox undo failed to restore the original v1 savepoint");
+    editor.undo(true);
+    auto settings = *editor.document.pattern().production;
+    settings.wet = 0.2f; editor.set_production(settings, "room-drag");
+    settings.wet = 0.3f; editor.set_production(settings, "room-drag");
+    editor.document.end_edit();
+    editor.undo();
+    check_ui(editor.document.pattern().production->wet == gtracker::ProductionSettings{}.wet, "room drag did not undo as one operation");
+    editor.undo(true);
+    editor.save();
+    Editor reopened(args);
+    check_ui(reopened.document.pattern().production->wet == 0.3f, "saved room mix did not reopen");
+    reopened.request_render(); reopened.pending.wait(); reopened.poll_render();
+    check_ui(reopened.rendered.audio.channels == 2 && reopened.rendered.audio.samples == gtracker::render_pattern(reopened.document.pattern()).samples,
+             "editor and CLI/library production render differ");
+    reopened.play();
+    check_ui(reopened.playing && reopened.audio_channels == 2 && reopened.audio_rate == 48000, "wet playback did not open stereo input");
+    reopened.stop();
+    settings = *reopened.document.pattern().production; settings.enabled = false;
+    reopened.set_production(settings);
+    check_ui(!reopened.current_audio(), "room bypass kept stale audio marked current");
+    reopened.request_render(); reopened.pending.wait(); reopened.poll_render();
+    check_ui(reopened.rendered.audio.samples == dry.samples, "editor bypass changed exact dry PCM");
+    reopened.play();
+    check_ui(reopened.audio_channels == 1, "dry playback did not restore mono stream");
+    reopened.stop();
+    frame(host, controls); frame(host, controls);
+    host.screenshot(std::filesystem::current_path() / "editor-production-controls.bmp");
 }
 
 void timeline_navigation(Host& host, const Arguments& original, const std::filesystem::path& manifest) {
@@ -441,6 +498,7 @@ int main(int argc, char** argv) {
         writable_defaults(args);
         source_workflow(host, args, std::filesystem::path(argv[2]));
         slide_authoring(host, args);
+        production_authoring(host, args);
         timeline_navigation(host, args, std::filesystem::path(argv[2]));
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");

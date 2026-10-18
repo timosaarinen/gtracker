@@ -402,6 +402,8 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--sample-rate", type=int)
     render.add_argument("--tail", type=float)
     render.add_argument("--script")
+    render.add_argument("--production")
+    render.add_argument("--bypass-production", action="store_true")
     render.add_argument("--json", action="store_true")
     editor = commands.add_parser("editor")
     editor.add_argument("file", nargs="?")
@@ -484,9 +486,10 @@ def main(argv: list[str] | None = None) -> int:
             command = ["ctest", "--preset", args.profile, "--build-config", "Release", "--output-on-failure"]
         elif args.command == "render":
             command = [str(executable(ROOT, args.profile, "gtracker_cli")), "render", args.file, "--output", args.output]
-            for option in ("sample_rate", "tail", "script"):
+            for option in ("sample_rate", "tail", "script", "production"):
                 if getattr(args, option) is not None:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
+            if args.bypass_production: command.append("--bypass-production")
             if args.json:
                 command.append("--json")
         elif args.command == "package":

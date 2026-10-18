@@ -12,6 +12,7 @@
     "length_beats": {"$ref": "pattern.schema.json#/properties/length_beats"},
     "seed": {"$ref": "pattern.schema.json#/properties/seed"},
     "events": {"$ref": "pattern.schema.json#/properties/events"},
+    "production": {"$ref": "production.schema.json"},
     "instrument": {
       "type": "object", "additionalProperties": false,
       "required": ["model", "tuning_midi", "decay_seconds", "brightness", "body_mix"],

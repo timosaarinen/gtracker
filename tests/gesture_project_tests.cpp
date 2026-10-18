@@ -25,18 +25,18 @@ void serialization_and_renderer(const std::filesystem::path& root, const std::fi
     const auto audio = gtracker::render_pattern(score);
     auto changed = score;
     changed.gestures[0].points[1].fret = 5;
-    check(gtracker::render_pattern(changed).mono != audio.mono, "interior curve point was flattened/ignored");
+    check(gtracker::render_pattern(changed).samples != audio.samples, "interior curve point was flattened/ignored");
     auto sorted = score;
     std::reverse(sorted.gestures.begin(), sorted.gestures.end());
-    check(gtracker::render_pattern(sorted).mono == audio.mono, "gesture storage order changed timing");
+    check(gtracker::render_pattern(sorted).samples == audio.samples, "gesture storage order changed timing");
     gtracker::save_pattern(score, output / "slide.json");
-    check(gtracker::render_pattern(gtracker::load_pattern(output / "slide.json")).mono == audio.mono, "saved slide cannot be reproduced");
+    check(gtracker::render_pattern(gtracker::load_pattern(output / "slide.json")).samples == audio.samples, "saved slide cannot be reproduced");
     auto v1 = gtracker::load_pattern(root / "examples/campfire.gtrk.json");
     auto contact = v1; contact.schema_version = 2; contact.model = "contact_0_2";
-    check(gtracker::render_pattern(contact).mono == gtracker::render_pattern(v1).mono, "v2 migration changed music without curves");
+    check(gtracker::render_pattern(contact).samples == gtracker::render_pattern(v1).samples, "v2 migration changed music without curves");
     check(gtracker::pattern_json(v1).find("gestures") == std::string::npos && gtracker::pattern_json(v1).find("model") == std::string::npos, "v1 silently migrated on save");
     auto silent = score; silent.events.clear();
-    const auto no_excitation = gtracker::render_pattern(silent).mono;
+    const auto no_excitation = gtracker::render_pattern(silent).samples;
     check(std::all_of(no_excitation.begin(), no_excitation.end(), [](float value) { return value == 0; }), "slide generated implicit plucks");
 
     gtracker::EditorDocument document(v1);

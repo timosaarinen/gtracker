@@ -1,8 +1,10 @@
 #include "gtracker/project.hpp"
 #include "gtracker/core.h"
+#include "gtracker/hash.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -22,7 +24,7 @@ namespace gtracker {
 namespace {
 using json = nlohmann::json;
 constexpr std::size_t max_document_bytes = 1024 * 1024;
-constexpr std::size_t max_render_frames = 32 * 1024 * 1024;
+constexpr std::size_t max_render_samples = 32 * 1024 * 1024;
 
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
@@ -98,13 +100,46 @@ template<typename Writer> void write_file(const std::filesystem::path& path, Wri
 void check_core(gt_result result) {
     if (result != GT_OK) throw std::runtime_error(std::string("Synthesizer: ") + gt_result_string(result));
 }
+
+json production_value(const ProductionSettings& s) {
+    validate_production(s);
+    return {{"schema", "gtracker.production"}, {"version", s.version}, {"algorithm", s.algorithm},
+        {"enabled", s.enabled}, {"wet", s.wet}, {"decay_seconds", s.decay_seconds}, {"damping", s.damping},
+        {"predelay_ms", s.predelay_ms}, {"width", s.width}, {"output_gain_db", s.output_gain_db}};
 }
+
+ProductionSettings read_production(const json& doc) {
+    keys(doc, {"schema", "version", "algorithm", "enabled", "wet", "decay_seconds", "damping", "predelay_ms", "width", "output_gain_db"}, "production");
+    require(doc.at("schema") == "gtracker.production", "Unsupported production schema");
+    ProductionSettings s;
+    s.version = static_cast<int>(unsigned_integer(doc.at("version"), 1, "production.version"));
+    s.algorithm = doc.at("algorithm").get<std::string>();
+    require(doc.at("enabled").is_boolean(), "production.enabled must be boolean");
+    s.enabled = doc.at("enabled").get<bool>();
+    s.wet = static_cast<float>(real_number(doc.at("wet"), "production.wet"));
+    s.decay_seconds = static_cast<float>(real_number(doc.at("decay_seconds"), "production.decay_seconds"));
+    s.damping = static_cast<float>(real_number(doc.at("damping"), "production.damping"));
+    s.predelay_ms = static_cast<float>(real_number(doc.at("predelay_ms"), "production.predelay_ms"));
+    s.width = static_cast<float>(real_number(doc.at("width"), "production.width"));
+    s.output_gain_db = static_cast<float>(real_number(doc.at("output_gain_db"), "production.output_gain_db"));
+    validate_production(s);
+    return s;
+}
+}
+
+ProductionSettings parse_production_json(std::string_view source) {
+    require(source.size() <= 65536, "Production settings exceed 64 KiB");
+    return read_production(json::parse(source));
+}
+std::string production_json(const ProductionSettings& settings) { return production_value(settings).dump(2) + "\n"; }
 
 void validate_pattern(const Pattern& p) {
     require(p.schema_version == 1 || p.schema_version == 2, "Unsupported schema_version; expected 1 or 2");
     require(p.model == "baseline_0_1" || p.model == "contact_0_2", "Unsupported instrument model: " + p.model);
     require(p.schema_version == 2 || (p.model == "baseline_0_1" && p.gestures.empty()), "Schema v1 supports only baseline_0_1 with no gestures; explicitly select v2/contact_0_2");
     require(p.gestures.empty() || p.model == "contact_0_2", "Slide gestures require the explicit contact_0_2 model");
+    require(p.schema_version == 2 || !p.production, "Production settings require explicit pattern v2");
+    if (p.production) validate_production(*p.production);
     require(!p.name.empty() && p.name.size() <= 256, "name must contain 1..256 UTF-8 bytes");
     require(p.revision > 0 && p.revision <= 9007199254740991ULL, "revision must be a positive JSON-safe integer");
     require(std::isfinite(p.bpm) && p.bpm >= 20 && p.bpm <= 400, "tempo_bpm must be in 20..400");
@@ -173,9 +208,10 @@ Pattern parse_pattern_json(std::string_view source) {
     const auto version = unsigned_integer(doc.at("schema_version"), 9007199254740991ULL, "schema_version");
     require(version == 1 || version == 2, "Unsupported schema_version; expected 1 or 2");
     if (version == 1) keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events"}, "pattern");
-    else keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events", "gestures"}, "pattern v2");
+    else keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events", "gestures", "production"}, "pattern v2");
     Pattern p;
     p.schema_version = static_cast<int>(version);
+    if (version == 2 && doc.contains("production")) p.production = read_production(doc.at("production"));
     p.name = doc.at("name").get<std::string>();
     p.revision = unsigned_integer(doc.at("revision"), 9007199254740991ULL, "revision");
     p.bpm = real_number(doc.at("tempo_bpm"), "tempo_bpm");
@@ -255,6 +291,7 @@ std::string pattern_json(const Pattern& p) {
                         {"brightness", p.brightness}, {"body_mix", p.body_mix}}},
         {"events", events}};
     if (p.schema_version == 2) {
+        if (p.production) doc["production"] = production_value(*p.production);
         doc["instrument"]["model"] = p.model;
         doc["gestures"] = json::array();
         for (const auto& gesture : p.gestures) {
@@ -285,13 +322,31 @@ void save_pattern(const Pattern& p, const std::filesystem::path& path) {
     write_file(path, [&](std::ostream& out) { out.write(text.data(), static_cast<std::streamsize>(text.size())); });
 }
 
+std::string render_identity(const Pattern& p, const RenderOptions& options) {
+    require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
+    require(std::isfinite(options.tail_seconds) && options.tail_seconds >= 0 && options.tail_seconds <= 30, "tail must be in 0..30 seconds");
+    // Versioned declarative bytes, never a compiler-dependent C struct dump.
+    json identity{{"schema", "gtracker.render-identity"}, {"version", 1}, {"renderer", GT_VERSION},
+        {"pattern", json::parse(pattern_json(p))}, {"sample_rate", options.sample_rate},
+        {"instrument_tail_seconds", options.tail_seconds}, {"bypass_production", options.bypass_production}};
+    if (options.production_override) identity["production_override"] = production_value(*options.production_override);
+    return sha256(identity.dump());
+}
+
 RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     validate_pattern(p);
     require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
     require(std::isfinite(options.tail_seconds) && options.tail_seconds >= 0 && options.tail_seconds <= 30, "tail must be in 0..30 seconds");
     const double seconds_per_beat = 60.0 / p.bpm;
-    const double frame_count = std::ceil((p.length_beats * seconds_per_beat + options.tail_seconds) * options.sample_rate);
-    require(frame_count >= 1 && frame_count <= max_render_frames, "Render exceeds the prototype's 32 Mi-frame buffer limit; render a shorter pattern or lower sample rate");
+    auto production = options.production_override.value_or(p.production.value_or(ProductionSettings{}));
+    validate_production(production);
+    if (options.bypass_production) production.enabled = false;
+    const auto channels = production.enabled ? 2 : 1;
+    const double dry_frame_count = std::ceil((p.length_beats * seconds_per_beat + options.tail_seconds) * options.sample_rate);
+    const double room_tail = production_tail_seconds(production);
+    const double frame_count = dry_frame_count + std::ceil(room_tail * options.sample_rate);
+    require(frame_count >= 1 && frame_count * channels <= max_render_samples, "Render exceeds the prototype's 32 Mi-sample buffer limit; render a shorter pattern or lower sample rate");
+    const auto dry_frames = static_cast<std::size_t>(dry_frame_count);
     auto config = gt_default_config();
     config.sample_rate = static_cast<std::uint32_t>(options.sample_rate);
     config.string_count = static_cast<std::uint32_t>(p.tuning_midi.size());
@@ -350,33 +405,53 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     check_core(loaded);
     RenderResult result;
     result.sample_rate = options.sample_rate;
-    result.mono.resize(static_cast<std::size_t>(frame_count));
+    result.channels = channels;
+    result.production_tail_seconds = room_tail;
+    result.identity = render_identity(p, options);
+    result.samples.resize(static_cast<std::size_t>(frame_count) * static_cast<std::size_t>(channels));
     const auto start = std::chrono::steady_clock::now();
-    for (std::size_t offset = 0; offset < result.mono.size(); offset += 1024)
-        check_core(gt_render(synth.get(), result.mono.data() + offset, std::min<std::size_t>(1024, result.mono.size() - offset)));
+    if (channels == 1) {
+        for (std::size_t offset = 0; offset < result.frames(); offset += 1024)
+            check_core(gt_render(synth.get(), result.samples.data() + offset, std::min<std::size_t>(1024, result.frames() - offset)));
+    } else {
+        ProductionProcessor processor(options.sample_rate, production);
+        std::array<float, 1024> dry{};
+        for (std::size_t offset = 0; offset < result.frames(); offset += dry.size()) {
+            const auto count = std::min(dry.size(), result.frames() - offset);
+            std::fill(dry.begin(), dry.end(), 0);
+            if (offset < dry_frames) check_core(gt_render(synth.get(), dry.data(), std::min(count, dry_frames - offset)));
+            processor.process(dry.data(), result.samples.data() + offset * 2, count);
+        }
+    }
     result.elapsed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     double squares = 0;
-    for (float value : result.mono) {
+    const auto end_begin = result.samples.size() - std::min(result.samples.size(), static_cast<std::size_t>(options.sample_rate / 20 * channels));
+    for (std::size_t i = 0; i < result.samples.size(); ++i) {
+        const float value = result.samples[i];
         require(std::isfinite(value), "Synthesizer produced non-finite audio");
         result.peak = std::max(result.peak, std::abs(value));
         squares += static_cast<double>(value) * value;
+        if (std::abs(value) >= 1) ++result.clipped_samples;
+        if (i >= end_begin) result.end_peak = std::max(result.end_peak, std::abs(value));
     }
-    result.rms = static_cast<float>(std::sqrt(squares / static_cast<double>(result.mono.size())));
+    result.rms = static_cast<float>(std::sqrt(squares / static_cast<double>(result.samples.size())));
     return result;
 }
 
-void write_wav(const std::filesystem::path& path, const std::vector<float>& mono, int sample_rate) {
+void write_wav(const std::filesystem::path& path, const std::vector<float>& samples, int sample_rate, int channels) {
     require(sample_rate >= 8000 && sample_rate <= 192000, "WAV sample rate is out of range");
-    require(mono.size() <= (std::numeric_limits<std::uint32_t>::max() - 36ULL) / 2, "WAV exceeds RIFF size limit");
-    for (float value : mono) require(std::isfinite(value), "Cannot write non-finite WAV samples");
+    require(channels == 1 || channels == 2, "WAV requires one or two channels");
+    require(samples.size() % static_cast<std::size_t>(channels) == 0, "WAV requires complete interleaved frames");
+    require(samples.size() <= (std::numeric_limits<std::uint32_t>::max() - 36ULL) / 2, "WAV exceeds RIFF size limit");
+    for (float value : samples) require(std::isfinite(value), "Cannot write non-finite WAV samples");
     write_file(path, [&](std::ostream& out) {
         const auto u16 = [&](std::uint16_t v) { out.put(static_cast<char>(v & 255)); out.put(static_cast<char>((v >> 8) & 255)); };
         const auto u32 = [&](std::uint32_t v) { u16(static_cast<std::uint16_t>(v)); u16(static_cast<std::uint16_t>(v >> 16)); };
-        const auto bytes = static_cast<std::uint32_t>(mono.size() * 2);
+        const auto bytes = static_cast<std::uint32_t>(samples.size() * 2);
         out.write("RIFF", 4); u32(36 + bytes); out.write("WAVEfmt ", 8); u32(16);
-        u16(1); u16(1); u32(static_cast<std::uint32_t>(sample_rate)); u32(static_cast<std::uint32_t>(sample_rate) * 2);
-        u16(2); u16(16); out.write("data", 4); u32(bytes);
-        for (float value : mono) {
+        u16(1); u16(static_cast<std::uint16_t>(channels)); u32(static_cast<std::uint32_t>(sample_rate)); u32(static_cast<std::uint32_t>(sample_rate) * 2 * static_cast<std::uint32_t>(channels));
+        u16(static_cast<std::uint16_t>(2 * channels)); u16(16); out.write("data", 4); u32(bytes);
+        for (float value : samples) {
             const auto sample = static_cast<std::int16_t>(std::lround(std::clamp(value, -1.0f, 1.0f) * 32767.0f));
             u16(static_cast<std::uint16_t>(sample));
         }

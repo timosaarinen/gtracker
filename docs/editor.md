@@ -113,6 +113,15 @@ playback gain, timing, document revision or undo history. An old render remains
 gray. Source views initially include their retained context; ordinary patterns
 initially fit their musical region.
 
+## Production
+
+Expand **Production / room** for saved wet/dry, decay/damping, pre-delay, stereo
+width and gain controls. The first edit explicitly stores pattern v2; undo can
+restore the original v1 document. Disable **Room enabled** for exact dry mono
+bypass. Render again after editing; enabled production renders and plays stereo.
+See [production settings and signal checks](production.md). Original source-take
+playback remains unchanged.
+
 ## Lua operations
 
 Build with `GT_ENABLE_LUA=ON` (the normal desktop preset). Expand `Lua command`,
@@ -213,6 +222,6 @@ Future work includes editor recording controls (CLI capture exists), musical
 transcription, hammer/pull-off and additional contact/expression gestures,
 multiple patterns and arrangement, course-aware twelve-string instruments,
 richer keyboard tab entry, autosave/recovery, render
-cancellation, output-device selection, and reverb controls.
+cancellation and output-device selection.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.

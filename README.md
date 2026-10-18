@@ -5,7 +5,7 @@ tool for **Lust of War**. Compose in horizontal tabs, use Lua for musical editin
 and develop audio-to-pattern analysis against the same native instrument that
 will render music in the game.
 
-**Status: working 0.2 prototype.** This is an audible development foundation,
+**Status: working 0.3 prototype.** This is an audible development foundation,
 not yet a realistic guitar instrument or an automatic guitar transcriber.
 
 ## What works now
@@ -13,7 +13,7 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - C++17 plucked-string renderer with a small C ABI, deterministic excitation,
   fractional frets, damping and synthetic body taps; no stored audio samples.
 - Versioned JSON patterns, strict validation, stable event IDs, beat timing,
-  explicit tuning and seed, and mono 16-bit PCM WAV export.
+  explicit tuning and seed, and mono/stereo 16-bit PCM WAV export.
 - Explicit v2 [continuous slide curves](docs/gestures.md) through save/reopen,
   Lua, native rendering and tab editing/undo. The experimental contact model
   retains vibration; the original v1 baseline remains selectable and unchanged.
@@ -37,12 +37,15 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - An original broadband loopback reference and [bounded file-delay estimator](docs/alignment.md)
   with match/ambiguity diagnostics and source hashes. Physical latency and clock
   drift remain separately measured work; authoring offsets stay explicit.
+- Native [stereo room production](docs/production.md) with saved settings,
+  wet/dry balance, decay/damping, pre-delay, width, gain and an exact dry bypass.
+  CLI/editor rendering shares the same chain and reports signal/export metrics.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 
 The core supports 1–12 independent string slots. Twelve strings are **not yet**
 six paired courses. Bends, hammer-ons, pull-offs, physical contact/collision models,
-microphone recording in the editor, song arrangement and room reverb are roadmap
+microphone recording in the editor and song arrangement are roadmap
 work. The existing model is a reference to compare with future physical models.
 
 ## Build and listen
