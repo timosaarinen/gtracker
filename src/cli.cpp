@@ -1,5 +1,6 @@
 #include "gtracker/project.hpp"
 #include "gtracker/core.h"
+#include "gtracker/take.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -16,6 +17,7 @@ void help() {
         "  gtracker_cli render PATTERN --output WAV [--sample-rate HZ] [--tail SECONDS]\n"
         "                       [--script LUA] [--json]\n"
         "  gtracker_cli transform PATTERN --script LUA --output PATTERN [--json]\n"
+        "  gtracker_cli take-info TAKE [--json]\n"
         "  gtracker_cli --version\n\n"
         "Patterns use schema v1, beat times, one-based string numbers (highest first).\n"
         "The current instrument is an independent plucked-string/body-tap baseline.\n";
@@ -35,8 +37,8 @@ int cli_main(int argc, char** argv) {
         if (argc == 1 || std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h") { help(); return 0; }
         if (std::string(argv[1]) == "--version") { std::cout << "gtracker " << GT_VERSION << "\n"; return 0; }
         const std::string command = argv[1];
-        if (command != "validate" && command != "render" && command != "transform") throw std::runtime_error("Unknown command: " + command);
-        if (argc < 3 || std::string(argv[2]).rfind("--", 0) == 0) throw std::runtime_error("A pattern path is required");
+        if (command != "validate" && command != "render" && command != "transform" && command != "take-info") throw std::runtime_error("Unknown command: " + command);
+        if (argc < 3 || std::string(argv[2]).rfind("--", 0) == 0) throw std::runtime_error("A pattern/take path is required");
         const auto input = std::filesystem::u8path(argv[2]);
         std::filesystem::path output, script;
         gtracker::RenderOptions options;
@@ -55,7 +57,23 @@ int cli_main(int argc, char** argv) {
             } else if (flag == "--tail" && command == "render") options.tail_seconds = number(value, "--tail");
             else throw std::runtime_error("Unknown or inapplicable option: " + flag);
         }
-        if (command == "validate" && (!output.empty() || !script.empty())) throw std::runtime_error("validate does not accept --output or --script");
+        if ((command == "validate" || command == "take-info") && (!output.empty() || !script.empty())) throw std::runtime_error(command + " does not accept --output or --script");
+        if (command == "take-info") {
+            const auto take = gtracker::load_take(input);
+            nlohmann::json report{{"ok", true}, {"command", command}, {"take", input.u8string()}, {"take_id", take.id},
+                {"source_name", take.source_name}, {"source_sha256", take.audio.sha256}, {"frames", take.audio.frames},
+                {"sample_rate", take.audio.sample_rate}, {"channels", take.audio.channels}, {"sample_width_bits", take.audio.sample_width_bits},
+                {"peak", take.audio.peak}, {"rms", take.audio.rms}, {"analysis_status", "metadata_only"},
+                {"pattern_revision", take.pattern.revision}, {"source_pattern_revision", take.source_pattern_revision},
+                {"analysis_matches_pattern_revision", take.pattern.revision == take.source_pattern_revision},
+                {"input_offset_status", take.alignment.offset_status},
+                {"selection_start_beat", take.source_frame_to_beat(static_cast<double>(take.alignment.selection_start_frame))},
+                {"selection_end_beat", take.source_frame_to_beat(static_cast<double>(take.alignment.selection_end_frame))}};
+            if (as_json) std::cout << report.dump(2) << '\n';
+            else std::cout << "Take: " << take.source_name << " (" << take.audio.frames << " frames, "
+                           << take.audio.channels << " channels at " << take.audio.sample_rate << " Hz; metadata only)\n";
+            return 0;
+        }
         if (command != "validate" && output.empty()) throw std::runtime_error("--output is required");
         if (command == "transform" && script.empty()) throw std::runtime_error("transform requires --script");
         if (command == "render") {

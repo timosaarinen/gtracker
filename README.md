@@ -25,6 +25,7 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   It explicitly reports that transcription is unavailable.
 - Source-preserving take import/inspection with relative bundle paths, explicit
   source-sample timing, manual/uncalibrated offsets and checked analysis identity.
+  A native PCM/take reader verifies hashes and formats without Python at playback.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 

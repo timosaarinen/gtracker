@@ -52,6 +52,11 @@ tests pass for 44.1/48 kHz mono/stereo PCM widths, timing, moved bundles, stale
 pattern revisions, changed source/jobs, refused overwrites and cancellation.
 See docs/takes.md. Native source waveform/playback integration is next; no
 microphone capture or musical transcription has been added.
+The native CLI now also exposes `take-info` using the shared bounded PCM reader,
+SHA-256 source verification and checked job/timing/metrics. Focused PCM tests
+cover channel/width/rate variants, unknown chunks, truncation and buffer bounds;
+the take integration cases compare native hashes, metrics and beat mapping with
+the Python importer/inspector. Preview conversion leaves source files untouched.
 
 No physical window interaction, hardware playback/listening or microphone capture
 is claimed. The default UI font lacks some non-Latin glyphs even though Unicode

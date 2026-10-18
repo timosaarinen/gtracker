@@ -116,6 +116,20 @@ class NativeTakeImportTests(unittest.TestCase):
                 self.assertEqual(report["analysis_status"], "metadata_only")
                 self.assertFalse(report["capabilities"]["note_transcription"])
                 self.assertTrue(report["analysis_matches_pattern_revision"])
+                native = self.native_info(output / "take.json")
+                self.assertEqual(native["source_sha256"], take["source"]["sha256"])
+                self.assertEqual((native["sample_rate"], native["channels"], native["sample_width_bits"]), (rate, channels, width * 8))
+                self.assertAlmostEqual(native["selection_start_beat"], report["selection_start_beat"])
+                self.assertAlmostEqual(native["selection_end_beat"], report["selection_end_beat"])
+                self.assertAlmostEqual(native["peak"], report["diagnostics"]["peak"], places=7)
+                self.assertAlmostEqual(native["rms"], report["diagnostics"]["rms"], places=7)
+
+    def native_info(self, path, success=True):
+        result = subprocess.run([str(CLI), "take-info", str(path), "--json"], capture_output=True, encoding="utf-8", check=False)
+        self.assertEqual(result.returncode, 0 if success else 2, result.stdout + result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["ok"], success)
+        return report
 
     def test_moved_bundle_reopens_and_revised_pattern_is_explicitly_stale(self):
         takes.import_take(self.input, self.pattern, self.output)
@@ -130,6 +144,7 @@ class NativeTakeImportTests(unittest.TestCase):
         pattern["revision"] += 1
         dev.atomic_json(moved / "pattern.gtrk.json", pattern)
         self.assertFalse(takes.inspect_take(moved / "take.json")["analysis_matches_pattern_revision"])
+        self.assertFalse(self.native_info(moved / "take.json")["analysis_matches_pattern_revision"])
         self.assertEqual(pattern["events"], events, "metadata analysis must not clear or replace authored notes")
 
     def test_existing_output_invalid_selection_and_cancel_leave_user_data_intact(self):
@@ -172,6 +187,7 @@ class NativeTakeImportTests(unittest.TestCase):
         dev.atomic_json(self.output / "analysis.json", analysis)
         with self.assertRaisesRegex(ValueError, "job/source/revision"):
             takes.inspect_take(self.output / "take.json")
+        self.native_info(self.output / "take.json", success=False)
         dev.atomic_json(self.output / "analysis.json", [])
         with self.assertRaises(ValueError):
             takes.inspect_take(self.output / "take.json")
@@ -181,6 +197,7 @@ class NativeTakeImportTests(unittest.TestCase):
         with (self.output / "source.wav").open("ab") as output: output.write(b"changed")
         with self.assertRaisesRegex(ValueError, "no longer matches"):
             takes.inspect_take(self.output / "take.json")
+        self.assertIn("SHA-256", self.native_info(self.output / "take.json", success=False)["error"])
 
     def test_developer_cli_is_json_and_works_from_another_working_directory(self):
         command = [sys.executable, str(ROOT / "tools/dev.py"), "import-take", str(self.input),
@@ -195,6 +212,24 @@ class NativeTakeImportTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertEqual(report["alignment"]["input_offset_frames"], 24)
         self.assertEqual(report["alignment"]["offset_status"], "manual")
+
+    def test_native_reader_rejects_bad_versions_fields_and_frame_mapping(self):
+        take = takes.import_take(self.input, self.pattern, self.output)
+        for parents, field, value in [
+            ((), "version", True), ((), "version", 2), ((), "future", []),
+            (("source",), "path", "../private.wav"), (("source",), "frames", True),
+            (("alignment",), "pattern_zero_frame", 999999999),
+            (("alignment",), "input_offset_frames", -9223372036854775808),
+            (("alignment",), "input_offset_frames", 18446744073709551615),
+            (("alignment",), "selection_end_frame", 0), (("alignment",), "offset_status", "measured"),
+        ]:
+            changed = deepcopy(take)
+            target = changed
+            for parent in parents: target = target[parent]
+            target[field] = value
+            dev.atomic_json(self.output / "take.json", changed)
+            with self.subTest(field=field, value=value):
+                self.native_info(self.output / "take.json", success=False)
 
 
 if __name__ == "__main__":

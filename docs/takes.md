@@ -63,6 +63,21 @@ and cancellation remove only their own checked staging directory; cancellation
 exits 130. Inputs and previous bundles stay intact.
 
 This first step provides CLI preservation, timing and provenance. Native source
-waveforms/A-B playback, device selection/capture, count-in and retained capture
+inspection is also available without Python:
+
+```sh
+.local/build/headless/bin/gtracker_cli take-info .local/takes/demo/take.json --json
+```
+
+Use `.exe` on Windows. That native reader verifies the preserved SHA-256, integer
+PCM channels/rate/width, source-sample mapping, job identity and signal metadata.
+Its playback-preview copy is bounded to 32 Mi interleaved float samples and a
+256 MiB input WAV; the streaming Python importer/inspector can still retain
+larger sources. The PCM reader also supports well-formed extensible PCM WAV,
+unknown chunks and original bytes after RIFF. Preview conversion leaves the
+original file unchanged. SHA-256 follows [FIPS 180-4](https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.180-4.pdf);
+tests check known messages and compare real take hashes/metrics with Python.
+
+Native source waveforms/A-B playback, device selection/capture, count-in and retained capture
 tails, actual latency calibration and editable analysis proposals are subsequent
 increments. Real-device recording and listening must be recorded separately.
