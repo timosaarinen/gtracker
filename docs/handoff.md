@@ -86,8 +86,21 @@ ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
 LeakSanitizer was blocked there. Intel Mac and current cross-platform
 qualification remain outstanding. Keep issue #1 open for those real checks.
 
-Next: polish a shared tab/wave beat viewport, then continue the planned sound/
-production or arrangement work in small verified increments.
+New Linux evidence now exists for committed `8f45804`: Ubuntu 20.04.6 under
+WSL2 6.18.54.1, GCC 9.4, Python 3.11.9, CMake 4.3.3, Ninja 1.10. Headless CI
+passed 11 native tests and Python's 53 with 13 desktop skips; after a full SDL
+desktop build, all 18 desktop tests and all 53 Python tests passed without skips.
+The original 48 kHz campfire WAV has the same SHA-256 as the Windows fixture.
+Logs are in `.local/qualification/ubuntu/.local/`; this does not qualify later
+source bytes or physical Linux windows/audio devices. The GCC 9 sanitizer run
+hit a pre-main ASan/dynamic-loader fault, confirmed in a bounded debugger run;
+no passing sanitizer result is claimed for that runtime. Alternate-runtime
+checks are separate: Clang 10 ASan/UBSan passed all 11 native tools/core tests
+with default leak settings, as well as the three core-only tests. Intel Mac
+qualification is still outstanding.
+
+Next: continue the planned production reverb/arrangement work in small verified
+increments, retaining explicit dry references and shared native rendering.
 Real takes, clock/latency calibration and transcription need separate evidence.
 
 The native CLI now generates original deterministic broadband probes and checks
@@ -109,3 +122,10 @@ implemented. V1 loading/saving stays v1. Unknown future gestures/models fail;
 sub-frame point collisions are rejected rather than flattened. The original
 slide study renders to `.local/slide-study.wav`. See docs/gestures.md. This is
 still an experimental moving-delay model, without a listening/realism claim.
+
+The latest editor polish shares a single beat range and actual plot data
+rectangle between tab/source/synth. Pattern/context fit, pointer zoom, bounded
+middle-drag pan, compact resizing and display-only wave auto scale are available.
+Native math and synthetic UI checks cover pixel alignment through navigation,
+unchanged document generation/history/source bytes and refused insertion in
+retained context. The inspector now uses the full side-column height.

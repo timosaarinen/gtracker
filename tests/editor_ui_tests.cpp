@@ -358,6 +358,68 @@ void slide_authoring(Host& host, const Arguments& original) {
     frame(host, [&] { interface(reopened); });
     host.screenshot(std::filesystem::current_path() / "editor-slide-controls.bmp");
 }
+
+void timeline_navigation(Host& host, const Arguments& original, const std::filesystem::path& manifest) {
+    Arguments args = original;
+    args.document.clear(); args.take = manifest;
+    Editor editor(args);
+    const auto document = gtracker::pattern_json(editor.document.pattern());
+    const auto source = file_bytes(editor.source->take.source_path);
+    const auto generation = editor.document.generation();
+    const auto draw = [&] { interface(editor); };
+    const auto aligned = [&] {
+        for (double beat : {0.0, 0.333333333333, 4.0, 8.0})
+            check_ui(std::abs(editor.tab_geometry.beat_x(beat) - editor.timeline_geometry.beat_x(beat)) < 0.001,
+                     "tab and waveform do not share screen-pixel beat positions");
+    };
+    frame(host, draw); frame(host, draw); aligned();
+    check_ui(editor.view.first < 0 && editor.view.last > editor.document.pattern().length_beats, "source context did not include pre-roll/tail");
+    editor.fit_timeline(false);
+    frame(host, draw); aligned();
+    check_ui(editor.view.first == 0 && editor.view.last == 8, "pattern fit did not restore musical bounds");
+    const float middle = (editor.tab_geometry.left + editor.tab_geometry.right) * 0.5f;
+    frame(host, draw, [&] { ImGui::GetIO().AddMousePosEvent(middle, 300); });
+    frame(host, draw, [&] { ImGui::GetIO().AddMouseWheelEvent(0, 1); });
+    frame(host, draw); aligned();
+    check_ui(editor.view.span() < 8 && !editor.follow_view_fit, "tab wheel did not zoom the shared viewport");
+    const double zoomed_first = editor.view.first;
+    frame(host, draw, [&] {
+        ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Middle, true);
+    });
+    frame(host, draw, [&] {
+        ImGui::GetIO().AddMousePosEvent(middle + 40, 300);
+    });
+    frame(host, draw, [&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Middle, false); });
+    frame(host, draw); aligned();
+    check_ui(editor.view.first < zoomed_first, "middle drag did not pan the tab");
+    const double before_wave_zoom = editor.view.span();
+    frame(host, draw, [&] { ImGui::GetIO().AddMousePosEvent(middle, 580); });
+    frame(host, draw, [&] { ImGui::GetIO().AddMouseWheelEvent(0, 1); });
+    frame(host, draw); aligned();
+    check_ui(editor.view.span() < before_wave_zoom, "plot wheel did not retain interactive zoom");
+
+    int width = 0, height = 0;
+    SDL_GetWindowSize(host.window, &width, &height);
+    check_ui(SDL_SetWindowSize(host.window, 980, 680), "resize dummy window");
+    frame(host, draw); frame(host, draw); aligned();
+    check_ui(editor.timeline_geometry.right < 980 && editor.timeline_geometry.right > editor.timeline_geometry.left,
+             "shared geometry did not follow window resize");
+    host.screenshot(std::filesystem::current_path() / "editor-timeline-compact.bmp");
+    check_ui(SDL_SetWindowSize(host.window, width, height), "restore dummy window size");
+    editor.fit_timeline(true);
+    frame(host, draw); frame(host, draw); aligned();
+    const float context = editor.tab_geometry.beat_x(-0.75);
+    for (int i = 0; i < 2; ++i) {
+        frame(host, draw, [&] {
+            ImGui::GetIO().AddMousePosEvent(context, 300);
+            ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        });
+        frame(host, draw, [&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false); });
+    }
+    check_ui(gtracker::pattern_json(editor.document.pattern()) == document && editor.document.generation() == generation && !editor.document.dirty(),
+             "viewport navigation or context double-click edited musical data/history");
+    check_ui(file_bytes(editor.source->take.source_path) == source, "view navigation altered preserved audio");
+}
 }
 
 int main(int argc, char** argv) {
@@ -379,6 +441,7 @@ int main(int argc, char** argv) {
         writable_defaults(args);
         source_workflow(host, args, std::filesystem::path(argv[2]));
         slide_authoring(host, args);
+        timeline_navigation(host, args, std::filesystem::path(argv[2]));
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");
         std::filesystem::remove_all(directory);

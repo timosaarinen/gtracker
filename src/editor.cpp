@@ -1,6 +1,7 @@
 #include "gtracker/project.hpp"
 #include "gtracker/editor_document.hpp"
 #include "gtracker/take.hpp"
+#include "gtracker/timeline.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -146,6 +147,7 @@ std::filesystem::path editor_resource_directory(const Arguments& args) {
 
 struct CompletedRender {
     RenderResult audio;
+    double end_beat = 0;
     std::vector<double> times;
     std::vector<double> beats;
     std::vector<double> minimum;
@@ -155,6 +157,7 @@ struct CompletedRender {
 CompletedRender render_snapshot(const Pattern& pattern) {
     CompletedRender result;
     result.audio = gtracker::render_pattern(pattern);
+    result.end_beat = static_cast<double>(result.audio.mono.size()) / result.audio.sample_rate * pattern.bpm / 60.0;
     const std::size_t count = std::min<std::size_t>(2048, result.audio.mono.size());
     result.times.reserve(count);
     result.beats.reserve(count);
@@ -232,6 +235,12 @@ struct Editor {
     bool play_after_render = false;
     bool playing = false;
     bool source_from_zero = true;
+    gtracker::BeatViewport view;
+    gtracker::TimelineGeometry timeline_geometry;
+    gtracker::TimelineGeometry tab_geometry;
+    bool follow_view_fit = true;
+    bool view_all_context = false;
+    bool auto_wave_gain = true;
     std::string status = "Select a fret number, edit the inspector, then Render and Play.";
     std::array<char, 1024> path{};
     std::array<char, 1024> script_path{};
@@ -268,6 +277,7 @@ struct Editor {
             cursor_beat = event.beat;
             cursor_lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
         }
+        fit_timeline(source.has_value());
     }
 
     ~Editor() {
@@ -307,6 +317,40 @@ struct Editor {
         }
         if (selected_gesture >= static_cast<int>(document.pattern().gestures.size())) selected_gesture = -1;
         if (selected_gesture >= 0) selected = -1;
+        sync_timeline();
+    }
+
+    gtracker::BeatViewport timeline_extent() const {
+        gtracker::BeatViewport result{0, document.pattern().length_beats};
+        if (source) {
+            result.first = std::min(result.first, source->take.source_frame_to_beat(0));
+            result.last = std::max(result.last, source->take.source_frame_to_beat(static_cast<double>(source->take.audio.frames)));
+        }
+        result.last = std::max(result.last, rendered.end_beat);
+        return result;
+    }
+    void fit_timeline(bool all_context) {
+        follow_view_fit = true;
+        view_all_context = all_context;
+        const auto range = all_context ? timeline_extent() : gtracker::BeatViewport{0, document.pattern().length_beats};
+        view.fit(range.first, range.last);
+    }
+    void sync_timeline() {
+        if (follow_view_fit) fit_timeline(view_all_context);
+        else {
+            const auto bounds = timeline_extent();
+            view.constrain(bounds.first, bounds.last);
+        }
+    }
+    void zoom_timeline(double factor, double anchor) {
+        const auto bounds = timeline_extent();
+        view.zoom(factor, anchor, bounds.first, bounds.last);
+        follow_view_fit = false;
+    }
+    void pan_timeline(double beats) {
+        const auto bounds = timeline_extent();
+        view.pan(beats, bounds.first, bounds.last);
+        follow_view_fit = false;
     }
 
     void commit(Pattern next, const char* action, const std::string& edit_key = {}) {
@@ -346,6 +390,7 @@ struct Editor {
             cursor_beat = event.beat;
             cursor_lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
         }
+        fit_timeline(source.has_value());
         changed();
         message("Loaded " + document.pattern().name + ".");
     }
@@ -729,12 +774,13 @@ std::string tuning_label(double midi) {
     return std::string(names[(note % 12 + 12) % 12]) + std::to_string(note / 12 - 1);
 }
 
-void canvas(Editor& editor, ImVec2 size) {
+void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* shared = nullptr) {
     size.x = std::max(size.x, 200.0f);
     size.y = std::max(size.y, 170.0f);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    ImGui::InvisibleButton("##tab_canvas", size, ImGuiButtonFlags_MouseButtonLeft);
+    ImGui::InvisibleButton("##tab_canvas", size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
     const bool hovered = ImGui::IsItemHovered();
+    const bool panning = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Middle);
     const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
     const bool double_clicked = hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
     auto* draw = ImGui::GetWindowDrawList();
@@ -743,14 +789,17 @@ void canvas(Editor& editor, ImVec2 size) {
 
     const int strings = static_cast<int>(editor.document.pattern().tuning_midi.size());
     const int lanes = strings + 1;
-    const float left = origin.x + 64.0f;
-    const float right = origin.x + size.x - 20.0f;
+    const gtracker::TimelineGeometry geometry = shared ? *shared
+        : gtracker::TimelineGeometry{editor.view, origin.x + 64.0f, origin.x + size.x - 20.0f};
+    editor.tab_geometry = geometry;
+    const float left = geometry.left;
+    const float right = geometry.right;
     const float top = origin.y + 32.0f;
     const float lane_height = (size.y - 42.0f) / static_cast<float>(lanes);
-    const double pixels_per_beat = static_cast<double>(right - left) / editor.document.pattern().length_beats;
+    const double pixels_per_beat = static_cast<double>(right - left) / geometry.view.span();
     auto lane_y = [&](int lane) { return top + (static_cast<float>(lane) + 0.5f) * lane_height; };
     auto beat_x = [&](double beat) {
-        return left + static_cast<float>(beat / editor.document.pattern().length_beats) * (right - left);
+        return geometry.beat_x(beat);
     };
 
     for (int lane = 0; lane < lanes; ++lane) {
@@ -769,18 +818,29 @@ void canvas(Editor& editor, ImVec2 size) {
         }
     }
 
+    draw->PushClipRect(ImVec2(left - 14, origin.y), ImVec2(right + 14, origin.y + size.y), true);
+    if (geometry.view.first < 0)
+        draw->AddRectFilled(ImVec2(left, top), ImVec2(std::min(right, beat_x(0)), origin.y + size.y), IM_COL32(7, 12, 18, 145));
+    if (geometry.view.last > editor.document.pattern().length_beats)
+        draw->AddRectFilled(ImVec2(std::max(left, beat_x(editor.document.pattern().length_beats)), top), ImVec2(right, origin.y + size.y), IM_COL32(7, 12, 18, 145));
+
     double grid = 1.0;
+    while (grid * pixels_per_beat > 150.0 && grid > 1.0 / 64) grid *= 0.5;
     while (grid * pixels_per_beat < 34.0) {
         grid *= 2.0;
     }
-    for (double beat = 0.0; beat <= editor.document.pattern().length_beats + 0.0001; beat += grid) {
+    for (double beat = std::ceil(geometry.view.first / grid) * grid; beat <= geometry.view.last + 1e-9; beat += grid) {
         const float x = beat_x(beat);
-        const bool bar = std::fmod(beat, 4.0) < 0.001;
+        const bool bar = std::abs(std::remainder(beat, 4.0)) < 0.001;
         draw->AddLine(ImVec2(x, top - 3.0f), ImVec2(x, origin.y + size.y - 6.0f),
                        bar ? IM_COL32(60, 89, 107, 255) : IM_COL32(33, 50, 64, 255));
         char label[32];
-        std::snprintf(label, sizeof(label), "%g", beat);
+        std::snprintf(label, sizeof(label), "%g", std::abs(beat) < 1e-12 ? 0.0 : beat);
         draw->AddText(ImVec2(x - 3.0f, origin.y + 7.0f), bar ? cyan : quiet_color, label);
+    }
+    for (double boundary : {0.0, editor.document.pattern().length_beats}) {
+        if (boundary >= geometry.view.first && boundary <= geometry.view.last)
+            draw->AddLine(ImVec2(beat_x(boundary), top), ImVec2(beat_x(boundary), origin.y + size.y - 6), IM_COL32(107, 125, 135, 180), 1.5f);
     }
 
     const float cursor_x = beat_x(editor.cursor_beat);
@@ -791,6 +851,7 @@ void canvas(Editor& editor, ImVec2 size) {
     const ImVec2 mouse = ImGui::GetIO().MousePos;
     for (std::size_t i = 0; i < editor.document.pattern().gestures.size(); ++i) {
         const auto& gesture = editor.document.pattern().gestures[i];
+        if (gesture.beat > geometry.view.last || gesture.beat + gesture.points.back().beat < geometry.view.first) continue;
         const bool selected = static_cast<int>(i) == editor.selected_gesture;
         const auto color = selected ? amber : IM_COL32(187, 143, 76, 210);
         const float y = lane_y(gesture.string_index);
@@ -814,6 +875,7 @@ void canvas(Editor& editor, ImVec2 size) {
     }
     for (std::size_t i = 0; i < editor.document.pattern().events.size(); ++i) {
         const auto& event = editor.document.pattern().events[i];
+        if (event.beat < geometry.view.first - 14 / pixels_per_beat || event.beat > geometry.view.last + 14 / pixels_per_beat) continue;
         const bool body = event.type == "body_hit";
         const bool damp = event.type == "damp";
         const float x = beat_x(event.beat);
@@ -840,6 +902,7 @@ void canvas(Editor& editor, ImVec2 size) {
             hit = static_cast<int>(i);
         }
     }
+    draw->PopClipRect();
     draw->PopClipRect();
 
     if (hovered && hit >= 0) {
@@ -869,7 +932,12 @@ void canvas(Editor& editor, ImVec2 size) {
             editor.cursor_beat = gesture.beat;
             editor.cursor_lane = gesture.string_index;
         } else if (mouse.y >= top && mouse.x >= left && mouse.x <= right) {
-            const double beat = static_cast<double>((mouse.x - left) / (right - left)) * editor.document.pattern().length_beats;
+            const double beat = geometry.x_beat(mouse.x);
+            if (beat < 0 || beat >= editor.document.pattern().length_beats) {
+                editor.selected = -1; editor.selected_gesture = -1;
+                editor.message("Retained context is outside the editable pattern. Choose a pattern beat to add an event.");
+                return;
+            }
             editor.cursor_beat = std::clamp(std::round(beat / editor.snap) * editor.snap,
                                             0.0, std::nextafter(editor.document.pattern().length_beats, 0.0));
             editor.cursor_lane = std::clamp(static_cast<int>((mouse.y - top) / lane_height), 0, strings);
@@ -880,6 +948,16 @@ void canvas(Editor& editor, ImVec2 size) {
             }
         }
     }
+    if (hovered) {
+        const auto& io = ImGui::GetIO();
+        if (io.MouseWheel != 0) {
+            if (io.KeyShift) editor.pan_timeline(-io.MouseWheel * geometry.view.span() * 0.1);
+            else editor.zoom_timeline(std::pow(0.8, io.MouseWheel), geometry.x_beat(io.MousePos.x));
+        }
+        if (io.MouseWheelH != 0) editor.pan_timeline(-io.MouseWheelH * geometry.view.span() * 0.1);
+    }
+    if (panning && !ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && ImGui::GetIO().MouseDelta.x != 0)
+        editor.pan_timeline(-static_cast<double>(ImGui::GetIO().MouseDelta.x) / (right - left) * geometry.view.span());
 }
 
 void slide_inspector(Editor& editor) {
@@ -1053,7 +1131,7 @@ void inspector(Editor& editor) {
             ImGui::Text("%d Hz, %d channels, %d-bit PCM", take.audio.sample_rate, take.audio.channels, take.audio.sample_width_bits);
             ImGui::Text("Source tempo: %.2f BPM", take.alignment.bpm);
             ImGui::Text("Input offset: %lld frames (%s)", static_cast<long long>(take.alignment.input_offset_frames), take.alignment.offset_status.c_str());
-            ImGui::TextWrapped("No latency calibration or note transcription is available. The authored pattern is retained.");
+            ImGui::TextWrapped("Source timing is %s. Musical recognition is unavailable; authored notes are retained.", take.alignment.offset_status.c_str());
             if (editor.document.pattern().revision != take.source_pattern_revision)
                 ImGui::TextWrapped("Analysis belongs to an older pattern revision. No proposal is applied.");
         }
@@ -1061,50 +1139,59 @@ void inspector(Editor& editor) {
     }
 }
 
-void waveform(const Editor& editor, float height) {
+gtracker::TimelineGeometry waveform(Editor& editor, float height) {
+    editor.sync_timeline();
+    const auto origin = ImGui::GetCursorScreenPos();
+    gtracker::TimelineGeometry geometry{editor.view, origin.x + 64, origin.x + ImGui::GetContentRegionAvail().x - 20};
     const bool has_render = !editor.rendered.audio.mono.empty();
-    if (!has_render && !editor.source) {
-        ImGui::BeginChild("##wave_empty", ImVec2(0.0f, height), ImGuiChildFlags_Borders);
-        ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "RENDERED WAVEFORM");
-        ImGui::TextWrapped("Render the pattern to inspect the waveform. Space renders and plays the current edit.");
-        ImGui::EndChild();
-        return;
-    }
     const bool current = editor.current_audio();
     const bool source = editor.source.has_value();
-    if (ImPlot::BeginPlot("##waveform", ImVec2(-1.0f, height), ImPlotFlags_NoMenus | (source ? 0 : ImPlotFlags_NoLegend))) {
-        ImPlot::SetupAxes(source ? "Pattern beat" : "Time (seconds)", nullptr, ImPlotAxisFlags_NoHighlight, ImPlotAxisFlags_NoHighlight);
-        if (source) {
-            const auto& preview = *editor.source;
-            const double start = std::min(0.0, preview.take.source_frame_to_beat(0));
-            double end = std::max(editor.document.pattern().length_beats,
-                                  preview.take.source_frame_to_beat(static_cast<double>(preview.take.audio.frames)));
-            if (has_render) end = std::max(end, editor.rendered.beats.back());
-            ImPlot::SetupAxisLimits(ImAxis_X1, start, end, ImGuiCond_Always);
-            ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
-        } else {
-            ImPlot::SetupAxisLimits(ImAxis_X1, 0.0,
-                                   static_cast<double>(editor.rendered.audio.mono.size()) / editor.rendered.audio.sample_rate,
-                                   ImGuiCond_Always);
-        }
-        ImPlot::SetupAxisLimits(ImAxis_Y1, -1.05, 1.05, ImGuiCond_Always);
+    const auto before = editor.view;
+    const auto extent = editor.timeline_extent();
+    auto& input = ImPlot::GetInputMap();
+    const auto saved_input = input;
+    input.Pan = ImGuiMouseButton_Middle;
+    ImPlot::PushStyleVar(ImPlotStyleVar_PlotPadding, ImVec2(16, 10));
+    if (ImPlot::BeginPlot("##waveform", ImVec2(-1.0f, height), ImPlotFlags_NoMenus | ImPlotFlags_NoBoxSelect | (source ? 0 : ImPlotFlags_NoLegend))) {
+        ImPlot::SetupAxes("Pattern beat", nullptr, ImPlotAxisFlags_NoHighlight, ImPlotAxisFlags_NoHighlight);
+        ImPlot::SetupAxisLimits(ImAxis_X1, editor.view.first, editor.view.last, ImPlotCond_Once);
+        ImPlot::SetupAxisLinks(ImAxis_X1, &editor.view.first, &editor.view.last);
+        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, extent.first, extent.last);
+        ImPlot::SetupAxisZoomConstraints(ImAxis_X1, std::min(1.0 / 64, extent.span()), extent.span());
+        const double peak = std::max(source ? editor.source->take.audio.peak : 0.0, has_render ? static_cast<double>(editor.rendered.audio.peak) : 0.0);
+        const double amplitude = editor.auto_wave_gain && (has_render || source) ? std::clamp(peak * 1.15, 0.01, 1.05) : 1.05;
+        ImPlot::SetupAxisLimits(ImAxis_Y1, -amplitude, amplitude, ImPlotCond_Always);
+        ImPlot::SetupAxisFormat(ImAxis_Y1, "% 7.3f");
+        if (source) ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
+        ImPlot::SetupFinish();
+        const auto position = ImPlot::GetPlotPos();
+        const auto size = ImPlot::GetPlotSize();
+        const auto limits = ImPlot::GetPlotLimits();
+        geometry = {{limits.X.Min, limits.X.Max}, position.x, position.x + size.x};
         if (source) {
             const auto& preview = *editor.source;
             ImPlot::SetNextFillStyle(ImVec4(0.96f, 0.74f, 0.37f, 0.45f));
             ImPlot::PlotShaded("Source", preview.beats.data(), preview.minimum.data(), preview.maximum.data(), static_cast<int>(preview.beats.size()));
-            const double boundaries[] = {0, editor.document.pattern().length_beats};
-            ImPlot::SetNextLineStyle(ImVec4(0.55f, 0.59f, 0.63f, 0.65f));
-            ImPlot::PlotInfLines("Pattern bounds", boundaries, 2);
         }
+        const double boundaries[] = {0, editor.document.pattern().length_beats};
+        ImPlot::SetNextLineStyle(ImVec4(0.55f, 0.59f, 0.63f, 0.65f));
+        ImPlot::PlotInfLines("Pattern bounds", boundaries, 2);
         if (has_render) {
             ImPlot::SetNextFillStyle(current ? ImVec4(0.30f, 0.83f, 0.87f, 0.80f)
                                             : ImVec4(0.42f, 0.48f, 0.53f, 0.60f));
             ImPlot::PlotShaded(current ? "Synth" : "Synth (previous)",
-                               source ? editor.rendered.beats.data() : editor.rendered.times.data(), editor.rendered.minimum.data(),
+                               editor.rendered.beats.data(), editor.rendered.minimum.data(),
                                editor.rendered.maximum.data(), static_cast<int>(editor.rendered.times.size()));
         }
+        if (!has_render && !source) ImPlot::PlotText("Render to inspect audio", (geometry.view.first + geometry.view.last) * 0.5, 0);
         ImPlot::EndPlot();
+        if (std::abs(editor.view.first - before.first) > 1e-12 || std::abs(editor.view.last - before.last) > 1e-12)
+            editor.follow_view_fit = false;
     }
+    ImPlot::PopStyleVar();
+    input = saved_input;
+    editor.timeline_geometry = geometry;
+    return geometry;
 }
 
 void keyboard(Editor& editor) {
@@ -1257,7 +1344,7 @@ void interface(Editor& editor) {
             editor.stop();
             editor.message("Source playback range changed. Play source to compare.");
         }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Start at the aligned beat-zero frame within the selected source. Disable to hear retained pre-roll. The original file is unchanged.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Start at the mapped beat-zero frame within the selected source. Disable to hear retained pre-roll. The original file is unchanged.");
         ImGui::SameLine();
         const bool detach = ImGui::Button("Detach");
         ImGui::SameLine();
@@ -1269,7 +1356,7 @@ void interface(Editor& editor) {
             ImGui::TextWrapped("%s", take.source_name.c_str());
             ImGui::Text("%d-bit PCM; input offset %lld frames (%s)", take.audio.sample_width_bits,
                         static_cast<long long>(take.alignment.input_offset_frames), take.alignment.offset_status.c_str());
-            ImGui::TextUnformatted("No latency calibration or note recognition is available.");
+            ImGui::TextUnformatted("Input/output clock alignment is unmeasured. No note recognition is available.");
             if (editor.document.pattern().revision != take.source_pattern_revision)
                 ImGui::TextUnformatted("Metadata job belongs to an older pattern revision; no proposal is applied.");
             ImGui::EndTooltip();
@@ -1278,22 +1365,40 @@ void interface(Editor& editor) {
     }
 
     const float waveform_height = 136.0f;
-    const float main_height = std::max(255.0f, ImGui::GetContentRegionAvail().y - waveform_height - 65.0f);
+    const float main_height = std::max(350.0f, ImGui::GetContentRegionAvail().y - 65.0f);
     const float inspector_width = 268.0f;
     const float canvas_width = std::max(300.0f, ImGui::GetContentRegionAvail().x - inspector_width - 8.0f);
-    ImGui::BeginChild("Tab", ImVec2(canvas_width, main_height), ImGuiChildFlags_Borders,
+    ImGui::BeginChild("Timeline", ImVec2(canvas_width, main_height), ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::TextDisabled("TAB  /  highest string first");
+    ImGui::TextDisabled("TAB / slide");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Highest string first. Fret = pluck, / = slide, x = damp, + = body hit. Wheel zooms; middle-drag pans. Shift+wheel pans the tab.");
     ImGui::SameLine();
-    ImGui::TextDisabled("  fret = pluck   / = slide   x = damp   + = body hit");
-    canvas(editor, ImGui::GetContentRegionAvail());
+    if (ImGui::Button("Pattern")) editor.fit_timeline(false);
+    ImGui::SameLine();
+    if (ImGui::Button("Context")) editor.fit_timeline(true);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show the whole preserved source and rendered decay tail on the same beat axis.");
+    ImGui::SameLine();
+    if (ImGui::Button("-##zoom")) editor.zoom_timeline(2, (editor.view.first + editor.view.last) * 0.5);
+    ImGui::SameLine();
+    if (ImGui::Button("+##zoom")) editor.zoom_timeline(0.5, (editor.view.first + editor.view.last) * 0.5);
+    ImGui::SameLine();
+    ImGui::Checkbox("Auto scale", &editor.auto_wave_gain);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Fit the wave's display scale. Played/exported samples keep their original level.");
+    const auto canvas_origin = ImGui::GetCursorScreenPos();
+    const auto available = ImGui::GetContentRegionAvail();
+    const ImVec2 canvas_size(available.x, std::max(170.0f, available.y - waveform_height - 8));
+    // Measure/draw the plot first, then use its exact data rectangle for the tab.
+    // Both widgets therefore share current-frame bounds even during plot zoom.
+    ImGui::SetCursorScreenPos(ImVec2(canvas_origin.x, canvas_origin.y + canvas_size.y + 8));
+    const auto geometry = waveform(editor, waveform_height);
+    ImGui::SetCursorScreenPos(canvas_origin);
+    canvas(editor, canvas_size, &geometry);
     ImGui::EndChild();
     ImGui::SameLine();
     ImGui::BeginChild("Inspector", ImVec2(0.0f, main_height), ImGuiChildFlags_Borders);
     inspector(editor);
     ImGui::EndChild();
 
-    waveform(editor, waveform_height);
     if (editor.status_error) {
         ImGui::TextColored(ImVec4(1.0f, 0.46f, 0.38f, 1.0f), "%s", editor.status.c_str());
     } else {

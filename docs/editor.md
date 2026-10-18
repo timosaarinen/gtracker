@@ -99,6 +99,20 @@ Saving an attached pattern preserves the take association; **Detach** permits a
 separate pattern copy. Source bytes and analysis proposals are never rewritten
 by preview playback. The metadata-only worker supplies no musical proposals.
 
+The tab, source and synth share the same beat viewport and screen-pixel
+positions. **Pattern** fits the editable region; **Context** also shows retained
+pre-roll and rendered/source tails, with outside-pattern tab space dimmed. Wheel
+zooms around the pointer and middle-drag pans; Shift+wheel also pans the tab.
+The waveform accepts wheel/middle-drag navigation. The `-`/`+` controls zoom
+around the view center. Context clicks cannot insert events outside the pattern.
+The inspector uses the full height beside the tab/wave column, including at the
+compact window size.
+
+**Auto scale** fits the waveform's vertical display range. It changes no PCM,
+playback gain, timing, document revision or undo history. An old render remains
+gray. Source views initially include their retained context; ordinary patterns
+initially fit their musical region.
+
 ## Lua operations
 
 Build with `GT_ENABLE_LUA=ON` (the normal desktop preset). Expand `Lua command`,
@@ -198,7 +212,7 @@ queued playback, waveform inspection, and unattended UI capture.
 Future work includes editor recording controls (CLI capture exists), musical
 transcription, hammer/pull-off and additional contact/expression gestures,
 multiple patterns and arrangement, course-aware twelve-string instruments,
-timeline zoom/scroll, richer keyboard tab entry, autosave/recovery, render
+richer keyboard tab entry, autosave/recovery, render
 cancellation, output-device selection, and reverb controls.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.
