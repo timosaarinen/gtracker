@@ -265,3 +265,30 @@ passed separately. The final extra framebuffer capture is checked separately.
 `.local/nightshift/retained-checks.json` binds the generated A/B, 18 known-score
 probes and playable `.local/night-shift-retained.wav` to their actual source/build.
 Linux qualification of this new model follows its committed checkpoint.
+
+Committed `a18e11c` passed Ubuntu GCC9 native19, Python84 (no skips after fresh
+desktop), desktop26 and Clang10 ASan/UBSan19. Known-score probes also completed.
+Logs: `.local/qualification/ubuntu/.local/retained-{ci,desktop,python-desktop,clang-sanitize,probe}.log`.
+The older GCC9 sanitizer runtime was accidentally invoked again and reproduced
+its recursive runtime failures; bounded diagnostics remain in
+`retained-gcc-runtime-summary.log`. A file-size cap briefly broke a Clang build;
+removing that inappropriate compiler cap and bounding diagnostic output instead
+allowed the actual Clang sanitizer pass. Neither failed attempt is a code pass.
+
+Issue #5 now has an explicit, dependency-free monophonic proposal experiment,
+separate from the unchanged metadata worker/take protocol. Native review checks
+source/job/alignment plus the exact score snapshot; acceptance adds only selected
+plucks and fingerings as one undoable editor batch. No notes are preselected.
+Late/stale/changed-source jobs, unsupported data and conflicting curves fail
+without edits. An original native two-bar phrase, generated tone/noise/silence/
+stereo checks and documented octave/chord failures keep scope explicit.
+See docs/proposals.md for commands, primary-source research notes and limits.
+
+Windows full CI `.local/ci/runs/20261018T070350Z-8890168f/report.json` passed20
+native and93 Python checks (one POSIX-only skip); fresh desktop28 passed too.
+A subsequent source-change-during-analysis/oversized-input regression was added
+and checked with the focused proposal/package tests. A fresh optional venv ran
+the four-note job without third-party packages. Native synthetic UI tested the
+actual accept button, no preselection, one-step undo/redo, save/reopen, A/B queuing
+and a changed source after load; framebuffer `editor-proposal-review.bmp` was
+inspected. This is not physical playback or real-guitar transcription evidence.

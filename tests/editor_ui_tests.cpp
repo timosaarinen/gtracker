@@ -431,6 +431,61 @@ void production_authoring(Host& host, const Arguments& original) {
     host.screenshot(std::filesystem::current_path() / "editor-production-controls.bmp");
 }
 
+void proposal_workflow(Host& host, const Arguments& original, const std::filesystem::path& fixture) {
+    const auto directory = original.document.parent_path() / "proposal-copy";
+    std::filesystem::copy(fixture.parent_path(), directory, std::filesystem::copy_options::recursive);
+    Arguments args = original; args.document.clear(); args.take = directory / "take.json";
+    Editor editor(args);
+    const auto source_before = file_bytes(directory / "source.wav");
+    const auto metadata_before = file_bytes(directory / "analysis.json");
+    const auto generation = editor.document.generation();
+    set_text(editor.proposal_path, (directory / "proposals.json").u8string());
+    editor.load_proposals();
+    check_ui(editor.proposals && editor.proposals->notes.size() == 4 && editor.document.generation() == generation && !editor.document.dirty(),
+             "loading proposals edited the source score or lost the actual generated candidates");
+    check_ui(std::all_of(editor.proposal_alternatives.begin(), editor.proposal_alternatives.end(), [](int value) { return value == -1; }),
+             "proposal fingerings were silently preselected");
+    editor.attempt([&] { editor.accept_proposals(); });
+    check_ui(editor.status_error && editor.document.pattern().events.empty(), "empty proposal selection edited the score");
+    for (std::size_t i = 0; i < editor.proposals->notes.size(); ++i)
+        editor.proposal_alternatives[i] = static_cast<int>(editor.proposals->notes[i].alternatives.size())-1;
+    ImVec2 a, b;
+    auto draw = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20,20)); ImGui::SetNextWindowSize(ImVec2(620,690));
+        ImGui::Begin("Note proposal review regression");
+        proposal_inspector(editor);
+        a = ImGui::GetItemRectMin(); b = ImGui::GetItemRectMax();
+        ImGui::End();
+    };
+    frame(host,draw); frame(host,draw);
+    host.screenshot(std::filesystem::current_path() / "editor-proposal-review.bmp");
+    frame(host,draw,[&] { ImGui::GetIO().AddMousePosEvent((a.x+b.x)*.5f,(a.y+b.y)*.5f); ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,false); });
+    check_ui(editor.document.pattern().events.size() == 4 && editor.document.dirty(), "real Accept selected plucks button did not commit the chosen batch");
+    for (const auto& event : editor.document.pattern().events) check_ui(event.string_index == 5, "chosen string alternatives were ignored");
+    const auto first_id = editor.document.pattern().events.front().id;
+    check_ui(!gtracker::note_proposals_match(*editor.proposals,editor.document.pattern(),editor.source->take), "applied proposals stayed fresh for a second import");
+    editor.undo(); check_ui(editor.document.pattern().events.empty(), "proposal batch did not undo in one operation");
+    editor.undo(true); check_ui(editor.document.pattern().events.front().id == first_id, "proposal redo lost stable event IDs");
+    editor.save();
+    Editor reopened(args);
+    check_ui(reopened.document.pattern().events.size() == 4, "accepted proposals did not survive source take save/reopen");
+    reopened.request_render(); reopened.pending.wait(); reopened.poll_render(); reopened.play();
+    check_ui(reopened.current_audio() && reopened.playing, "accepted notes did not render/queue through the shared instrument");
+    reopened.play_source(); check_ui(reopened.audio_rate == 16000 && reopened.audio_channels == 1, "proposal A/B changed original source format");
+    reopened.stop();
+    check_ui(file_bytes(directory / "source.wav") == source_before && file_bytes(directory / "analysis.json") == metadata_before,
+             "review/accept/save altered source PCM or the preserved metadata job");
+
+    const auto corrupt = original.document.parent_path() / "proposal-corrupt-copy";
+    std::filesystem::copy(fixture.parent_path(), corrupt, std::filesystem::copy_options::recursive);
+    args.take = corrupt / "take.json"; Editor guarded(args);
+    set_text(guarded.proposal_path, (corrupt / "proposals.json").u8string()); guarded.load_proposals(); guarded.proposal_alternatives[0] = 0;
+    { std::fstream audio(corrupt / "source.wav",std::ios::binary|std::ios::in|std::ios::out); audio.seekp(-1,std::ios::end); audio.put('\x01'); }
+    guarded.attempt([&] { guarded.accept_proposals(); });
+    check_ui(guarded.status_error && guarded.document.pattern().events.empty() && !guarded.document.dirty(), "source changed after loading but stale proposals were accepted");
+}
+
 void timeline_navigation(Host& host, const Arguments& original, const std::filesystem::path& manifest) {
     Arguments args = original;
     args.document.clear(); args.take = manifest;
@@ -496,7 +551,7 @@ void timeline_navigation(Host& host, const Arguments& original, const std::files
 
 int main(int argc, char** argv) {
     try {
-        check_ui(argc == 3, "Expected source root and generated take manifest");
+        check_ui(argc == 4, "Expected source root, generated take and proposal manifests");
         const auto directory = std::filesystem::current_path() / "editor-ui-test-output";
         std::filesystem::create_directories(directory);
         Arguments args;
@@ -514,6 +569,7 @@ int main(int argc, char** argv) {
         source_workflow(host, args, std::filesystem::path(argv[2]));
         slide_authoring(host, args);
         production_authoring(host, args);
+        proposal_workflow(host, args, std::filesystem::path(argv[3]));
         timeline_navigation(host, args, std::filesystem::path(argv[2]));
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");

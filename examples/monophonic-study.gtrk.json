@@ -1,0 +1,26 @@
+{
+  "schema_version": 2,
+  "name": "Original single-note research phrase",
+  "revision": 1,
+  "tempo_bpm": 120,
+  "length_beats": 8,
+  "seed": 42,
+  "instrument": {
+    "model": "retained_0_5",
+    "tuning_midi": [64, 59, 55, 50, 45, 40],
+    "decay_seconds": 4,
+    "brightness": 0.78,
+    "body_mix": 0
+  },
+  "events": [
+    {"id":"m01", "type":"pluck", "beat":0, "string":6, "fret":0, "strength":0.7},
+    {"id":"m02", "type":"damp", "beat":1.5, "string":6, "strength":1},
+    {"id":"m03", "type":"pluck", "beat":2, "string":6, "fret":7, "strength":0.7},
+    {"id":"m04", "type":"damp", "beat":3.5, "string":6, "strength":1},
+    {"id":"m05", "type":"pluck", "beat":4, "string":6, "fret":12, "strength":0.7},
+    {"id":"m06", "type":"damp", "beat":5.5, "string":6, "strength":1},
+    {"id":"m07", "type":"pluck", "beat":6, "string":6, "fret":15, "strength":0.7},
+    {"id":"m08", "type":"damp", "beat":7.5, "string":6, "strength":1}
+  ],
+  "gestures": []
+}

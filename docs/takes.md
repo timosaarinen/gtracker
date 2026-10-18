@@ -3,6 +3,8 @@
 The import command attaches a stable integer-PCM WAV to an ignored take bundle.
 Use [record-take](capture.md) for explicit native capture followed by this import
 workflow. Analysis remains metadata-only and recognizes no musical events.
+Optional [single-note research proposals](proposals.md) use a separate explicit
+sidecar and reviewed native acceptance; the preserved metadata result stays intact.
 The source is copied byte-for-byte, including its header/extra chunks, channel
 count, rate, pre-roll and decay tail. Selecting a region only stores coordinates;
 it never crops, resamples, normalizes or replaces the source.

@@ -35,6 +35,9 @@ Command-line examples (use .exe on Windows):
 This package includes native tools, original patterns/song, Lua examples, schema,
 controls/model documentation and notices. It contains no recordings or weights.
 An optional Python research worker is not required to render/play authored music.
+The optional source-checkout single-note proposal experiment can produce reviewed
+sidecars for the native Note proposals inspector/CLI; see docs/proposals.md.
+It does not recognize chords/articulations or recover actual played strings.
 
 Platform runtime libraries are prerequisites, not bundled here. Windows builds
 using MSVC/Clang require the Microsoft Visual C++ 2015-2022 x64 runtime. Linux

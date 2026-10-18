@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker explicit proposal selection v1",
+  "description": "One-based alternative indices refer to the reviewed proposal file. Readers reject duplicate notes, unknown IDs, stale score snapshots and out-of-pattern timing. Existing authored events are retained.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "version", "job_id", "strength", "choices"],
+  "properties": {
+    "schema": {"const": "gtracker.proposal-selection"}, "version": {"type": "integer", "const": 1},
+    "job_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "strength": {"type": "number", "minimum": 0, "maximum": 1},
+    "choices": {
+      "type": "array", "minItems": 1, "maxItems": 128,
+      "items": {"type": "object", "additionalProperties": false, "required": ["note_id", "alternative"],
+        "properties": {"note_id": {"type": "string", "minLength": 1, "maxLength": 64}, "alternative": {"type": "integer", "minimum": 1, "maximum": 12}}}
+    }
+  }
+}

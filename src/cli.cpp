@@ -1,4 +1,6 @@
 #include "gtracker/project.hpp"
+#include "gtracker/proposals.hpp"
+#include <iterator>
 #include "gtracker/core.h"
 #include "gtracker/take.hpp"
 #include "gtracker/alignment.hpp"
@@ -77,6 +79,8 @@ void help() {
         "  gtracker_cli render-song SONG --output WAV [render options above; always streamed]\n"
         "  gtracker_cli snapshot-song SONG --output SONG [--json]\n"
         "  gtracker_cli take-info TAKE [--json]\n"
+        "  gtracker_cli proposal-info TAKE --proposals JSON [--json]\n"
+        "  gtracker_cli accept-proposals TAKE --proposals JSON --selection JSON --output PATTERN [--json]\n"
         "  gtracker_cli calibration-probe --output WAV [--sample-rate HZ] [--seed N] [--json]\n"
         "  gtracker_cli align-audio --reference WAV --recorded WAV [--max-offset-ms MS]\n"
         "      [--window-seconds S] [--reference-channel 1|2] [--recorded-channel 1|2]\n"
@@ -166,6 +170,76 @@ int alignment_command(int argc, char** argv, bool as_json) {
 }
 }
 
+int proposal_command(int argc, char** argv, bool as_json) {
+    if (argc < 3 || std::string(argv[2]).rfind("--", 0) == 0) throw std::runtime_error("A preserved take manifest is required");
+    const bool accept = std::string(argv[1]) == "accept-proposals";
+    const auto take_path = std::filesystem::u8path(argv[2]);
+    std::filesystem::path proposal_path, selection_path, output;
+    for (int i = 3; i < argc; ++i) {
+        const std::string flag = argv[i];
+        if (flag == "--json") continue;
+        if (++i >= argc) throw std::runtime_error("Missing value for " + flag);
+        const auto path = std::filesystem::u8path(argv[i]);
+        if (flag == "--proposals") proposal_path = path;
+        else if (flag == "--selection" && accept) selection_path = path;
+        else if (flag == "--output" && accept) output = path;
+        else throw std::runtime_error("Unknown or inapplicable proposal option: " + flag);
+    }
+    if (proposal_path.empty()) throw std::runtime_error("--proposals is required");
+    const auto take = gtracker::load_take(take_path);
+    const auto proposals = gtracker::load_note_proposals(proposal_path, take);
+    nlohmann::json report{{"ok", true}, {"command", argv[1]}, {"job_id", proposals.job_id}, {"take_id", take.id},
+        {"status", proposals.status}, {"matches_current_pattern", gtracker::note_proposals_match(proposals, take.pattern, take)},
+        {"source_pattern_revision", proposals.source_pattern.revision}, {"pattern_revision", take.pattern.revision},
+        {"notes", nlohmann::json::array()}, {"limitations", proposals.limitations}};
+    for (const auto& note : proposals.notes) {
+        nlohmann::json alternatives = nlohmann::json::array();
+        for (const auto& alternative : note.alternatives) alternatives.push_back({{"string", alternative.string_index+1}, {"fret", alternative.fret}});
+        report["notes"].push_back({{"id", note.id}, {"onset_frame", note.onset_frame}, {"beat", take.source_frame_to_beat(static_cast<double>(note.onset_frame))},
+            {"pitch_midi", note.pitch_midi}, {"periodicity", note.periodicity}, {"onset_uncertainty_frames", note.onset_uncertainty_frames}, {"alternatives", alternatives}});
+    }
+    if (accept) {
+        if (selection_path.empty() || output.empty()) throw std::runtime_error("Acceptance requires --selection JSON and --output pattern");
+        gtracker::require_distinct_output(output, {take_path, take.pattern_path, take.source_path, take.analysis_path, proposal_path, selection_path});
+        if (std::filesystem::file_size(selection_path) > 65536) throw std::runtime_error("Proposal selection exceeds 64 KiB");
+        std::ifstream input(selection_path, std::ios::binary);
+        if (!input) throw std::runtime_error("Cannot open proposal selection");
+        std::string data(65537, '\0');
+        input.read(data.data(), static_cast<std::streamsize>(data.size()));
+        data.resize(static_cast<std::size_t>(input.gcount()));
+        if (input.bad() || data.size() > 65536) throw std::runtime_error("Proposal selection changed/exceeds 64 KiB");
+        const auto selection = nlohmann::json::parse(data, [](int depth, nlohmann::json::parse_event_t, nlohmann::json&) {
+            if (depth > 16) throw std::runtime_error("Proposal selection exceeds its nesting bound"); return true;
+        });
+        const auto exact = [](const auto& value, std::initializer_list<const char*> fields) {
+            if (!value.is_object() || value.size() != fields.size()) throw std::runtime_error("Proposal selection has missing/unknown fields");
+            for (const auto* field : fields) if (!value.contains(field)) throw std::runtime_error("Proposal selection is missing a field");
+        };
+        exact(selection, {"schema", "version", "job_id", "strength", "choices"});
+        if (selection.at("schema") != "gtracker.proposal-selection" || !selection.at("version").is_number_integer() || selection.at("version") != 1 || selection.at("job_id") != proposals.job_id)
+            throw std::runtime_error("Unsupported/mismatched proposal selection schema/version/job");
+        if (!selection.at("strength").is_number()) throw std::runtime_error("Proposal strength must be numeric");
+        const auto& entries = selection.at("choices");
+        if (!entries.is_array() || entries.empty() || entries.size() > 128) throw std::runtime_error("Choose 1..128 notes explicitly");
+        std::vector<gtracker::ProposalChoice> choices;
+        for (const auto& entry : entries) {
+            exact(entry, {"note_id", "alternative"});
+            const auto found = std::find_if(proposals.notes.begin(), proposals.notes.end(), [&](const auto& note) { return entry.at("note_id") == note.id; });
+            if (found == proposals.notes.end() || !entry.at("alternative").is_number_integer() || entry.at("alternative") < 1 || entry.at("alternative") > GT_MAX_STRINGS)
+                throw std::runtime_error("Unknown note or invalid one-based alternative");
+            choices.push_back({static_cast<std::size_t>(found-proposals.notes.begin()), entry.at("alternative").get<std::size_t>()-1});
+        }
+        auto next = gtracker::accept_note_proposals(take.pattern, take, proposals, choices, selection.at("strength").get<float>());
+        if (next.revision >= 9007199254740991ULL) throw std::runtime_error("Pattern revision exhausted its JSON-safe range");
+        ++next.revision;
+        gtracker::save_pattern(next, output);
+        report["output"] = output.u8string(); report["accepted_notes"] = choices.size(); report["pattern_revision"] = next.revision;
+    }
+    if (as_json) std::cout << report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
+    else std::cout << proposals.notes.size() << " monophonic candidates; " << (report["matches_current_pattern"] == true ? "current" : "stale") << " score snapshot.\n";
+    return 0;
+}
+
 int cli_main(int argc, char** argv) {
     bool as_json = false;
     for (int i = 1; i < argc; ++i) if (std::string(argv[i]) == "--json") as_json = true;
@@ -177,6 +251,7 @@ int cli_main(int argc, char** argv) {
             return 0;
         }
         const std::string command = argv[1];
+        if (command == "proposal-info" || command == "accept-proposals") return proposal_command(argc, argv, as_json);
         if (command == "calibration-probe" || command == "align-audio") return alignment_command(argc, argv, as_json);
         const bool is_render = command == "render" || command == "render-song";
         const bool is_song = command == "validate-song" || command == "render-song" || command == "snapshot-song";

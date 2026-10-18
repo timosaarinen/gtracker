@@ -2,6 +2,7 @@
 #include "gtracker/editor_document.hpp"
 #include "gtracker/take.hpp"
 #include "gtracker/timeline.hpp"
+#include "gtracker/proposals.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -222,6 +223,9 @@ struct Editor {
     CompletedRender rendered;
     std::optional<SourcePreview> source;
     std::optional<SourcePreview> pending_source;
+    std::optional<gtracker::NoteProposals> proposals;
+    std::vector<int> proposal_alternatives; // -1 skips a note until explicitly chosen.
+    float proposal_strength = 0.6f;
     SDL_AudioStream* audio_stream = nullptr;
     int audio_rate = 0;
     int audio_channels = 0;
@@ -245,6 +249,7 @@ struct Editor {
     std::array<char, 1024> path{};
     std::array<char, 1024> script_path{};
     std::array<char, 1024> take_path{};
+    std::array<char, 1024> proposal_path{};
     std::array<char, 1024> confirmation_save_path{};
 
     explicit Editor(const Arguments& args) {
@@ -384,6 +389,7 @@ struct Editor {
     }
 
     void loaded() {
+        proposals.reset(); proposal_alternatives.clear();
         source = std::move(pending_source);
         pending_source.reset();
         set_text(path, document.filename().u8string());
@@ -443,7 +449,30 @@ struct Editor {
         document.end_edit();
         stop();
         source.reset();
+        proposals.reset(); proposal_alternatives.clear();
         message("Source detached; its files are preserved. Save writes the pattern only.");
+    }
+
+    void load_proposals() {
+        if (!source) throw std::runtime_error("Open a preserved source take before loading note proposals.");
+        auto loaded = gtracker::load_note_proposals(std::filesystem::u8path(proposal_path.data()), source->take);
+        const bool current = gtracker::note_proposals_match(loaded, document.pattern(), source->take);
+        proposal_alternatives.assign(loaded.notes.size(), -1);
+        proposals = std::move(loaded);
+        message(current ? "Loaded monophonic candidates. Review timing and choose each fingering explicitly." : "Loaded a stale proposal job. Repeat analysis against the current pattern before accepting.");
+    }
+
+    void accept_proposals() {
+        if (!source || !proposals) throw std::runtime_error("Open a source take and proposal job first.");
+        const auto verified = gtracker::load_take(source->take.manifest_path);
+        if (gtracker::pattern_json(verified.pattern) != gtracker::pattern_json(document.pattern()))
+            throw std::runtime_error("The saved take pattern differs from the editor. Save/review it before accepting a proposal job.");
+        std::vector<gtracker::ProposalChoice> choices;
+        for (std::size_t i = 0; i < proposal_alternatives.size(); ++i)
+            if (proposal_alternatives[i] >= 0) choices.push_back({i, static_cast<std::size_t>(proposal_alternatives[i])});
+        auto next = gtracker::accept_note_proposals(document.pattern(), verified, *proposals, choices, proposal_strength);
+        commit(std::move(next), "Accepted selected note proposals as one undoable edit.");
+        std::fill(proposal_alternatives.begin(), proposal_alternatives.end(), -1);
     }
 
     void resolve(gtracker::EditorDocument::Decision decision) {
@@ -1048,6 +1077,71 @@ void production_inspector(Editor& editor) {
     ImGui::TextWrapped("Render again after editing. Original source playback stays unchanged.");
 }
 
+void proposal_inspector(Editor& editor) {
+    ImGui::TextWrapped("Optional single-note research proposals. Chords and articulations are unsupported.");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##proposal_path", editor.proposal_path.data(), editor.proposal_path.size());
+    ImGui::BeginDisabled(!editor.source);
+    if (ImGui::Button("Load proposals", ImVec2(-1, 0))) editor.attempt([&] { editor.load_proposals(); });
+    ImGui::EndDisabled();
+    if (!editor.source) ImGui::TextWrapped("Open a source take first. Generate a job with analysis/propose.py in a source checkout.");
+    if (!editor.source || !editor.proposals) return;
+    const auto& proposals = *editor.proposals;
+    const bool current = gtracker::note_proposals_match(proposals, editor.document.pattern(), editor.source->take);
+    ImGui::TextWrapped("Job: %s", proposals.job_id.c_str());
+    ImGui::Text("Channel %d | %zu candidates", proposals.channel+1, proposals.notes.size());
+    if (!current) ImGui::TextWrapped("Stale score snapshot. Repeat the proposal job after saving current edits.");
+    if (proposals.notes.empty()) ImGui::TextWrapped("No confident candidates in this single-note experiment. This does not establish silence.");
+    ImGui::TextWrapped("Fingerings are alternatives, not detected strings. Periodicity is a diagnostic, not a probability. Acceptance adds plucks only.");
+    ImGui::BeginDisabled(!current);
+    for (std::size_t index = 0; index < proposals.notes.size(); ++index) {
+        const auto& note = proposals.notes[index];
+        const double beat = editor.source->take.source_frame_to_beat(static_cast<double>(note.onset_frame));
+        ImGui::PushID(static_cast<int>(index));
+        const bool inside = beat >= 0 && beat < editor.document.pattern().length_beats;
+        if (ImGui::TreeNodeEx("note", ImGuiTreeNodeFlags_None, "%s | beat %.3f", note.id.c_str(), beat)) {
+            ImGui::Text("MIDI %.2f | periodicity %.2f", note.pitch_midi, note.periodicity);
+            ImGui::Text("Onset window: ~%.1f ms", note.onset_uncertainty_frames * 1000.0 / proposals.sample_rate);
+            ImGui::Text("Pitch spread: %.1f cents", note.pitch_spread_cents);
+            if (!inside) ImGui::TextWrapped("Outside the pattern. Adjust alignment explicitly before a new job.");
+            if (note.alternatives.empty()) ImGui::TextWrapped("No compatible string/fret in this tuning.");
+            ImGui::BeginDisabled(!inside || note.alternatives.empty());
+            const int selected = editor.proposal_alternatives[index];
+            std::string label = "Skip this note";
+            if (selected >= 0) {
+                const auto& alternative = note.alternatives[static_cast<std::size_t>(selected)];
+                char buffer[96]; std::snprintf(buffer, sizeof(buffer), "String %d, fret %.2f", alternative.string_index+1, alternative.fret); label = buffer;
+            }
+            ImGui::SetNextItemWidth(-1);
+            if (ImGui::BeginCombo("##fingering", label.c_str())) {
+                if (ImGui::Selectable("Skip this note", selected < 0)) editor.proposal_alternatives[index] = -1;
+                for (std::size_t i = 0; i < note.alternatives.size(); ++i) {
+                    const auto& alternative = note.alternatives[i];
+                    char buffer[96]; std::snprintf(buffer, sizeof(buffer), "String %d, fret %.2f", alternative.string_index+1, alternative.fret);
+                    if (ImGui::Selectable(buffer, selected == static_cast<int>(i))) editor.proposal_alternatives[index] = static_cast<int>(i);
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::EndDisabled();
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::TreeNode("Research limits")) {
+        for (const auto& limitation : proposals.limitations) ImGui::TextWrapped("%s", limitation.c_str());
+        ImGui::TreePop();
+    }
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat("##proposal_strength", &editor.proposal_strength, 0, 1, "New pluck strength %.2f");
+    ImGui::TextWrapped("Strength is your authoring choice; it is not inferred from the recording.");
+    const auto selected_count = std::count_if(editor.proposal_alternatives.begin(), editor.proposal_alternatives.end(), [](int value) { return value >= 0; });
+    ImGui::Text("%zu / %zu notes selected", static_cast<std::size_t>(selected_count), proposals.notes.size());
+    ImGui::BeginDisabled(selected_count == 0);
+    if (ImGui::Button("Accept selected plucks", ImVec2(-1, 0))) editor.attempt([&] { editor.accept_proposals(); });
+    ImGui::EndDisabled();
+    ImGui::EndDisabled();
+}
+
 void inspector(Editor& editor) {
     const bool slide = editor.selected_gesture >= 0 && editor.selected_gesture < static_cast<int>(editor.document.pattern().gestures.size());
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), slide ? "SLIDE" : "EVENT");
@@ -1166,10 +1260,14 @@ void inspector(Editor& editor) {
             ImGui::Text("%d Hz, %d channels, %d-bit PCM", take.audio.sample_rate, take.audio.channels, take.audio.sample_width_bits);
             ImGui::Text("Source tempo: %.2f BPM", take.alignment.bpm);
             ImGui::Text("Input offset: %lld frames (%s)", static_cast<long long>(take.alignment.input_offset_frames), take.alignment.offset_status.c_str());
-            ImGui::TextWrapped("Source timing is %s. Musical recognition is unavailable; authored notes are retained.", take.alignment.offset_status.c_str());
+            ImGui::TextWrapped("Source timing is %s. Its metadata job has no transcript; optional note proposals are reviewed separately.", take.alignment.offset_status.c_str());
             if (editor.document.pattern().revision != take.source_pattern_revision)
-                ImGui::TextWrapped("Analysis belongs to an older pattern revision. No proposal is applied.");
+                ImGui::TextWrapped("The metadata job describes an older pattern revision.");
         }
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Note proposals")) {
+        proposal_inspector(editor);
         ImGui::TreePop();
     }
 }
@@ -1384,16 +1482,16 @@ void interface(Editor& editor) {
         const bool detach = ImGui::Button("Detach");
         ImGui::SameLine();
         const auto& take = editor.source->take;
-        ImGui::TextDisabled("%s | %.1f kHz, %d ch | source %.1f BPM | no transcript", take.source_name.c_str(),
+        ImGui::TextDisabled("%s | %.1f kHz, %d ch | source %.1f BPM | metadata job", take.source_name.c_str(),
                             take.audio.sample_rate / 1000.0, take.audio.channels, take.alignment.bpm);
         if (ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::TextWrapped("%s", take.source_name.c_str());
             ImGui::Text("%d-bit PCM; input offset %lld frames (%s)", take.audio.sample_width_bits,
                         static_cast<long long>(take.alignment.input_offset_frames), take.alignment.offset_status.c_str());
-            ImGui::TextUnformatted("Input/output clock alignment is unmeasured. No note recognition is available.");
+            ImGui::TextUnformatted("Input/output clock alignment is unmeasured. Optional single-note proposals are reviewed separately.");
             if (editor.document.pattern().revision != take.source_pattern_revision)
-                ImGui::TextUnformatted("Metadata job belongs to an older pattern revision; no proposal is applied.");
+                ImGui::TextUnformatted("The metadata job describes an older pattern revision.");
             ImGui::EndTooltip();
         }
         if (detach) editor.detach_source();

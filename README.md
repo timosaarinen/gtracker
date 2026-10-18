@@ -29,6 +29,10 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - Python analysis worker that accepts a recorded WAV and returns a versioned
   result with source hash, timing, channel/peak/RMS metadata and job provenance.
   It explicitly reports that transcription is unavailable.
+- A separate opt-in [single-note proposal experiment](docs/proposals.md), with
+  explicit channel selection, original sample timing, string/fret alternatives
+  and reviewed batch acceptance/undo. Generated two-bar fixtures pass; chords,
+  articulation recognition and real-guitar accuracy remain unqualified.
 - Source-preserving take import/inspection with relative bundle paths, explicit
   source-sample timing, manual/uncalibrated offsets and checked analysis identity.
   A native PCM/take reader verifies hashes and formats without Python at playback;

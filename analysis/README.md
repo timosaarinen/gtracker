@@ -1,8 +1,14 @@
 # Analysis worker protocol, version 1
 
-This package is a **metadata-only baseline** for the future recording-to-pattern
+`analyze.py` is a **metadata-only baseline** for the recording-to-pattern
 analyzer. It does not infer pitches, onsets, strings/frets, articulations, or body
 percussion. It has no third-party Python dependency and downloads no model weights.
+
+The separate, explicit [`propose.py` experiment](../docs/proposals.md) can generate
+single-note candidates and pitch-compatible fingering alternatives for native
+review/undo. It uses a different versioned sidecar; this worker's v1 protocol and
+unavailable transcription capability remain unchanged. Chords and articulations
+are unsupported, and real-guitar recognition has not been qualified.
 
 ## Invoke one job
 
@@ -54,8 +60,9 @@ pre-roll/tail, and long-recording chunking can extend the versioned job interfac
 An empty event array here means **transcription has not been implemented**. It
 must not clear an existing pattern or be presented as proof that a take has no
 notes. The current editor does not invoke or import this worker automatically.
-Future proposals should retain uncertainty and enter the document through an
-undoable operation only when their source revision still matches.
+Optional single-note sidecars retain uncertainty and enter the document through
+an explicit undoable operation only when their full source score snapshot still
+matches; see [the proposal workflow](../docs/proposals.md).
 
 ## Research environment
 

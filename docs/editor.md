@@ -99,6 +99,14 @@ Saving an attached pattern preserves the take association; **Detach** permits a
 separate pattern copy. Source bytes and analysis proposals are never rewritten
 by preview playback. The metadata-only worker supplies no musical proposals.
 
+The separate **Note proposals** inspector reviews optional
+[single-note research jobs](proposals.md). Load a sidecar for the attached take,
+expand notes and explicitly choose each string/fret alternative. All notes start
+skipped. **Accept selected plucks** adds one undoable batch with fractional source
+timing and your chosen strength. A changed score/source rejects stale acceptance;
+the old metadata result and original PCM remain unchanged. This experiment does
+not recognize chords, articulations, or actual played strings.
+
 The tab, source and synth share the same beat viewport and screen-pixel
 positions. **Pattern** fits the editable region; **Context** also shows retained
 pre-roll and rendered/source tails, with outside-pattern tab space dimmed. Wheel
@@ -214,12 +222,12 @@ savepoints, revision bounds and history without SDL.
 ## Current scope
 
 Implemented: pluck/damp/body-hit and continuous-slide editing, explicit baseline/
-contact model selection, basic instrument parameters,
+contact/retained model selection, reviewed single-note proposal acceptance, basic instrument parameters,
 JSON load/save, document undo/redo, a small Lua command API, asynchronous rendering,
 queued playback, waveform inspection, and unattended UI capture.
 
 Future work includes editor recording controls (CLI capture exists), musical
-transcription, hammer/pull-off and additional contact/expression gestures,
+general guitar transcription, hammer/pull-off and additional contact/expression gestures,
 an arrangement UI (CLI songs exist), course-aware twelve-string instruments,
 richer keyboard tab entry, autosave/recovery, render
 cancellation and output-device selection.
