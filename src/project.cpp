@@ -154,6 +154,8 @@ Pattern parse_pattern_json(std::string_view source) {
     require(source.size() <= max_document_bytes, "Pattern JSON exceeds the 1 MiB prototype limit");
     const auto doc = json::parse(source);
     require(doc.is_object(), "Pattern JSON must be an object");
+    require(!doc.contains("schema") || doc.at("schema") != "gtracker.song",
+            "This is a song arrangement. Use gtracker_cli render-song; the editor currently edits individual patterns.");
     const auto version = unsigned_integer(doc.at("schema_version"), 9007199254740991ULL, "schema_version");
     require(version == 1 || version == 2, "Unsupported schema_version; expected 1 or 2");
     if (version == 1) keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events"}, "pattern");

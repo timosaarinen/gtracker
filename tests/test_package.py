@@ -28,9 +28,9 @@ class PackageTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
         (self.root / ".gitignore").write_text(".local/\n", encoding="utf-8")
         self.suffix = ".exe" if os.name == "nt" else ""
-        names = ["examples/campfire.gtrk.json", "examples/slide-study.gtrk.json", "examples/room.json", "scripts/soften.lua", "scripts/slide.lua",
+        names = ["examples/campfire.gtrk.json", "examples/slide-study.gtrk.json", "examples/night-bridge.gtrk.json", "examples/night-shift.gsong.json", "examples/room.json", "scripts/soften.lua", "scripts/slide.lua",
                  "schema/pattern.schema.json", "schema/pattern-v2.schema.json", "schema/take.schema.json", "schema/capture-result.schema.json",
-                 "schema/alignment-result.schema.json", "schema/production.schema.json", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md", "packaging/README.txt",
+                 "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md", "packaging/README.txt",
                  ".local/build/headless/bin/gtracker_cli" + self.suffix,
                  ".local/build/headless/_deps/gt_json-src/LICENSE.MIT",
                  ".local/build/headless/_deps/gt_lua-src/src/lua.h", ".local/private.wav"]

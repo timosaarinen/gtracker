@@ -2,6 +2,8 @@
 #include "gtracker/core.h"
 #include "gtracker/take.hpp"
 #include "gtracker/alignment.hpp"
+#include "gtracker/song.hpp"
+#include "gtracker/io.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -26,6 +28,25 @@ struct RenderSignalGuard {
     }
     ~RenderSignalGuard() { std::signal(SIGINT, previous); }
 };
+void prepare_stream(gtracker::StreamOptions& stream, const std::filesystem::path& cancel, bool progress_json) {
+    stream.cancelled = [cancel] { return render_interrupted != 0 || (!cancel.empty() && std::filesystem::exists(cancel)); };
+    if (progress_json) stream.progress = [last = std::chrono::steady_clock::time_point{}](const gtracker::RenderProgress& p) mutable {
+        const auto now = std::chrono::steady_clock::now();
+        if (p.processed_frames != 0 && p.processed_frames != p.processing_frames && now - last < std::chrono::milliseconds(100)) return;
+        std::cerr << nlohmann::json{{"type", "render_progress"}, {"processed_frames", p.processed_frames},
+            {"processing_frames", p.processing_frames}, {"written_frames", p.written_frames}, {"output_frames", p.output_frames}}.dump() << '\n';
+        last = now;
+    };
+}
+nlohmann::json stream_report(const gtracker::StreamRenderResult& r) {
+    return {{"sample_rate", r.sample_rate}, {"frames", r.frames}, {"channels", r.channels},
+        {"seconds", static_cast<double>(r.frames) / r.sample_rate}, {"peak", r.peak}, {"rms", r.rms},
+        {"render_ms", r.render_ms}, {"export_elapsed_ms", r.elapsed_ms}, {"render_identity_sha256", r.identity},
+        {"clipped_samples", r.clipped_samples}, {"end_peak_last_50ms", r.end_peak}, {"warmup_frames", r.warmup_frames},
+        {"audio_buffer_bytes", r.audio_buffer_bytes}, {"timeline_frames", r.timeline_frames},
+        {"output_reaches_timeline_end", r.warmup_frames + r.frames == r.timeline_frames}, {"streaming", true},
+        {"wav_encoding", r.channels == 2 ? "PCM_S16LE_STEREO" : "PCM_S16LE_MONO"}};
+}
 void help() {
     std::cout << "gtracker " << GT_VERSION << " - acoustic guitar prototype\n\n"
         "Usage:\n"
@@ -35,6 +56,9 @@ void help() {
         "                       [--stream] [--progress-json] [--cancel-file PATH]\n"
         "                       [--start-frame N] [--end-frame N] [--block-frames N]\n"
         "  gtracker_cli transform PATTERN --script LUA --output PATTERN [--json]\n"
+        "  gtracker_cli validate-song SONG [--json]\n"
+        "  gtracker_cli render-song SONG --output WAV [render options above; always streamed]\n"
+        "  gtracker_cli snapshot-song SONG --output SONG [--json]\n"
         "  gtracker_cli take-info TAKE [--json]\n"
         "  gtracker_cli calibration-probe --output WAV [--sample-rate HZ] [--seed N] [--json]\n"
         "  gtracker_cli align-audio --reference WAV --recorded WAV [--max-offset-ms MS]\n"
@@ -133,7 +157,9 @@ int cli_main(int argc, char** argv) {
         if (std::string(argv[1]) == "--version") { std::cout << "gtracker " << GT_VERSION << "\n"; return 0; }
         const std::string command = argv[1];
         if (command == "calibration-probe" || command == "align-audio") return alignment_command(argc, argv, as_json);
-        if (command != "validate" && command != "render" && command != "transform" && command != "take-info") throw std::runtime_error("Unknown command: " + command);
+        const bool is_render = command == "render" || command == "render-song";
+        const bool is_song = command == "validate-song" || command == "render-song" || command == "snapshot-song";
+        if (!is_song && command != "validate" && command != "render" && command != "transform" && command != "take-info") throw std::runtime_error("Unknown command: " + command);
         if (argc < 3 || std::string(argv[2]).rfind("--", 0) == 0) throw std::runtime_error("A pattern/take path is required");
         const auto input = std::filesystem::u8path(argv[2]);
         std::filesystem::path output, script, production_path;
@@ -145,19 +171,19 @@ int cli_main(int argc, char** argv) {
             const std::string flag = argv[i];
             if (flag == "--json") continue;
             if (flag == "--help") { help(); return 0; }
-            if (flag == "--bypass-production" && command == "render") { options.bypass_production = true; continue; }
-            if (flag == "--stream" && command == "render") { streaming = true; continue; }
-            if (flag == "--progress-json" && command == "render") { streaming = true; progress_json = true; continue; }
+            if (flag == "--bypass-production" && is_render) { options.bypass_production = true; continue; }
+            if (flag == "--stream" && is_render) { streaming = true; continue; }
+            if (flag == "--progress-json" && is_render) { streaming = true; progress_json = true; continue; }
             if (i + 1 >= argc) throw std::runtime_error("Missing value for " + flag);
             const std::string value = argv[++i];
             if (flag == "--output" || flag == "-o") output = std::filesystem::u8path(value);
             else if (flag == "--script") script = std::filesystem::u8path(value);
-            else if (flag == "--sample-rate" && command == "render") {
+            else if (flag == "--sample-rate" && (is_render || command == "validate-song")) {
                 const double rate = number(value, "--sample-rate");
                 if (rate < 8000 || rate > 192000 || std::floor(rate) != rate) throw std::runtime_error("Sample rate must be an integer in 8000..192000");
                 options.sample_rate = static_cast<int>(rate);
-            } else if (flag == "--tail" && command == "render") options.tail_seconds = number(value, "--tail");
-            else if (flag == "--production" && command == "render") {
+            } else if (flag == "--tail" && is_render) options.tail_seconds = number(value, "--tail");
+            else if (flag == "--production" && is_render) {
                 production_path = std::filesystem::u8path(value);
                 if (std::filesystem::file_size(production_path) > 65536) throw std::runtime_error("Production settings exceed 64 KiB");
                 std::ifstream in(production_path, std::ios::binary);
@@ -167,10 +193,10 @@ int cli_main(int argc, char** argv) {
                 text.resize(static_cast<std::size_t>(in.gcount()));
                 options.production_override = gtracker::parse_production_json(text);
             }
-            else if (flag == "--cancel-file" && command == "render") {
+            else if (flag == "--cancel-file" && is_render) {
                 cancel_path = std::filesystem::u8path(value); streaming = true;
             }
-            else if ((flag == "--start-frame" || flag == "--end-frame" || flag == "--block-frames") && command == "render") {
+            else if ((flag == "--start-frame" || flag == "--end-frame" || flag == "--block-frames") && is_render) {
                 const double parsed = number(value, flag.c_str());
                 if (parsed < 0 || parsed > 9007199254740991.0 || std::floor(parsed) != parsed) throw std::runtime_error(flag + " must be a nonnegative JSON-safe integer");
                 const auto frames = static_cast<std::uint64_t>(parsed);
@@ -201,16 +227,48 @@ int cli_main(int argc, char** argv) {
                            << take.audio.channels << " channels at " << take.audio.sample_rate << " Hz; metadata only)\n";
             return 0;
         }
-        if (command != "validate" && output.empty()) throw std::runtime_error("--output is required");
+        if (command != "validate" && command != "validate-song" && output.empty()) throw std::runtime_error("--output is required");
         if (command == "transform" && script.empty()) throw std::runtime_error("transform requires --script");
-        if (command == "render") {
-            for (const auto& source_path : {input, script, production_path}) {
-                if (source_path.empty()) continue;
-                std::error_code error;
-                const bool same_existing_file = std::filesystem::equivalent(source_path, output, error);
-                if (same_existing_file || std::filesystem::weakly_canonical(source_path) == std::filesystem::weakly_canonical(output))
-                    throw std::runtime_error("Render output must differ from the pattern input, script and production settings");
+        if (is_render) gtracker::require_distinct_output(output, {input, script, production_path});
+        if (is_song) {
+            if (!script.empty()) throw std::runtime_error("Song scripts are not implemented; edit the reusable pattern independently");
+            if (command == "validate-song" && !output.empty()) throw std::runtime_error("validate-song does not accept --output");
+            auto song = gtracker::load_song(input);
+            const auto snapshot = gtracker::song_snapshot_json(song);
+            nlohmann::json report{{"ok", true}, {"command", command}, {"renderer_version", GT_VERSION},
+                {"song_schema_version", 1}, {"input", input.u8string()}, {"song_revision", song.revision},
+                {"patterns", song.patterns.size()}, {"tempo_bpm", song.bpm}, {"seed", song.seed},
+                {"source_snapshot_utf8_bytes", snapshot.size()}};
+            if (command == "snapshot-song") {
+                gtracker::require_distinct_output(output, song.source_files);
+                gtracker::write_text_atomic(output, snapshot);
+                report["output"] = output.u8string();
+                if (as_json) std::cout << report.dump(2) << '\n';
+                else std::cout << "Saved portable song snapshot to " << output.u8string() << '\n';
+                return 0;
             }
+            const auto compiled = gtracker::compile_song(song, options.sample_rate);
+            // Validate sample-rounded contacts, pitch limits and the shared native schedule too.
+            auto native = gtracker::compiled_song_renderer(compiled, options);
+            report.update({{"instances", compiled.placements.size()}, {"events", compiled.performance.events.size()},
+                {"gestures", compiled.performance.slides.size()}, {"length_beats", compiled.length_beats},
+                {"instrument_model", gt_model_name(compiled.performance.model)}, {"strings", compiled.performance.instrument.string_count},
+                {"sample_rate", native.sample_rate()}, {"channels", native.channels()}, {"timeline_frames", native.total_frames()}});
+            if (command == "render-song") {
+                RenderSignalGuard signals;
+                prepare_stream(stream_options, cancel_path, progress_json);
+                gtracker::require_distinct_output(output, song.source_files);
+                const auto rendered = gtracker::export_wav(native, output, gtracker::song_render_identity(song, options), stream_options);
+                report.update(stream_report(rendered));
+                report["output"] = output.u8string(); report["pcm_bytes"] = rendered.frames * rendered.channels * 2;
+                report["production_tail_seconds"] = gtracker::production_tail_seconds(gtracker::song_production(song, options));
+                report["production_bypassed"] = options.bypass_production;
+                const auto production = options.production_override ? options.production_override : song.production;
+                report["production"] = production ? nlohmann::json::parse(gtracker::production_json(*production)) : nlohmann::json(nullptr);
+                if (!as_json) std::cout << "Rendered song: " << report["seconds"] << " s to " << output.u8string() << '\n';
+            } else if (!as_json) std::cout << "Valid song: " << song.name << " (" << compiled.placements.size() << " placements)\n";
+            if (as_json) std::cout << report.dump(2) << '\n';
+            return 0;
         }
         auto pattern = gtracker::load_pattern(input);
         if (!script.empty()) gtracker::apply_lua(pattern, script);
@@ -221,24 +279,9 @@ int cli_main(int argc, char** argv) {
         if (command == "render") {
             if (streaming) {
                 RenderSignalGuard signals;
-                stream_options.cancelled = [&] { return render_interrupted != 0 || (!cancel_path.empty() && std::filesystem::exists(cancel_path)); };
-                auto last_progress = std::chrono::steady_clock::time_point{};
-                if (progress_json) stream_options.progress = [&](const gtracker::RenderProgress& p) {
-                    const auto now = std::chrono::steady_clock::now();
-                    if (p.processed_frames != 0 && p.processed_frames != p.processing_frames && now - last_progress < std::chrono::milliseconds(100)) return;
-                    std::cerr << nlohmann::json{{"type", "render_progress"}, {"processed_frames", p.processed_frames},
-                        {"processing_frames", p.processing_frames}, {"written_frames", p.written_frames}, {"output_frames", p.output_frames}}.dump() << '\n';
-                    last_progress = now;
-                };
+                prepare_stream(stream_options, cancel_path, progress_json);
                 const auto rendered = gtracker::render_pattern_wav(pattern, output, options, stream_options);
-                report["sample_rate"] = rendered.sample_rate; report["frames"] = rendered.frames;
-                report["peak"] = rendered.peak; report["rms"] = rendered.rms; report["render_ms"] = rendered.render_ms;
-                report["channels"] = rendered.channels; report["render_identity_sha256"] = rendered.identity;
-                report["clipped_samples"] = rendered.clipped_samples; report["end_peak_last_50ms"] = rendered.end_peak;
-                report["warmup_frames"] = rendered.warmup_frames; report["audio_buffer_bytes"] = rendered.audio_buffer_bytes;
-                report["timeline_frames"] = rendered.timeline_frames;
-                report["output_reaches_timeline_end"] = rendered.warmup_frames + rendered.frames == rendered.timeline_frames;
-                report["export_elapsed_ms"] = rendered.elapsed_ms;
+                report.update(stream_report(rendered));
             } else {
                 const auto rendered = gtracker::render_pattern(pattern, options);
                 gtracker::write_wav(output, rendered.samples, rendered.sample_rate, rendered.channels);

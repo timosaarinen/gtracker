@@ -1,6 +1,6 @@
 # Synthesis baseline
 
-Renderer version: **0.3.0**, preserving the explicit **baseline_0_1** sound.
+Renderer version: **0.4.0**, preserving the explicit **baseline_0_1** sound.
 The dependency-free instrument library exposes the C interface
 in `include/gtracker/core.h`. It is shared by the editor and command-line renderer;
 it has no dependency on SDL, Lua, JSON, Python, an audio device, or sampled audio.

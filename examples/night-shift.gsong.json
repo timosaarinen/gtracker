@@ -1,0 +1,25 @@
+{
+  "schema": "gtracker.song",
+  "version": 1,
+  "name": "Night shift - original continuous sketch",
+  "revision": 1,
+  "tempo_bpm": 96,
+  "seed": 42,
+  "instrument_pattern": "slide",
+  "patterns": [
+    {"id": "slide", "file": "slide-study.gtrk.json"},
+    {"id": "answer", "file": "night-bridge.gtrk.json"}
+  ],
+  "order": [
+    {"id":"intro", "pattern":"answer", "repeat":1, "time_scale":1, "transpose":0, "strength_scale":0.65, "gap_beats":0},
+    {"id":"verse", "pattern":"slide", "repeat":2, "time_scale":1, "transpose":0, "strength_scale":0.85, "gap_beats":0},
+    {"id":"answer", "pattern":"answer", "repeat":2, "time_scale":1, "transpose":0, "strength_scale":0.8, "gap_beats":0},
+    {"id":"lift", "pattern":"slide", "repeat":1, "time_scale":1, "transpose":5, "strength_scale":0.85, "gap_beats":0},
+    {"id":"slow", "pattern":"answer", "repeat":1, "time_scale":1.25, "transpose":0, "strength_scale":0.65, "gap_beats":0},
+    {"id":"return", "pattern":"slide", "repeat":1, "time_scale":1, "transpose":0, "strength_scale":0.7, "gap_beats":2}
+  ],
+  "production": {
+    "schema": "gtracker.production", "version": 1, "algorithm": "room_v1", "enabled": true,
+    "wet": 0.18, "decay_seconds": 1.2, "damping": 0.35, "predelay_ms": 18, "width": 0.9, "output_gain_db": 0
+  }
+}

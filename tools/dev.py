@@ -434,6 +434,25 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--end-frame", type=int)
     render.add_argument("--block-frames", type=int)
     render.add_argument("--json", action="store_true")
+    for name in ("render-song", "validate-song", "snapshot-song"):
+        song = commands.add_parser(name)
+        if name == "render-song": song.add_argument("file", nargs="?", default="examples/night-shift.gsong.json")
+        else: song.add_argument("file")
+        song.add_argument("--profile", choices=PROFILES, default="headless")
+        song.add_argument("--json", action="store_true")
+        if name != "snapshot-song": song.add_argument("--sample-rate", type=int)
+        if name == "snapshot-song": song.add_argument("--output", required=True)
+        if name == "render-song":
+            song.add_argument("--output", default=".local/night-shift.wav")
+            song.add_argument("--tail", type=float)
+            song.add_argument("--production")
+            song.add_argument("--bypass-production", action="store_true")
+            song.add_argument("--stream", action="store_true", help="Songs always stream; accepted for consistency.")
+            song.add_argument("--progress-json", action="store_true")
+            song.add_argument("--cancel-file")
+            song.add_argument("--start-frame", type=int)
+            song.add_argument("--end-frame", type=int)
+            song.add_argument("--block-frames", type=int)
     editor = commands.add_parser("editor")
     editor.add_argument("file", nargs="?")
     editor.add_argument("--take")
@@ -515,15 +534,15 @@ def main(argv: list[str] | None = None) -> int:
             command = ["cmake", "--build", "--preset", args.profile, "--config", "Release"]
         elif args.command == "test":
             command = ["ctest", "--preset", args.profile, "--build-config", "Release", "--output-on-failure"]
-        elif args.command == "render":
-            command = [str(executable(ROOT, args.profile, "gtracker_cli")), "render", args.file, "--output", args.output]
+        elif args.command in ("render", "render-song"):
+            command = [str(executable(ROOT, args.profile, "gtracker_cli")), args.command, args.file, "--output", args.output]
             for option in ("sample_rate", "tail", "script", "production", "cancel_file", "start_frame", "end_frame", "block_frames"):
-                if getattr(args, option) is not None:
+                if getattr(args, option, None) is not None:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.bypass_production: command.append("--bypass-production")
             if args.stream: command.append("--stream")
             if args.progress_json: command.append("--progress-json")
-            if args.stream or args.progress_json or any(getattr(args, name) is not None for name in ("cancel_file", "start_frame", "end_frame", "block_frames")):
+            if args.command == "render-song" or args.stream or args.progress_json or any(getattr(args, name) is not None for name in ("cancel_file", "start_frame", "end_frame", "block_frames")):
                 if args.cancel_file:
                     render_cancel = ROOT / args.cancel_file
                 else:
@@ -532,6 +551,11 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--cancel-file", str(render_cancel)]
             if args.json:
                 command.append("--json")
+        elif args.command in ("validate-song", "snapshot-song"):
+            command = [str(executable(ROOT, args.profile, "gtracker_cli")), args.command, args.file]
+            for name in ("output", "sample_rate"):
+                if getattr(args, name, None) is not None: command += ["--" + name.replace("_", "-"), str(getattr(args, name))]
+            if args.json: command.append("--json")
         elif args.command == "package":
             output = args.output or f".local/packages/gtracker-{args.profile}-{platform.system()}-{platform.machine()}.zip"
             command = [sys.executable, str(ROOT / "tools/package.py"), "--profile", args.profile, "--output", output]
@@ -567,8 +591,8 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
-        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info", "input-devices", "calibration-probe", "align-audio") and args.json),
-                           separate_stderr=args.command == "render" and args.progress_json, cancel_file=render_cancel)["returncode"]
+        return run_command(ROOT, command, echo=not (args.command in ("render", "render-song", "validate-song", "snapshot-song", "import-take", "take-info", "input-devices", "calibration-probe", "align-audio") and args.json),
+                           separate_stderr=args.command in ("render", "render-song") and args.progress_json, cancel_file=render_cancel)["returncode"]
     except (RuntimeError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

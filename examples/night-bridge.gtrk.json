@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "name": "Night shift - answering phrase",
+  "revision": 1,
+  "tempo_bpm": 96,
+  "length_beats": 8,
+  "seed": 42,
+  "instrument": {
+    "model": "contact_0_2",
+    "tuning_midi": [64, 59, 55, 50, 45, 40],
+    "decay_seconds": 4,
+    "brightness": 0.78,
+    "body_mix": 0.15
+  },
+  "events": [
+    {"id":"answer-p1", "type":"pluck", "beat":0, "string":5, "fret":3, "strength":0.62},
+    {"id":"answer-p2", "type":"pluck", "beat":0.48, "string":3, "fret":0, "strength":0.43},
+    {"id":"answer-p3", "type":"pluck", "beat":1, "string":2, "fret":1, "strength":0.48},
+    {"id":"answer-p4", "type":"pluck", "beat":2, "string":1, "fret":3, "strength":0.46},
+    {"id":"answer-b1", "type":"body_hit", "beat":3, "strength":0.18},
+    {"id":"answer-p5", "type":"pluck", "beat":4, "string":6, "fret":3, "strength":0.65},
+    {"id":"answer-p6", "type":"pluck", "beat":4.51, "string":4, "fret":0, "strength":0.44},
+    {"id":"answer-p7", "type":"pluck", "beat":5, "string":3, "fret":0, "strength":0.42},
+    {"id":"answer-p8", "type":"pluck", "beat":6, "string":2, "fret":3, "strength":0.49}
+  ],
+  "gestures": [
+    {"id":"answer-s1", "type":"slide", "beat":1.125, "string":2, "points":[
+      {"beat":0, "fret":1}, {"beat":0.625, "fret":3}, {"beat":1.5, "fret":1}
+    ]},
+    {"id":"answer-s2", "type":"slide", "beat":6.125, "string":2, "points":[
+      {"beat":0, "fret":3}, {"beat":0.5, "fret":2}, {"beat":1.375, "fret":0}
+    ]}
+  ]
+}

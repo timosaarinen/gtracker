@@ -181,3 +181,32 @@ interrupt initialization and injected-write test adjustments, focused native
 export, refreshed capture/UI executables, eight desktop checks and all streaming
 Python cases passed; `.local/nightshift/stream-checks.json` binds those bytes.
 Windows console Ctrl+C remains unqualified; POSIX interrupt verification is next.
+
+Linux `fe8ed5b` passed headless CI (16 native, all64 Python with no skips),
+23 desktop tests and16 Clang10 ASan/UBSan native tests. Direct and developer-
+wrapper targeted POSIX SIGINT cancellation both passed. Logs are the isolated
+Ubuntu checkout's `.local/stream-{ci,desktop,sanitize}.log`; Windows console
+Ctrl+C and all physical audio checks remain separate.
+
+Issue #6 song increment: renderer0.4 adds strict version1 song arrangements,
+relative pattern references or embedded definitions, explicit repeat/timing/
+fret/strength variations, one global instrument/tempo/seed/production, portable
+snapshots, full source-write guards and the same bounded native WAV exporter.
+There is no reset between placements. Pattern IDs/points/source files remain
+unchanged; incompatible instruments and per-pattern production fail explicitly.
+CLI `validate-song`, `render-song` and `snapshot-song` have developer wrappers.
+
+The original `examples/night-shift.gsong.json` renders to `.local/night-shift.wav`:
+68 beats/46.468 seconds including tails, 48 kHz stereo PCM16, 2,230,465 frames,
+peak0.15143, no full-scale samples and ending50ms peak5.1e-12. Its complete source
+snapshot is8,940 UTF-8 bytes versus8,921,860 PCM bytes. This is authored synthetic
+music, with no transcription/listening claim. Native tests compare one-pattern
+and flattened references, ringing into an empty pattern, room continuity,
+variations, seed/tempo ownership and snapshot identity. Eight generated Python
+song cases cover moved references, standalone snapshots, warmed previews,
+source-write refusal, strict future-data rejection and cancellation.
+
+Windows headless CI `.local/ci/runs/20261018T053403Z-5013690d/report.json` passed17
+native and72 Python tests (one POSIX-only skip), with freshly built desktop
+executables present. Persistent cache storage/recovery, arrangement UI and
+seamless loop preparation remain next work; see docs/song.md.

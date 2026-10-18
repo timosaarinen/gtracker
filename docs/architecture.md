@@ -29,6 +29,10 @@ V1 keeps the original baseline. V2 carries explicit model selection and local
 slide curves; beat-to-frame conversion preserves their points or rejects
 sub-frame collisions rather than flattening them. Model/control state lives in
 the core and is shared by CLI/editor renders.
+The song layer places reusable definitions into one absolute-frame schedule,
+keeps global tempo/seed/instrument/production explicit and streams the result
+without resetting at musical boundaries. Portable snapshots embed references;
+render identities include complete loaded source data rather than file mtimes.
 
 **gtracker_production** is an independent native mono-in/stereo-out room chain.
 It retains state across blocks and has no SDL, JSON, Lua or Python dependency.

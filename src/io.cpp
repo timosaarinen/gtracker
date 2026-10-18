@@ -16,6 +16,15 @@
 #endif
 
 namespace gtracker {
+void require_distinct_output(const std::filesystem::path& destination, const std::vector<std::filesystem::path>& sources) {
+    for (const auto& source : sources) {
+        if (source.empty()) continue;
+        std::error_code error;
+        const bool same = std::filesystem::equivalent(source, destination, error);
+        if (same || std::filesystem::weakly_canonical(source) == std::filesystem::weakly_canonical(destination))
+            throw std::runtime_error("Output must differ from the pattern input, song, referenced patterns, script and production settings");
+    }
+}
 namespace {
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
 std::filesystem::path temporary_path(const std::filesystem::path& destination) {

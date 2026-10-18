@@ -220,7 +220,7 @@ queued playback, waveform inspection, and unattended UI capture.
 
 Future work includes editor recording controls (CLI capture exists), musical
 transcription, hammer/pull-off and additional contact/expression gestures,
-multiple patterns and arrangement, course-aware twelve-string instruments,
+an arrangement UI (CLI songs exist), course-aware twelve-string instruments,
 richer keyboard tab entry, autosave/recovery, render
 cancellation and output-device selection.
 The editor currently uses SDL's maintained 2D renderer backend; migration to

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker continuous single-instrument song v1",
+  "description": "Native validation also checks unique IDs, compatible instruments, instance count, expanded source/schedule limits, transposed frets and sample-rounded contact conflicts.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "version", "name", "revision", "tempo_bpm", "seed", "instrument_pattern", "patterns", "order"],
+  "properties": {
+    "schema": {"const": "gtracker.song"}, "version": {"const": 1},
+    "name": {"$ref": "pattern.schema.json#/properties/name"},
+    "revision": {"$ref": "pattern.schema.json#/properties/revision"},
+    "tempo_bpm": {"$ref": "pattern.schema.json#/properties/tempo_bpm"},
+    "seed": {"$ref": "pattern.schema.json#/properties/seed"},
+    "instrument_pattern": {"type": "string", "minLength": 1, "maxLength": 128},
+    "production": {"$ref": "production.schema.json"},
+    "patterns": {
+      "type": "array", "minItems": 1, "maxItems": 64,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["id"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "file": {"type": "string", "minLength": 1, "maxLength": 1023},
+          "pattern": {"oneOf": [{"$ref": "pattern.schema.json"}, {"$ref": "pattern-v2.schema.json"}]}
+        },
+        "oneOf": [{"required": ["file"], "not": {"required": ["pattern"]}}, {"required": ["pattern"], "not": {"required": ["file"]}}]
+      }
+    },
+    "order": {
+      "type": "array", "minItems": 1, "maxItems": 4096,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "pattern", "repeat", "time_scale", "transpose", "strength_scale", "gap_beats"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "pattern": {"type": "string", "minLength": 1, "maxLength": 128},
+          "repeat": {"type": "integer", "minimum": 1, "maximum": 256},
+          "time_scale": {"type": "number", "minimum": 0.25, "maximum": 4},
+          "transpose": {"type": "number", "minimum": -24, "maximum": 24},
+          "strength_scale": {"type": "number", "minimum": 0, "maximum": 2},
+          "gap_beats": {"type": "number", "minimum": 0, "maximum": 256}
+        }
+      }
+    }
+  }
+}
