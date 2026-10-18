@@ -516,6 +516,63 @@ void proposal_workflow(Host& host, const Arguments& original, const std::filesys
     check_ui(guarded.status_error && guarded.document.pattern().events.empty() && !guarded.document.dirty(), "source changed after loading but stale proposals were accepted");
 }
 
+void recovery_workflow(Host& host,const Arguments& original) {
+    Arguments args=original; args.data_dir=original.document.parent_path()/"recovery-user-data";
+    const auto original_bytes=file_bytes(args.document);
+    std::filesystem::path copy;
+    {
+        Editor interrupted(args);
+        interrupted.checkpoint_recovery(0);
+        auto next=interrupted.document.pattern(); next.bpm=99; interrupted.commit(next,"Unsaved recovery fixture");
+        interrupted.checkpoint_recovery(4.9);
+        check_ui(interrupted.recovery && interrupted.recovery->owned_path().empty(),"recovery checkpoint ran before its interval");
+        interrupted.checkpoint_recovery(5.1); copy=interrupted.recovery->owned_path();
+        check_ui(std::filesystem::is_regular_file(copy) && interrupted.document.dirty(),"unsaved score did not create a recovery copy");
+    } // A dirty session without explicit save/discard must retain its copy.
+    check_ui(std::filesystem::is_regular_file(copy),"closing an interrupted dirty instance removed recoverable work");
+    Editor reopened(args);
+    check_ui(reopened.recovery_listing.copies.size()==1 && reopened.document.pattern().bpm!=99,"startup silently applied or missed a recovery copy");
+    const auto recovered=reopened.recovery_listing.copies.front();
+    {
+        Arguments direct=args; direct.document=copy; Editor launched(direct);
+        check_ui(std::filesystem::u8path(launched.path.data())!=copy && launched.recovery_save_suggestion.parent_path()==std::filesystem::weakly_canonical(args.data_dir),
+                 "explicit recovery-file launch did not suggest a new save filename");
+    }
+    auto next=reopened.document.pattern(); next.bpm=110; reopened.commit(next,"Protect newer unsaved work");
+    ImVec2 a,b;
+    auto draw=[&] {
+        ImGui::SetNextWindowPos(ImVec2(20,20)); ImGui::SetNextWindowSize(ImVec2(450,150));
+        ImGui::Begin("Recovery reopen regression"); open_recovery_button(reopened,recovered);
+        a=ImGui::GetItemRectMin(); b=ImGui::GetItemRectMax(); unsaved_dialog(reopened); ImGui::End();
+    };
+    frame(host,draw); frame(host,draw);
+    frame(host,draw,[&] { ImGui::GetIO().AddMousePosEvent((a.x+b.x)*.5f,(a.y+b.y)*.5f); ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,false); });
+    check_ui(reopened.document.pending()==gtracker::EditorDocument::Pending::load && reopened.document.pattern().bpm==110,"Open recovered copy bypassed the unsaved-work guard");
+    frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape,false); });
+    check_ui(reopened.document.pending()==gtracker::EditorDocument::Pending::none && reopened.document.pattern().bpm==110,"cancel recovery reopen lost newer edits");
+    reopened.open_recovery(copy); reopened.resolve(gtracker::EditorDocument::Decision::discard);
+    check_ui(reopened.document.pattern().bpm==99 && !reopened.source && !reopened.document.dirty(),"recovery did not open its saved normal score");
+    const auto destination=std::filesystem::u8path(reopened.path.data());
+    check_ui(destination.parent_path()==std::filesystem::weakly_canonical(args.data_dir) && destination!=copy,"recovery did not suggest a separate normal save path");
+    reopened.save();
+    check_ui(gtracker::load_pattern(destination).bpm==99 && std::filesystem::exists(copy) && file_bytes(args.document)==original_bytes,
+             "saving recovered work overwrote the original score or removed its older copy");
+    next=reopened.document.pattern(); next.bpm=101; reopened.commit(next,"New recovered edit"); reopened.checkpoint_recovery(6);
+    const auto owned=reopened.recovery->owned_path(); check_ui(std::filesystem::exists(owned),"new recovered edit was not checkpointed");
+    reopened.save(); check_ui(!std::filesystem::exists(owned) && std::filesystem::exists(copy),"save removed another session's copy");
+    reopened.open_recovery_panel=true; frame(host,[&] { interface(reopened); }); frame(host,[&] { interface(reopened); });
+    host.screenshot(std::filesystem::current_path()/"editor-recovery-copies.bmp");
+    {
+        Editor discarded(args); next=discarded.document.pattern(); next.bpm=105; discarded.commit(next,"Explicit discard fixture"); discarded.checkpoint_recovery(6);
+        const auto pending_copy=discarded.recovery->owned_path(); discarded.document.request_close(); discarded.resolve(gtracker::EditorDocument::Decision::discard);
+        check_ui(discarded.document.close_requested() && !std::filesystem::exists(pending_copy) && std::filesystem::exists(copy),"explicit close/discard cleaned the wrong copy");
+    }
+    args.recovery=false; Editor disabled(args); next=disabled.document.pattern(); next.bpm=107; disabled.commit(next,"Opt-out fixture"); disabled.checkpoint_recovery(6);
+    check_ui(!disabled.recovery && disabled.recovery_listing.copies.empty(),"--no-recovery still opened/wrote recovery state");
+}
+
 void keyboard_entry(Host& host, const Arguments& args) {
     Editor editor(args);
     auto empty = editor.document.pattern(); empty.events.clear(); empty.gestures.clear();
@@ -703,6 +760,7 @@ int main(int argc, char** argv) {
         slide_authoring(host, args);
         production_authoring(host, args);
         proposal_workflow(host, args, std::filesystem::path(argv[3]));
+        recovery_workflow(host,args);
         keyboard_entry(host,args);
         timeline_navigation(host, args, std::filesystem::path(argv[2]));
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),

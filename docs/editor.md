@@ -78,9 +78,44 @@ Loading another pattern or closing the window with unsaved edits opens a
 **Save / Discard / Cancel** dialog. Escape cancels. The dialog has a separate
 save path, initially the current document's last saved filename: choosing Save
 before a pending Load does not overwrite the pattern being loaded. Failed saves
-or loads keep the current document and dialog available. No autosave is provided;
-an operating-system kill cannot show this dialog. Explicit bounded `--frames`
-runs still exit at the requested limit for unattended checks.
+or loads keep the current document and dialog available. Explicit bounded
+`--frames` runs still exit at the requested limit for unattended checks.
+
+## Recovery copies
+
+While the app runs, changed unsaved scores get a normal pattern copy every five
+seconds under `DATA_DIR/recovery/`. Development uses ignored `.local/`; installed
+builds use the configured writable user-data folder. The original score and
+source audio are untouched. Each session owns a unique file and updates it
+atomically. A failed write retains the previous complete copy and reports an
+error. Recent edits since the last successful checkpoint can still be lost.
+This is not a guarantee against power loss or storage failure.
+
+At startup, **Review recovery copies** opens the inspector's **Recovery copies**
+section. Copies are listed newest first. **Open recovered copy** uses the normal
+unsaved-work guard, loads the score for review and suggests a new ordinary save
+filename outside the recovery folder. Review and Save that copy before manually
+replacing an original. Opening a copy never automatically replaces current edits.
+Explicitly opening a recovery filename on the CLI also suggests a new save path.
+
+Copies preserve versioned score data, including IDs, fractional timing, tuning,
+instrument model, slides and production. They do not contain undo history,
+transport, source PCM, or a take association. The original take bundle/audio/job
+files remain intact; reopen those separately for source comparison. Saving or
+explicitly discarding a session clears only its own recovery file. Interrupted
+sessions' copies remain, and there is no automatic deletion of older sessions.
+
+The list scans at most 512 directory entries and opens up to 20 recent valid
+copies. Unreadable/future-format files stay on disk and are reported. Use
+**Refresh recovery copies** to rescan; manage older files only after checking the
+saved work you want to keep. An unwritable data directory leaves editing/manual
+Save available and reports the recovery failure.
+
+`--no-recovery` disables recovery writing and discovery for that session, in both
+the direct editor and `python tools/dev.py editor`. There is no background job
+after the editor exits. Generated dummy-driver tests forcibly terminate an owned
+editor after a checkpoint, validate/reopen its score and verify unchanged
+original bytes; that is separate from physical-window or hard-power-loss testing.
 
 ## Render and listen
 
@@ -248,6 +283,6 @@ queued playback, waveform inspection, and unattended UI capture.
 Future work includes editor recording controls (CLI capture exists),
 general guitar transcription, hammer/pull-off and additional contact/expression gestures,
 an arrangement UI (CLI songs exist), course-aware twelve-string instruments,
-chord/selection shortcuts, autosave/recovery and output-device selection.
+chord/selection shortcuts, full session recovery and output-device selection.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.

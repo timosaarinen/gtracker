@@ -1,5 +1,6 @@
 #include "gtracker/project.hpp"
 #include "gtracker/editor_document.hpp"
+#include "gtracker/editor_recovery.hpp"
 #include "gtracker/take.hpp"
 #include "gtracker/timeline.hpp"
 #include "gtracker/proposals.hpp"
@@ -50,6 +51,7 @@ struct Arguments {
     int frames = 0;
     bool smoke = false;
     bool help = false;
+    bool recovery = true;
 };
 
 Arguments arguments(int argc, char* argv[]) {
@@ -83,6 +85,8 @@ Arguments arguments(int argc, char* argv[]) {
             result.frames = static_cast<int>(count);
         } else if (argument == "--smoke-test") {
             result.smoke = true;
+        } else if (argument == "--no-recovery") {
+            result.recovery = false;
         } else if (argument == "--help" || argument == "-h") {
             result.help = true;
         } else if (!argument.empty() && argument[0] == '-') {
@@ -263,6 +267,11 @@ struct Editor {
     bool auto_wave_gain = true;
     bool tab_keyboard_focus = false;
     FretEntry fret_entry;
+    bool recovery_enabled = true, open_recovery_panel = false;
+    std::optional<gtracker::RecoveryCopies> recovery;
+    gtracker::RecoveryListing recovery_listing;
+    std::filesystem::path recovery_save_suggestion;
+    std::string recovery_error;
     std::string status = "Select a fret number, edit the inspector, then Render and Play.";
     std::array<char, 1024> path{};
     std::array<char, 1024> script_path{};
@@ -301,9 +310,22 @@ struct Editor {
             cursor_lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
         }
         fit_timeline(source.has_value());
+        recovery_enabled = args.recovery;
+        if (recovery_enabled) {
+            try {
+                refresh_recoveries();
+                if (recovery && recovery->contains(document.filename())) {
+                    recovery_save_suggestion = recovery->suggested_save_path(); restore_active_path();
+                }
+            }
+            catch (const std::exception& error) { recovery_error = error.what(); message("Recovery unavailable: "+recovery_error,true); }
+        }
     }
 
     ~Editor() {
+        if (recovery && (!document.dirty() || document.close_requested())) {
+            try { recovery->clear_owned(document.filename()); } catch (const std::exception&) { /* Keep the copy if cleanup fails. */ }
+        }
         if (render_job) render_job->cancelled.store(true, std::memory_order_relaxed);
         // The worker owns its snapshot. Request cancellation, then join without
         // allowing a worker to outlive its application resources.
@@ -410,11 +432,14 @@ struct Editor {
     }
 
     void loaded() {
+        const bool recovered = recovery && recovery->contains(document.filename());
+        clear_recovery(document.filename());
+        recovery_save_suggestion = recovered ? recovery->suggested_save_path() : std::filesystem::path{};
         end_fret_entry(); tab_keyboard_focus = false;
         proposals.reset(); proposal_alternatives.clear();
         source = std::move(pending_source);
         pending_source.reset();
-        set_text(path, document.filename().u8string());
+        restore_active_path();
         if (source) set_text(take_path, source->take.manifest_path.u8string());
         selected = document.pattern().events.empty() ? -1 : 0;
         selected_gesture = -1;
@@ -427,7 +452,7 @@ struct Editor {
         }
         fit_timeline(source.has_value());
         changed();
-        message("Loaded " + document.pattern().name + ".");
+        message(recovered ? "Opened a recovery score copy. Save to the suggested new filename after reviewing it." : "Loaded " + document.pattern().name + ".");
     }
 
     void load() {
@@ -440,7 +465,8 @@ struct Editor {
     }
 
     void restore_active_path() {
-        set_text(path, (document.filename().empty() ? data_directory / "sketch.gtrk.json" : document.filename()).u8string());
+        set_text(path, (!recovery_save_suggestion.empty() ? recovery_save_suggestion :
+            (document.filename().empty() ? data_directory / "sketch.gtrk.json" : document.filename())).u8string());
     }
 
     void load_source() {
@@ -502,6 +528,7 @@ struct Editor {
         const auto destination = decision == gtracker::EditorDocument::Decision::save
             ? save_destination(confirmation_save_path.data()) : std::filesystem::path{};
         document.resolve(decision, destination);
+        if (!document.dirty() || document.close_requested()) clear_recovery(document.filename());
         if (document.generation() != before) loaded();
         if (decision == gtracker::EditorDocument::Decision::cancel) pending_source.reset();
     }
@@ -509,8 +536,38 @@ struct Editor {
     void save() {
         end_fret_entry();
         document.save(save_destination(path.data()));
+        clear_recovery(document.filename()); recovery_save_suggestion.clear();
         restore_active_path();
-        message("Saved " + std::string(path.data()) + ".");
+        message("Saved " + document.filename().filename().u8string() + ".");
+    }
+
+    void refresh_recoveries() {
+        if (!recovery_enabled) return;
+        if (!recovery) recovery.emplace(data_directory);
+        recovery_listing = recovery->list();
+        recovery_error.clear();
+    }
+
+    void clear_recovery(const std::filesystem::path& preserve = {}) {
+        if (!recovery) return;
+        try { recovery->clear_owned(preserve); }
+        catch (const std::exception& error) { recovery_error = error.what(); }
+    }
+
+    void checkpoint_recovery(double seconds) {
+        if (!recovery) return;
+        try {
+            if (recovery->update(document,seconds)) recovery_error.clear();
+        } catch (const std::exception& error) {
+            const std::string detail = error.what();
+            if (detail != recovery_error) message("Recovery copy failed: "+detail,true);
+            recovery_error = detail;
+        }
+    }
+
+    void open_recovery(const std::filesystem::path& copy) {
+        if (!recovery || !recovery->contains(copy)) throw std::runtime_error("Choose a recovery score from this data folder.");
+        set_text(path,copy.u8string()); load();
     }
 
     void run_script() {
@@ -1316,6 +1373,32 @@ void proposal_inspector(Editor& editor) {
     ImGui::EndDisabled();
 }
 
+void open_recovery_button(Editor& editor,const gtracker::RecoveryCopy& copy) {
+    if (ImGui::Button("Open recovered copy",ImVec2(-1,0))) editor.attempt([&] { editor.open_recovery(copy.path); });
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s",copy.path.u8string().c_str());
+}
+
+void recovery_inspector(Editor& editor) {
+    if (!editor.recovery_enabled) { ImGui::TextWrapped("Recovery copies are disabled for this session (--no-recovery)."); return; }
+    ImGui::TextWrapped("Unsaved scores get a recovery copy every five seconds while the app runs. Originals stay unchanged.");
+    if (!editor.recovery_error.empty()) ImGui::TextWrapped("Last recovery error: %s",editor.recovery_error.c_str());
+    if (ImGui::Button("Refresh recovery copies",ImVec2(-1,0))) editor.attempt([&] { editor.refresh_recoveries(); });
+    if (editor.recovery && !editor.recovery->owned_path().empty()) ImGui::TextWrapped("This session has a recovery copy. Save or explicit discard clears it.");
+    if (editor.recovery_listing.unreadable) ImGui::TextWrapped("%zu unreadable/future copies were kept on disk.",editor.recovery_listing.unreadable);
+    if (editor.recovery_listing.truncated) ImGui::TextWrapped("Showing a bounded recent list; more files may exist in the recovery folder.");
+    ImGui::TextWrapped("Open a copy to review the score and save to a new filename. Source audio and take metadata stay in their original bundles.");
+    ImGui::TextDisabled("Recent copies, newest first.");
+    for (std::size_t i=0;i<editor.recovery_listing.copies.size();++i) {
+        const auto& copy=editor.recovery_listing.copies[i];
+        ImGui::PushID(static_cast<int>(i));
+        ImGui::Separator(); ImGui::TextWrapped("%s",copy.name.c_str());
+        ImGui::TextDisabled("Revision %llu",static_cast<unsigned long long>(copy.revision));
+        open_recovery_button(editor,copy);
+        ImGui::PopID();
+    }
+    if (editor.recovery) ImGui::TextWrapped("Folder: %s",editor.recovery->directory().u8string().c_str());
+}
+
 void inspector(Editor& editor) {
     const bool slide = editor.selected_gesture >= 0 && editor.selected_gesture < static_cast<int>(editor.document.pattern().gestures.size());
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), slide ? "SLIDE" : "EVENT");
@@ -1443,6 +1526,14 @@ void inspector(Editor& editor) {
     }
     if (ImGui::TreeNode("Note proposals")) {
         proposal_inspector(editor);
+        ImGui::TreePop();
+    }
+    const bool focus_recovery = editor.open_recovery_panel;
+    if (focus_recovery) ImGui::SetNextItemOpen(true,ImGuiCond_Always);
+    editor.open_recovery_panel = false;
+    if (ImGui::TreeNode("Recovery copies")) {
+        if (focus_recovery) ImGui::SetScrollHereY(0);
+        recovery_inspector(editor);
         ImGui::TreePop();
     }
 }
@@ -1573,6 +1664,11 @@ void interface(Editor& editor) {
     ImGui::SameLine();
     if (ImGui::Button("Save", ImVec2(60.0f, 0.0f))) {
         editor.attempt([&]() { editor.save(); });
+    }
+    if (!editor.recovery_listing.copies.empty() || editor.recovery_listing.unreadable || !editor.recovery_error.empty()) {
+        const auto label = editor.recovery_listing.copies.empty() ? std::string("Recovery copies need attention") :
+            "Review recovery copies ("+std::to_string(editor.recovery_listing.copies.size())+")";
+        if (ImGui::Button(label.c_str())) editor.open_recovery_panel = true;
     }
 
     ImGui::BeginDisabled(!editor.document.can_undo());
@@ -1851,6 +1947,7 @@ int run(const Arguments& args) {
             }
         }
         editor.poll_render();
+        editor.checkpoint_recovery(std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count());
         if (args.smoke && editor.render_failed) {
             throw std::runtime_error(editor.status);
         }
@@ -1908,9 +2005,10 @@ int main(int argc, char* argv[]) {
         if (args.help) {
             std::cout << "gtracker_editor [pattern.gtrk.json] [--script PATH]\n"
                          "                [--take PATH] (instead of a pattern path)\n"
-                         "                [--data-dir PATH] [--resource-dir PATH]\n"
+                         "                [--data-dir PATH] [--resource-dir PATH] [--no-recovery]\n"
                          "                [--smoke-test] [--frames N] [--screenshot PATH.bmp]\n\n"
                          "Default saves go to the per-user application data folder.\n"
+                         "Unsaved scores get recovery copies there every five seconds; --no-recovery disables this session.\n"
                          "Bundled scripts resolve beside the executable; explicit paths use the working directory.\n"
                          "The smoke test renders a pattern and draws at least N frames (default 8).\n"
                          "Use SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software for headless smoke.\n"

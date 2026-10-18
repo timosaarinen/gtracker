@@ -464,6 +464,7 @@ def main(argv: list[str] | None = None) -> int:
     editor.add_argument("--take")
     editor.add_argument("--script")
     editor.add_argument("--smoke-test", action="store_true")
+    editor.add_argument("--no-recovery", action="store_true")
     editor.add_argument("--frames", type=int)
     editor.add_argument("--screenshot")
     editor.add_argument("--data-dir", default=".local")
@@ -599,6 +600,8 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
+            if args.no_recovery:
+                command.append("--no-recovery")
         return run_command(ROOT, command, echo=not (args.command in ("render", "render-song", "validate-song", "snapshot-song", "import-take", "take-info", "input-devices", "calibration-probe", "align-audio") and args.json),
                            separate_stderr=args.command in ("render", "render-song") and args.progress_json, cancel_file=render_cancel)["returncode"]
     except (RuntimeError, OSError) as error:

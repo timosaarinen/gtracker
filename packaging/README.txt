@@ -18,6 +18,9 @@ With no explicit document, the suggested save location is the per-user gtracker
 application-data folder, outside the installation. Use --data-dir PATH to choose
 another writable directory. Save editable copies there when opening bundled
 examples from a read-only installation. --resource-dir PATH overrides resources.
+Unsaved scores get five-second recovery copies in that data folder. Review them
+in Recovery copies and save to a new filename; original scores/take audio stay
+unchanged. --no-recovery disables this session. See docs/editor.md for limits.
 Open a preserved take with --take PATH/TO/take.json to compare its source audio
 with the native synth. Source playback and hash verification need no Python.
 See docs/takes.md for the optional Python import workflow in a source checkout.

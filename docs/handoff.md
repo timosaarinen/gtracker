@@ -321,3 +321,20 @@ invalid37, timeout-separated undo, damp/pluck replacement, keypad, text/numeric
 focus, the actual unsaved dialog, focus loss and fractional slide editing.
 The actual main framebuffer `editor-keyboard-main.bmp` was inspected. No physical
 typing qualification is inferred from those injected inputs.
+
+Normal score recovery copies now checkpoint changed unsaved work every five
+seconds in writable user data. Each editor owns only its unique copy; successful
+save/discard clears that copy, while interrupted sessions remain discoverable.
+Opening a copy uses the existing unsaved-work guard and suggests a new filename.
+Copies preserve the score, curves and production settings, but not undo, take
+association or audio; original take bundles remain unchanged. `--no-recovery`
+disables discovery and writing. Read/write failures are visible and retry later.
+
+Windows CI `.local/ci/runs/20261018T080545Z-d65ed324/report.json` passed21 native
+and96 Python tests (one POSIX-only skip), with unchanged source fingerprint
+`c714076dbe51ab501bf64e38450b058a962576a600059a6a72ce64cfda4c2688`.
+Fresh desktop29 passed separately. The owned-process test forcibly terminates
+its dummy editor after a checkpoint, validates/reopens the copy and checks the
+original bytes. Synthetic UI covers guarded recovery, undo/save/reopen and
+direct recovery-file launch; `editor-recovery-copies.bmp` was inspected. This is
+application recovery evidence, not power-loss durability or physical GUI input.
