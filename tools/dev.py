@@ -406,6 +406,21 @@ def main(argv: list[str] | None = None) -> int:
     package = commands.add_parser("package", help="Build a local relocatable developer ZIP; does not publish a release.")
     package.add_argument("--profile", choices=PROFILES, default="desktop")
     package.add_argument("--output")
+    importer = commands.add_parser("import-take", help="Preserve a PCM WAV and attach explicit source timing; no transcription.")
+    importer.add_argument("input")
+    importer.add_argument("--pattern", required=True)
+    importer.add_argument("--output", required=True)
+    importer.add_argument("--zero-frame", type=int, default=0)
+    importer.add_argument("--input-offset-frames", type=int)
+    importer.add_argument("--bpm", type=float)
+    importer.add_argument("--selection-start-frame", type=int)
+    importer.add_argument("--selection-end-frame", type=int)
+    importer.add_argument("--job-id")
+    inspector = commands.add_parser("take-info", help="Verify a preserved take and report sample/beat timing and analysis provenance.")
+    inspector.add_argument("take")
+    for take_command in (importer, inspector):
+        take_command.add_argument("--profile", choices=PROFILES, default="headless")
+        take_command.add_argument("--json", action="store_true")
     status = commands.add_parser("ci-status")
     status.add_argument("--json", action="store_true")
     ci = commands.add_parser("ci")
@@ -443,6 +458,16 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "package":
             output = args.output or f".local/packages/gtracker-{args.profile}-{platform.system()}-{platform.machine()}.zip"
             command = [sys.executable, str(ROOT / "tools/package.py"), "--profile", args.profile, "--output", output]
+        elif args.command in ("import-take", "take-info"):
+            operation = "import" if args.command == "import-take" else "inspect"
+            path = args.input if args.command == "import-take" else args.take
+            command = [sys.executable, str(ROOT / "tools/takes.py"), operation, path, "--profile", args.profile]
+            if args.command == "import-take":
+                command += ["--pattern", args.pattern, "--output", args.output]
+                for option in ("zero_frame", "input_offset_frames", "bpm", "selection_start_frame", "selection_end_frame", "job_id"):
+                    if getattr(args, option) is not None:
+                        command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
+            if args.json: command.append("--json")
         else:
             command = [str(executable(ROOT, "desktop", "gtracker_editor")), args.file]
             for option in ("script", "frames", "screenshot", "data_dir", "resource_dir"):
@@ -450,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
-        return run_command(ROOT, command, echo=not (args.command == "render" and args.json))["returncode"]
+        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info") and args.json))["returncode"]
     except (RuntimeError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

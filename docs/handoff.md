@@ -45,6 +45,14 @@ Generated audio, builds, ZIPs and local reports remain ignored.
 
 ## Limits and next work
 
+Issue #2 now has a CLI take-import/inspection increment: exact source WAV and
+pattern copies, versioned relative-path manifests, explicit source-frame mapping,
+manual/uncalibrated input offsets and metadata-only job identity. Eight focused
+tests pass for 44.1/48 kHz mono/stereo PCM widths, timing, moved bundles, stale
+pattern revisions, changed source/jobs, refused overwrites and cancellation.
+See docs/takes.md. Native source waveform/playback integration is next; no
+microphone capture or musical transcription has been added.
+
 No physical window interaction, hardware playback/listening or microphone capture
 is claimed. The default UI font lacks some non-Latin glyphs even though Unicode
 filenames round-trip. The analyzer is metadata-only; no transcription exists.

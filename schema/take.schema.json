@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker preserved take v1",
+  "description": "Readers additionally verify contained relative paths, WAV hashes/format, analysis provenance, UTF-8 byte lengths, frame bounds and duration/mapping consistency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "id", "origin", "pattern_path", "source_pattern_revision", "source", "alignment", "analysis_path", "created_utc"],
+  "properties": {
+    "schema": {"const": "gtracker.take"},
+    "version": {"const": 1, "type": "integer"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "origin": {"const": "import"},
+    "pattern_path": {"$ref": "#/$defs/bundle_path"},
+    "source_pattern_revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "analysis_path": {"$ref": "#/$defs/bundle_path"},
+    "created_utc": {"type": "string", "minLength": 1},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "name", "sha256", "size_bytes", "encoding", "sample_width_bits", "channels", "sample_rate_hz", "frames", "duration_seconds"],
+      "properties": {
+        "path": {"$ref": "#/$defs/bundle_path"},
+        "name": {"type": "string", "minLength": 1, "maxLength": 1023},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "encoding": {"const": "integer_pcm"},
+        "sample_width_bits": {"enum": [8, 16, 24, 32]},
+        "channels": {"type": "integer", "minimum": 1, "maximum": 2},
+        "sample_rate_hz": {"type": "integer", "minimum": 8000, "maximum": 192000},
+        "frames": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "duration_seconds": {"type": "number", "exclusiveMinimum": 0}
+      }
+    },
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coordinate_system", "pattern_zero_frame", "input_offset_frames", "offset_status", "tempo_bpm", "pattern_length_beats", "selection_start_frame", "selection_end_frame"],
+      "properties": {
+        "coordinate_system": {"const": "source_samples"},
+        "pattern_zero_frame": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "input_offset_frames": {"type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991},
+        "offset_status": {"enum": ["uncalibrated", "manual"]},
+        "tempo_bpm": {"type": "number", "minimum": 20, "maximum": 400},
+        "pattern_length_beats": {"type": "number", "exclusiveMinimum": 0, "maximum": 256},
+        "selection_start_frame": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "selection_end_frame": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+      },
+      "if": {"properties": {"offset_status": {"const": "uncalibrated"}}},
+      "then": {"properties": {"input_offset_frames": {"const": 0}}}
+    }
+  },
+  "$defs": {
+    "bundle_path": {
+      "type": "string", "minLength": 1,
+      "description": "Portable relative path inside the take bundle, without '..', absolute paths, backslashes, drive names or symlink escapes."
+    }
+  }
+}

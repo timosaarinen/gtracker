@@ -18,6 +18,12 @@ It writes the output JSON atomically and exits zero only after writing a result.
 Argument errors exit 2; input/analysis/output failures exit 1. The result file is
 the machine-readable interface; stdout is a short human-readable completion line.
 
+For a preserved WAV/pattern/timing bundle, use [take import](../docs/takes.md).
+That wrapper retains this job result unchanged and adds an explicit source-frame
+to-beat mapping in a separate v1 take manifest. Selection in that manifest does
+not imply that this metadata-only worker analyzed a cropped region; its result
+still describes the original whole-file audio and has no note transcript.
+
 ## Result contract
 
 | Field | Meaning |

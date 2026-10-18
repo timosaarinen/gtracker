@@ -23,6 +23,8 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - Python analysis worker that accepts a recorded WAV and returns a versioned
   result with source hash, timing, channel/peak/RMS metadata and job provenance.
   It explicitly reports that transcription is unavailable.
+- Source-preserving take import/inspection with relative bundle paths, explicit
+  source-sample timing, manual/uncalibrated offsets and checked analysis identity.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 
@@ -105,6 +107,8 @@ python analysis/analyze.py --input .local/demo.wav --output .local/analysis.json
 This currently measures the WAV and returns `status: metadata_only`, with no note
 events. Read [the analysis protocol](analysis/README.md) before adding a recognizer.
 Original audio remains separate from the compact score that the game will use.
+Use [preserved-take import](docs/takes.md) to keep a WAV, its timing, metadata-only
+analysis and an editable pattern copy together under ignored `.local/takes/`.
 
 ## Working with Codex or other agents
 
