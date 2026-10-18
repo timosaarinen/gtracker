@@ -69,10 +69,10 @@ no added room tail. Bypass adds no room tail and stays mono.
 
 `render_identity_sha256` hashes versioned canonical JSON containing the full
 pattern, seed, model, gestures, every production field, renderer version, rate,
-instrument tail, override and bypass choice. Names/revisions are included too,
+instrument tail, native build identity, override and bypass choice. Names/revisions are included too,
 so it conservatively invalidates for some changes that do not alter sound. No
 compiler padding or raw C structs enter the identity. It is an identity for
-future caching, not an on-disk audio cache or state checkpoint.
+the optional [persistent audio cache](cache.md); it is not a state checkpoint.
 
 Offline pattern output is bounded to 32 Mi float samples across all channels.
 The native processor allocates its delay memory at construction, not in

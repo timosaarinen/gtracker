@@ -210,3 +210,26 @@ Windows headless CI `.local/ci/runs/20261018T053403Z-5013690d/report.json` passe
 native and72 Python tests (one POSIX-only skip), with freshly built desktop
 executables present. Persistent cache storage/recovery, arrangement UI and
 seamless loop preparation remain next work; see docs/song.md.
+
+The optional local PCM cache now handles patterns and songs through the same
+streamed export. It checks canonical source/options/crop/build identity, receipt
+checksum, PCM header/size and full streamed SHA-256, then hashes the copied bytes
+again before publishing output. Read-only misses/corruption render independently;
+write failures preserve a successful output with `store_failed`. Handled
+interruption leaves old output intact, including during cache hashing/copying.
+Cache hits report zero new generation/warm-up and label reused float metrics.
+No eviction or acoustic-state checkpointing is implied. See docs/cache.md.
+
+CMake native source/toolchain/configuration fingerprints now include dirty code
+and automatically regenerate on source changes. `--version --json`, render
+reports and developer packages expose the compiled identity. Incremental SHA-256
+retains the original source hashes. A Windows Unicode filesystem error exposed
+and fixed a normal-result JSON reporting failure during corrupt-cache recovery.
+Native cache checks also inject a PCM change between validation/copying, corrupt
+or deep receipts, write/callback failures, and cancellation before/after storage.
+
+Windows full CI `.local/ci/runs/20261018T060055Z-fb04ee1c/report.json` passed18
+native and80 Python tests with one POSIX-only interrupt skip. Cache-source
+corruption/recovery and the first miss/reused hit passed separately. Fresh
+desktop/core-only, package and Linux checks continue below in local receipts;
+do not infer physical playback, microphone, Mac or listening qualification.

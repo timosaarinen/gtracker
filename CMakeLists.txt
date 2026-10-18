@@ -22,8 +22,43 @@ option(GT_BUILD_RUNTIME_EXAMPLE "Build a dependency-free game/runtime integratio
 
 find_package(Threads REQUIRED)
 
+# Bind cached output to actual native source/toolchain inputs, including dirty
+# development edits. Paths are relative so moving an otherwise identical build
+# does not inject a checkout location into its identity. Extra native UI/tool
+# sources conservatively invalidate too; this is not a minimal dependency key.
+file(GLOB_RECURSE gt_identity_sources CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp")
+list(APPEND gt_identity_sources CMakeLists.txt cmake/Dependencies.cmake cmake/BuildIdentity.hpp.in)
+list(SORT gt_identity_sources)
+set(gt_identity "gtracker.native-build.v1\n")
+foreach(source IN LISTS gt_identity_sources)
+  file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/${source}" source_hash)
+  string(APPEND gt_identity "${source}:${source_hash}\n")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
+endforeach()
+foreach(setting CMAKE_SYSTEM_NAME CMAKE_SYSTEM_PROCESSOR CMAKE_C_COMPILER_ID CMAKE_C_COMPILER_VERSION
+    CMAKE_CXX_COMPILER_ID CMAKE_CXX_COMPILER_VERSION CMAKE_CXX_COMPILER_TARGET CMAKE_CXX_SIMULATE_ID
+    CMAKE_CXX_COMPILER_FRONTEND_VARIANT CMAKE_GENERATOR_PLATFORM CMAKE_GENERATOR_TOOLSET
+    CMAKE_OSX_ARCHITECTURES CMAKE_MSVC_RUNTIME_LIBRARY CMAKE_INTERPROCEDURAL_OPTIMIZATION
+    CMAKE_C_FLAGS CMAKE_CXX_FLAGS CMAKE_EXE_LINKER_FLAGS GT_ENABLE_LUA GT_ENABLE_SANITIZERS)
+  string(APPEND gt_identity "${setting}:${${setting}}\n")
+endforeach()
+set(gt_identity_configurations DEBUG RELEASE RELWITHDEBINFO MINSIZEREL ${CMAKE_BUILD_TYPE} ${CMAKE_CONFIGURATION_TYPES})
+list(TRANSFORM gt_identity_configurations TOUPPER)
+list(REMOVE_DUPLICATES gt_identity_configurations)
+list(SORT gt_identity_configurations)
+foreach(configuration IN LISTS gt_identity_configurations)
+  foreach(language C CXX)
+    string(APPEND gt_identity "${language}_${configuration}:${CMAKE_${language}_FLAGS_${configuration}}\n")
+  endforeach()
+  string(APPEND gt_identity "LINK_${configuration}:${CMAKE_EXE_LINKER_FLAGS_${configuration}}\n")
+endforeach()
+string(SHA256 gt_render_build_id "${gt_identity}")
+configure_file(cmake/BuildIdentity.hpp.in "${CMAKE_CURRENT_BINARY_DIR}/generated/gtracker/build_identity.hpp" @ONLY)
+
 add_library(gtracker_core STATIC src/core.cpp)
-target_include_directories(gtracker_core PUBLIC include)
+target_include_directories(gtracker_core PUBLIC include PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+target_compile_definitions(gtracker_core PRIVATE GT_BUILD_CONFIGURATION="$<CONFIG>")
 set_target_properties(gtracker_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 function(gt_warnings target)
@@ -70,7 +105,7 @@ if(GT_BUILD_TOOLS)
   include(cmake/Dependencies.cmake)
   gt_dependency(gt_json json "https://codeload.github.com/nlohmann/json/tar.gz/refs/tags/v3.11.3"
     "0d8ef5af7f9794e3263480193c491549b2ba6cc74bb018906202ada498a79406")
-  add_library(gtracker_project STATIC src/project.cpp src/hash.cpp src/audio_source.cpp src/take.cpp src/alignment.cpp src/io.cpp src/export.cpp src/song.cpp)
+  add_library(gtracker_project STATIC src/project.cpp src/hash.cpp src/audio_source.cpp src/take.cpp src/alignment.cpp src/io.cpp src/export.cpp src/song.cpp src/render_cache.cpp)
   target_include_directories(gtracker_project PUBLIC include PRIVATE "${gt_json_SOURCE_DIR}/single_include")
   target_link_libraries(gtracker_project PUBLIC gtracker_renderer)
   gt_warnings(gtracker_project)
@@ -208,6 +243,10 @@ if(GT_BUILD_TESTS)
     target_link_libraries(gtracker_song_tests PRIVATE gtracker_project)
     gt_warnings(gtracker_song_tests)
     add_test(NAME song COMMAND gtracker_song_tests "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_executable(gtracker_render_cache_tests tests/render_cache_tests.cpp)
+    target_link_libraries(gtracker_render_cache_tests PRIVATE gtracker_project)
+    gt_warnings(gtracker_render_cache_tests)
+    add_test(NAME render_cache COMMAND gtracker_render_cache_tests)
     add_executable(gtracker_project_tests tests/project_tests.cpp)
     target_link_libraries(gtracker_project_tests PRIVATE gtracker_scripts)
     gt_warnings(gtracker_project_tests)

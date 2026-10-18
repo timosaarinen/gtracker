@@ -26,16 +26,18 @@ Command-line examples (use .exe on Windows):
 
   ./gtracker_cli validate examples/campfire.gtrk.json --json
   ./gtracker_cli render examples/campfire.gtrk.json --output /writable/path/demo.wav --json
+  ./gtracker_cli render-song examples/night-shift.gsong.json --cache-dir /writable/path/cache --output /writable/path/night-shift.wav --json
+  ./gtracker_cli --version --json
   ./gtracker_editor --data-dir /writable/path
 
-This package includes native tools, an original score, a Lua example, schema,
+This package includes native tools, original patterns/song, Lua examples, schema,
 controls/model documentation and notices. It contains no recordings or weights.
 An optional Python research worker is not required to render/play authored music.
 
 Platform runtime libraries are prerequisites, not bundled here. Windows builds
 using MSVC/Clang require the Microsoft Visual C++ 2015-2022 x64 runtime. Linux
 desktop builds require the system windowing/audio libraries used by their build.
-The package manifest records the source fingerprint and build platform; that is
+The package manifest records native build identity, source fingerprint and build platform; that is
 provenance, not evidence that another operating system or physical device passed.
 
 Patterns, script filenames and CLI JSON use UTF-8. The bundled UI font has limited

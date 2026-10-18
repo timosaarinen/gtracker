@@ -66,6 +66,8 @@ typedef struct gt_slide {
 
 /* Static string, never NULL; unknown result codes return "unknown result". */
 const char* gt_result_string(gt_result result);
+/* Static source/toolchain digest plus actual build configuration; never NULL. */
+const char* gt_renderer_build_id(void);
 
 /* 48 kHz, six strings ordered E4 B3 G3 D3 A2 E2, seed 42. */
 gt_config gt_default_config(void);

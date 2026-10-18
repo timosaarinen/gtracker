@@ -4,6 +4,7 @@
 #include "gtracker/alignment.hpp"
 #include "gtracker/song.hpp"
 #include "gtracker/io.hpp"
+#include "gtracker/render_cache.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -44,8 +45,23 @@ nlohmann::json stream_report(const gtracker::StreamRenderResult& r) {
         {"render_ms", r.render_ms}, {"export_elapsed_ms", r.elapsed_ms}, {"render_identity_sha256", r.identity},
         {"clipped_samples", r.clipped_samples}, {"end_peak_last_50ms", r.end_peak}, {"warmup_frames", r.warmup_frames},
         {"audio_buffer_bytes", r.audio_buffer_bytes}, {"timeline_frames", r.timeline_frames},
-        {"output_reaches_timeline_end", r.warmup_frames + r.frames == r.timeline_frames}, {"streaming", true},
+        {"crop_start_frame", r.start_frame}, {"output_reaches_timeline_end", r.start_frame + r.frames == r.timeline_frames}, {"streaming", true},
         {"wav_encoding", r.channels == 2 ? "PCM_S16LE_STEREO" : "PCM_S16LE_MONO"}};
+}
+void prepare_cache(gtracker::CacheOptions& cache, bool progress_json) {
+    if (progress_json) cache.progress = [last = std::chrono::steady_clock::time_point{}, phase = std::string{}](const gtracker::CacheProgress& p) mutable {
+        const auto now = std::chrono::steady_clock::now();
+        if (phase == p.phase && p.bytes != p.total_bytes && now - last < std::chrono::milliseconds(100)) return;
+        std::cerr << nlohmann::json{{"type", "cache_progress"}, {"phase", p.phase}, {"bytes", p.bytes}, {"total_bytes", p.total_bytes}}.dump() << '\n';
+        last = now; phase = p.phase;
+    };
+}
+nlohmann::json cached_report(const gtracker::CachedRenderResult& result) {
+    auto report = stream_report(result.render);
+    report.update({{"cache_status", result.status}, {"cache_key", result.key}, {"cache_detail", result.detail},
+        {"cache_lookup_ms", result.cache_lookup_ms}, {"cache_store_ms", result.cache_store_ms}, {"source_render_ms", result.source_render_ms},
+        {"signal_metrics_origin", result.status == "hit" ? "checked_cached_float_receipt" : "current_float_render"}});
+    return report;
 }
 void help() {
     std::cout << "gtracker " << GT_VERSION << " - acoustic guitar prototype\n\n"
@@ -55,6 +71,7 @@ void help() {
         "                       [--script LUA] [--production JSON] [--bypass-production] [--json]\n"
         "                       [--stream] [--progress-json] [--cancel-file PATH]\n"
         "                       [--start-frame N] [--end-frame N] [--block-frames N]\n"
+        "                       [--cache-dir PATH] [--refresh-cache | --cache-read-only]\n"
         "  gtracker_cli transform PATTERN --script LUA --output PATTERN [--json]\n"
         "  gtracker_cli validate-song SONG [--json]\n"
         "  gtracker_cli render-song SONG --output WAV [render options above; always streamed]\n"
@@ -116,7 +133,7 @@ int alignment_command(int argc, char** argv, bool as_json) {
         json report{{"ok", true}, {"schema", "gtracker.calibration-probe"}, {"version", 1}, {"renderer_version", GT_VERSION},
             {"output", output.u8string()}, {"sha256", audio.sha256}, {"sample_rate_hz", rate}, {"frames", audio.frames}, {"seed", seed},
             {"note", "Generated reference only; no playback, recording or physical latency measurement performed."}};
-        if (as_json) std::cout << report.dump(2) << '\n';
+        if (as_json) std::cout << report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
         else std::cout << "Generated two-second reference: " << output.u8string() << '\n';
         return 0;
     }
@@ -141,7 +158,7 @@ int alignment_command(int argc, char** argv, bool as_json) {
         {"polarity", result.polarity}, {"resolution_frames", 1}, {"elapsed_ms", result.elapsed_ms},
         {"drift_measured", false}, {"physical_latency_measured", false},
         {"note", "Positive offset means the recorded waveform is later than the reference file. Scores are bounded match diagnostics, not probabilities. File origins, device start/buffering and clock drift are not separated. Applying an authoring offset remains manual."}};
-    const auto text = report.dump(2) + "\n";
+    const auto text = report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) + "\n";
     if (!output.empty()) gtracker::write_text_atomic(output, text);
     if (as_json) std::cout << text;
     else std::cout << "Relative file delay: " << result.status << "; candidate " << result.candidate_offset_frames << " frames; fine score " << result.fine_score << '\n';
@@ -154,7 +171,11 @@ int cli_main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) if (std::string(argv[i]) == "--json") as_json = true;
     try {
         if (argc == 1 || std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h") { help(); return 0; }
-        if (std::string(argv[1]) == "--version") { std::cout << "gtracker " << GT_VERSION << "\n"; return 0; }
+        if (std::string(argv[1]) == "--version") {
+            if (as_json) std::cout << nlohmann::json{{"renderer_version", GT_VERSION}, {"renderer_build_id", gt_renderer_build_id()}}.dump() << '\n';
+            else std::cout << "gtracker " << GT_VERSION << "\n";
+            return 0;
+        }
         const std::string command = argv[1];
         if (command == "calibration-probe" || command == "align-audio") return alignment_command(argc, argv, as_json);
         const bool is_render = command == "render" || command == "render-song";
@@ -166,6 +187,7 @@ int cli_main(int argc, char** argv) {
         std::filesystem::path cancel_path;
         bool streaming = false, progress_json = false;
         gtracker::StreamOptions stream_options;
+        gtracker::CacheOptions cache_options;
         gtracker::RenderOptions options;
         for (int i = 3; i < argc; ++i) {
             const std::string flag = argv[i];
@@ -174,6 +196,8 @@ int cli_main(int argc, char** argv) {
             if (flag == "--bypass-production" && is_render) { options.bypass_production = true; continue; }
             if (flag == "--stream" && is_render) { streaming = true; continue; }
             if (flag == "--progress-json" && is_render) { streaming = true; progress_json = true; continue; }
+            if (flag == "--refresh-cache" && is_render) { streaming = true; cache_options.refresh = true; continue; }
+            if (flag == "--cache-read-only" && is_render) { streaming = true; cache_options.read_only = true; continue; }
             if (i + 1 >= argc) throw std::runtime_error("Missing value for " + flag);
             const std::string value = argv[++i];
             if (flag == "--output" || flag == "-o") output = std::filesystem::u8path(value);
@@ -195,6 +219,9 @@ int cli_main(int argc, char** argv) {
             }
             else if (flag == "--cancel-file" && is_render) {
                 cancel_path = std::filesystem::u8path(value); streaming = true;
+            }
+            else if (flag == "--cache-dir" && is_render) {
+                cache_options.directory = std::filesystem::u8path(value); streaming = true;
             }
             else if ((flag == "--start-frame" || flag == "--end-frame" || flag == "--block-frames") && is_render) {
                 const double parsed = number(value, flag.c_str());
@@ -222,7 +249,7 @@ int cli_main(int argc, char** argv) {
                 {"input_offset_status", take.alignment.offset_status},
                 {"selection_start_beat", take.source_frame_to_beat(static_cast<double>(take.alignment.selection_start_frame))},
                 {"selection_end_beat", take.source_frame_to_beat(static_cast<double>(take.alignment.selection_end_frame))}};
-            if (as_json) std::cout << report.dump(2) << '\n';
+            if (as_json) std::cout << report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
             else std::cout << "Take: " << take.source_name << " (" << take.audio.frames << " frames, "
                            << take.audio.channels << " channels at " << take.audio.sample_rate << " Hz; metadata only)\n";
             return 0;
@@ -235,7 +262,7 @@ int cli_main(int argc, char** argv) {
             if (command == "validate-song" && !output.empty()) throw std::runtime_error("validate-song does not accept --output");
             auto song = gtracker::load_song(input);
             const auto snapshot = gtracker::song_snapshot_json(song);
-            nlohmann::json report{{"ok", true}, {"command", command}, {"renderer_version", GT_VERSION},
+            nlohmann::json report{{"ok", true}, {"command", command}, {"renderer_version", GT_VERSION}, {"renderer_build_id", gt_renderer_build_id()},
                 {"song_schema_version", 1}, {"input", input.u8string()}, {"song_revision", song.revision},
                 {"patterns", song.patterns.size()}, {"tempo_bpm", song.bpm}, {"seed", song.seed},
                 {"source_snapshot_utf8_bytes", snapshot.size()}};
@@ -243,7 +270,7 @@ int cli_main(int argc, char** argv) {
                 gtracker::require_distinct_output(output, song.source_files);
                 gtracker::write_text_atomic(output, snapshot);
                 report["output"] = output.u8string();
-                if (as_json) std::cout << report.dump(2) << '\n';
+                if (as_json) std::cout << report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
                 else std::cout << "Saved portable song snapshot to " << output.u8string() << '\n';
                 return 0;
             }
@@ -257,9 +284,11 @@ int cli_main(int argc, char** argv) {
             if (command == "render-song") {
                 RenderSignalGuard signals;
                 prepare_stream(stream_options, cancel_path, progress_json);
+                prepare_cache(cache_options, progress_json);
                 gtracker::require_distinct_output(output, song.source_files);
-                const auto rendered = gtracker::export_wav(native, output, gtracker::song_render_identity(song, options), stream_options);
-                report.update(stream_report(rendered));
+                const auto cached = gtracker::cached_export_wav(native, output, gtracker::song_render_identity(song, options), stream_options, cache_options);
+                const auto& rendered = cached.render;
+                report.update(cached_report(cached));
                 report["output"] = output.u8string(); report["pcm_bytes"] = rendered.frames * rendered.channels * 2;
                 report["production_tail_seconds"] = gtracker::production_tail_seconds(gtracker::song_production(song, options));
                 report["production_bypassed"] = options.bypass_production;
@@ -267,12 +296,12 @@ int cli_main(int argc, char** argv) {
                 report["production"] = production ? nlohmann::json::parse(gtracker::production_json(*production)) : nlohmann::json(nullptr);
                 if (!as_json) std::cout << "Rendered song: " << report["seconds"] << " s to " << output.u8string() << '\n';
             } else if (!as_json) std::cout << "Valid song: " << song.name << " (" << compiled.placements.size() << " placements)\n";
-            if (as_json) std::cout << report.dump(2) << '\n';
+            if (as_json) std::cout << report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) << '\n';
             return 0;
         }
         auto pattern = gtracker::load_pattern(input);
         if (!script.empty()) gtracker::apply_lua(pattern, script);
-        nlohmann::json report{{"ok", true}, {"command", command}, {"renderer_version", GT_VERSION},
+        nlohmann::json report{{"ok", true}, {"command", command}, {"renderer_version", GT_VERSION}, {"renderer_build_id", gt_renderer_build_id()},
             {"schema_version", pattern.schema_version}, {"input", input.u8string()}, {"pattern_revision", pattern.revision},
             {"events", pattern.events.size()}, {"gestures", pattern.gestures.size()}, {"instrument_model", pattern.model},
             {"strings", pattern.tuning_midi.size()}, {"seed", pattern.seed}};
@@ -280,8 +309,9 @@ int cli_main(int argc, char** argv) {
             if (streaming) {
                 RenderSignalGuard signals;
                 prepare_stream(stream_options, cancel_path, progress_json);
-                const auto rendered = gtracker::render_pattern_wav(pattern, output, options, stream_options);
-                report.update(stream_report(rendered));
+                prepare_cache(cache_options, progress_json);
+                auto native = gtracker::pattern_renderer(pattern, options);
+                report.update(cached_report(gtracker::cached_export_wav(native, output, gtracker::render_identity(pattern, options), stream_options, cache_options)));
             } else {
                 const auto rendered = gtracker::render_pattern(pattern, options);
                 gtracker::write_wav(output, rendered.samples, rendered.sample_rate, rendered.channels);
@@ -306,7 +336,7 @@ int cli_main(int argc, char** argv) {
             report["output"] = output.u8string();
             if (!as_json) std::cout << "Saved revision " << pattern.revision << " to " << output.u8string() << "\n";
         } else if (!as_json) std::cout << "Valid pattern: " << pattern.name << " (" << pattern.events.size() << " events)\n";
-        if (as_json) std::cout << report.dump(2) << "\n";
+        if (as_json) std::cout << report.dump(2, ' ', false, nlohmann::json::error_handler_t::replace) << "\n";
         return 0;
     } catch (const gtracker::RenderCancelled& error) {
         if (as_json) std::cout << nlohmann::json{{"ok", false}, {"status", "cancelled"}, {"error", error.what()}}.dump() << '\n';

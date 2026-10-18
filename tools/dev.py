@@ -433,6 +433,9 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--start-frame", type=int)
     render.add_argument("--end-frame", type=int)
     render.add_argument("--block-frames", type=int)
+    render.add_argument("--cache-dir")
+    render.add_argument("--refresh-cache", action="store_true")
+    render.add_argument("--cache-read-only", action="store_true")
     render.add_argument("--json", action="store_true")
     for name in ("render-song", "validate-song", "snapshot-song"):
         song = commands.add_parser(name)
@@ -453,6 +456,9 @@ def main(argv: list[str] | None = None) -> int:
             song.add_argument("--start-frame", type=int)
             song.add_argument("--end-frame", type=int)
             song.add_argument("--block-frames", type=int)
+            song.add_argument("--cache-dir")
+            song.add_argument("--refresh-cache", action="store_true")
+            song.add_argument("--cache-read-only", action="store_true")
     editor = commands.add_parser("editor")
     editor.add_argument("file", nargs="?")
     editor.add_argument("--take")
@@ -536,13 +542,15 @@ def main(argv: list[str] | None = None) -> int:
             command = ["ctest", "--preset", args.profile, "--build-config", "Release", "--output-on-failure"]
         elif args.command in ("render", "render-song"):
             command = [str(executable(ROOT, args.profile, "gtracker_cli")), args.command, args.file, "--output", args.output]
-            for option in ("sample_rate", "tail", "script", "production", "cancel_file", "start_frame", "end_frame", "block_frames"):
+            for option in ("sample_rate", "tail", "script", "production", "cancel_file", "start_frame", "end_frame", "block_frames", "cache_dir"):
                 if getattr(args, option, None) is not None:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.bypass_production: command.append("--bypass-production")
             if args.stream: command.append("--stream")
             if args.progress_json: command.append("--progress-json")
-            if args.command == "render-song" or args.stream or args.progress_json or any(getattr(args, name) is not None for name in ("cancel_file", "start_frame", "end_frame", "block_frames")):
+            if args.refresh_cache: command.append("--refresh-cache")
+            if args.cache_read_only: command.append("--cache-read-only")
+            if args.command == "render-song" or args.stream or args.progress_json or args.refresh_cache or args.cache_read_only or any(getattr(args, name) is not None for name in ("cancel_file", "start_frame", "end_frame", "block_frames", "cache_dir")):
                 if args.cancel_file:
                     render_cancel = ROOT / args.cancel_file
                 else:

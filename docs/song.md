@@ -80,8 +80,8 @@ while PCM memory stays fixed to the selected processing block and delay state.
 version, sample rate, tail, complete production settings/override and bypass.
 It also includes metadata and unused definitions, so some nonaudible edits
 conservatively invalidate it. Moving source files without changing content does
-not change it. A preview adds exact crop bounds. This is ready for a persistent
-cache; cache storage/recovery is a separate increment.
+not change it. A preview adds exact crop bounds. Optional [persistent caching](cache.md)
+also checks native build identity, complete PCM and recoverable receipts.
 
 Native tests compare a one-pattern song with original pattern PCM and compare
 notes ringing into an empty pattern with one flattened continuous reference,

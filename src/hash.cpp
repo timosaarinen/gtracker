@@ -5,6 +5,8 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
+#include <algorithm>
+#include <fstream>
 
 namespace gtracker {
 namespace {
@@ -53,35 +55,65 @@ void block(std::array<std::uint32_t, 8>& state, const unsigned char* bytes) {
 }
 }
 
-std::string sha256(std::string_view bytes) {
-    if (bytes.size() > std::numeric_limits<std::uint64_t>::max() / 8) {
+Sha256::Sha256() : state_{
+    0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
+    0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U} {}
+
+void Sha256::update(std::string_view bytes) {
+    if (bytes.size() > std::numeric_limits<std::uint64_t>::max() / 8 - byte_count_)
         throw std::length_error("SHA-256 input exceeds its length representation");
-    }
-    std::array<std::uint32_t, 8> state = {
-        0x6a09e667U, 0xbb67ae85U, 0x3c6ef372U, 0xa54ff53aU,
-        0x510e527fU, 0x9b05688cU, 0x1f83d9abU, 0x5be0cd19U
-    };
+    byte_count_ += bytes.size();
     const auto* data = reinterpret_cast<const unsigned char*>(bytes.data());
     std::size_t offset = 0;
-    while (bytes.size() - offset >= 64) {
-        block(state, data + offset);
-        offset += 64;
+    if (pending_count_) {
+        const auto count = std::min(bytes.size(), pending_.size() - pending_count_);
+        if (count) std::memcpy(pending_.data() + pending_count_, data, count);
+        pending_count_ += count; offset += count;
+        if (pending_count_ == pending_.size()) { block(state_, pending_.data()); pending_count_ = 0; }
     }
-    std::array<unsigned char, 128> tail{};
+    while (bytes.size() - offset >= 64) { block(state_, data + offset); offset += 64; }
     const auto remaining = bytes.size() - offset;
-    if (remaining) std::memcpy(tail.data(), data + offset, remaining);
-    tail[remaining] = 0x80;
-    const std::size_t padded = remaining < 56 ? 64 : 128;
-    const auto bit_count = static_cast<std::uint64_t>(bytes.size()) * 8;
+    if (remaining) { std::memcpy(pending_.data() + pending_count_, data + offset, remaining); pending_count_ += remaining; }
+}
+
+std::string Sha256::digest() const {
+    auto state = state_;
+    std::array<unsigned char, 128> tail{};
+    if (pending_count_) std::memcpy(tail.data(), pending_.data(), pending_count_);
+    tail[pending_count_] = 0x80;
+    const std::size_t padded = pending_count_ < 56 ? 64 : 128;
+    const auto bit_count = byte_count_ * 8;
     for (unsigned i = 0; i < 8; ++i) tail[padded - 1 - i] = static_cast<unsigned char>(bit_count >> (i * 8));
     block(state, tail.data());
     if (padded == 128) block(state, tail.data() + 64);
     constexpr char hex[] = "0123456789abcdef";
     std::string result;
     result.reserve(64);
-    for (const auto word : state) {
-        for (int shift = 28; shift >= 0; shift -= 4) result.push_back(hex[(word >> shift) & 15]);
-    }
+    for (const auto word : state) for (int shift = 28; shift >= 0; shift -= 4) result.push_back(hex[(word >> shift) & 15]);
     return result;
+}
+
+std::string sha256(std::string_view bytes) {
+    Sha256 hash; hash.update(bytes); return hash.digest();
+}
+std::string sha256_file(const std::filesystem::path& path, const std::function<void()>& checkpoint, const std::function<void(std::uint64_t)>& progress) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("Cannot open file for SHA-256: " + path.u8string());
+    std::array<char, 65536> buffer{};
+    Sha256 hash;
+    std::uint64_t processed = 0;
+    if (progress) progress(0);
+    for (;;) {
+        if (checkpoint) checkpoint();
+        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const auto count = input.gcount();
+        if (input.bad() || (input.fail() && !input.eof())) throw std::runtime_error("Cannot read complete file for SHA-256");
+        hash.update(std::string_view(buffer.data(), static_cast<std::size_t>(count)));
+        processed += static_cast<std::uint64_t>(count);
+        if (progress) progress(processed);
+        if (static_cast<std::size_t>(count) < buffer.size()) break;
+    }
+    if (checkpoint) checkpoint();
+    return hash.digest();
 }
 } // namespace gtracker

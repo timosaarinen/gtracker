@@ -1,4 +1,5 @@
 #include "gtracker/core.h"
+#include "gtracker/build_identity.hpp"
 
 #include <algorithm>
 #include <array>
@@ -281,6 +282,8 @@ double render_body(gt_synth& synth, double strings) noexcept {
 } // namespace
 
 extern "C" {
+
+const char* gt_renderer_build_id(void) { return GT_RENDER_BUILD_ID "/" GT_BUILD_CONFIGURATION; }
 
 const char* gt_result_string(gt_result result) {
     switch (enum_value(result)) {

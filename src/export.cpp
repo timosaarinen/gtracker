@@ -27,6 +27,7 @@ StreamRenderResult export_wav(NativeRenderer& renderer, const std::filesystem::p
     StreamRenderResult result;
     result.sample_rate = renderer.sample_rate(); result.channels = renderer.channels();
     result.frames = end - options.start_frame; result.warmup_frames = options.start_frame;
+    result.start_frame = options.start_frame;
     result.timeline_frames = renderer.total_frames();
     result.identity = export_identity(identity, options.start_frame, end, renderer.total_frames());
     const auto channels = static_cast<std::size_t>(result.channels);

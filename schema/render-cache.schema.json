@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker local PCM cache receipt v1",
+  "description": "Native checks also verify canonical payload checksum, exact requested build/key/timing, fixed PCM16 header/size and streamed SHA-256 of copied audio.",
+  "type": "object", "additionalProperties": false, "required": ["payload", "sha256"],
+  "properties": {
+    "sha256": {"$ref": "#/$defs/hash"},
+    "payload": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema", "version", "identity", "renderer_version", "renderer_build_id", "sample_rate", "channels", "frames", "timeline_frames", "start_frame", "wav_sha256", "wav_bytes", "peak", "rms", "end_peak", "clipped_samples", "source_render_ms"],
+      "properties": {
+        "schema": {"const": "gtracker.render-cache"}, "version": {"const": 1},
+        "identity": {"$ref": "#/$defs/hash"}, "wav_sha256": {"$ref": "#/$defs/hash"},
+        "renderer_version": {"type": "string"},
+        "renderer_build_id": {"type": "string", "pattern": "^[0-9a-f]{64}/.*$"},
+        "sample_rate": {"type": "integer", "minimum": 8000, "maximum": 192000},
+        "channels": {"enum": [1, 2]},
+        "frames": {"type": "integer", "minimum": 1},
+        "timeline_frames": {"type": "integer", "minimum": 1},
+        "start_frame": {"type": "integer", "minimum": 0},
+        "wav_bytes": {"type": "integer", "minimum": 46, "maximum": 4294967295},
+        "peak": {"type": "number", "minimum": 0, "maximum": 64},
+        "rms": {"type": "number", "minimum": 0, "maximum": 64},
+        "end_peak": {"type": "number", "minimum": 0, "maximum": 64},
+        "clipped_samples": {"type": "integer", "minimum": 0},
+        "source_render_ms": {"type": "number", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {"hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+}

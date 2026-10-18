@@ -11,6 +11,7 @@ from pathlib import Path
 import platform
 import re
 import sys
+import subprocess
 import uuid
 import zipfile
 
@@ -27,7 +28,7 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
         result.append((dev.executable(root, profile, "gtracker_capture"), "gtracker_capture" + (".exe" if os.name == "nt" else "")))
     for name in ("examples/campfire.gtrk.json", "examples/slide-study.gtrk.json", "examples/night-bridge.gtrk.json", "examples/night-shift.gsong.json", "examples/room.json", "scripts/soften.lua", "scripts/slide.lua",
                  "schema/pattern.schema.json", "schema/pattern-v2.schema.json", "schema/take.schema.json", "schema/capture-result.schema.json",
-                 "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
+                 "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "schema/render-cache.schema.json", "docs/cache.md", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
     dependencies = root / ".local/build" / profile / "_deps"
@@ -49,7 +50,7 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
     return result
 
 
-def write_package(root: Path, profile: str, output: Path, source: dict) -> dict:
+def write_package(root: Path, profile: str, output: Path, source: dict, renderer: dict | None = None) -> dict:
     """Assemble an already-built profile; callers are responsible for building it."""
     root = root.resolve()
     output = (root / output).resolve()
@@ -81,6 +82,7 @@ def write_package(root: Path, profile: str, output: Path, source: dict) -> dict:
         "profile": profile,
         "platform": {"system": platform.system(), "release": platform.release(), "machine": platform.machine()},
         "source": source,
+        "renderer": renderer or {"status": "not_queried", "reason": "Prebuilt-input assembly; the caller did not supply native renderer metadata."},
         "build_options": build_options,
         "toolchain": toolchain,
         "runtime_libraries": "Platform runtimes are prerequisites; system DLLs/shared libraries are not bundled.",
@@ -107,6 +109,19 @@ def write_package(root: Path, profile: str, output: Path, source: dict) -> dict:
     return manifest
 
 
+def renderer_info(root: Path, profile: str) -> dict:
+    try:
+        result = subprocess.run([str(dev.executable(root, profile, "gtracker_cli")), "--version", "--json"],
+                                cwd=root, encoding="utf-8", capture_output=True, check=True, timeout=10)
+        info = json.loads(result.stdout)
+        identity = info["renderer_build_id"]
+        if not isinstance(info["renderer_version"], str) or not isinstance(identity, str) or not re.fullmatch(r"[0-9a-f]{64}/.*", identity):
+            raise ValueError("Invalid renderer version/build identity")
+        return info
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(f"Cannot inspect the built renderer metadata: {error}") from error
+
+
 def build_package(root: Path, profile: str, output: Path) -> dict:
     before = dev.source_state(root)
     targets = ["gtracker_cli"] + (["gtracker_editor", "gtracker_capture"] if profile == "desktop" else [])
@@ -118,7 +133,7 @@ def build_package(root: Path, profile: str, output: Path) -> dict:
     after = dev.source_state(root)
     if before["fingerprint_sha256"] != after["fingerprint_sha256"]:
         raise RuntimeError("Source changed during the package build; no ZIP was published.")
-    return write_package(root, profile, output, after)
+    return write_package(root, profile, output, after, renderer_info(root, profile))
 
 
 def main(argv: list[str] | None = None) -> int:

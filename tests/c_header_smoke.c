@@ -3,6 +3,7 @@
 
 /* Compiled as C and linked to the same C++ core used by the applications. */
 int main(void) {
+    if (strlen(gt_renderer_build_id()) < 65 || gt_renderer_build_id()[64] != '/') return 8;
     gt_config config = gt_default_config();
     gt_synth* synth = NULL;
     float silence[8];

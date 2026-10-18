@@ -38,7 +38,9 @@ render identities include complete loaded source data rather than file mtimes.
 It retains state across blocks and has no SDL, JSON, Lua or Python dependency.
 The project layer owns optional v2 production settings, shared CLI/editor
 rendering, bounded stereo output, explicit dry bypass and declarative SHA-256
-render identities. This identity is not yet a stored audio cache or checkpoint.
+render identities. Optional local PCM caching checks complete hashes and source/
+build/parameter/crop identity, preserving old output through handled failures.
+It stores completed audio, not acoustic-state checkpoints.
 
 **gtracker_renderer** retains one core and optional production instance across
 all scheduled blocks. It consumes copied absolute-frame performance data and

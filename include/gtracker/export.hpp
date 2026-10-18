@@ -26,7 +26,7 @@ struct StreamOptions {
 };
 struct StreamRenderResult {
     int sample_rate = 48000, channels = 1;
-    std::uint64_t frames = 0, warmup_frames = 0, timeline_frames = 0;
+    std::uint64_t frames = 0, warmup_frames = 0, timeline_frames = 0, start_frame = 0;
     std::size_t audio_buffer_bytes = 0;
     double render_ms = 0, elapsed_ms = 0;
     float peak = 0, rms = 0, end_peak = 0;

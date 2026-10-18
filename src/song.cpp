@@ -251,7 +251,7 @@ ProductionSettings song_production(const Song& song, const RenderOptions& option
 }
 std::string song_render_identity(const Song& song, const RenderOptions& options) {
     render_options(options);
-    json identity{{"schema", "gtracker.song-render-identity"}, {"version", 1}, {"renderer", GT_VERSION},
+    json identity{{"schema", "gtracker.song-render-identity"}, {"version", 1}, {"renderer", GT_VERSION}, {"renderer_build", gt_renderer_build_id()},
         {"song", json::parse(song_snapshot_json(song))}, {"sample_rate", options.sample_rate},
         {"instrument_tail_seconds", options.tail_seconds}, {"bypass_production", options.bypass_production}};
     if (options.production_override) identity["production_override"] = json::parse(production_json(*options.production_override));

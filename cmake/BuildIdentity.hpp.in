@@ -1,0 +1,2 @@
+#pragma once
+#define GT_RENDER_BUILD_ID "@gt_render_build_id@"

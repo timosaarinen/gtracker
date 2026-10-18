@@ -13,6 +13,8 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace gtracker {
@@ -25,17 +27,19 @@ void require_distinct_output(const std::filesystem::path& destination, const std
             throw std::runtime_error("Output must differ from the pattern input, song, referenced patterns, script and production settings");
     }
 }
-namespace {
-void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
-std::filesystem::path temporary_path(const std::filesystem::path& destination) {
+std::filesystem::path unique_sibling_path(const std::filesystem::path& destination, std::string_view tag) {
     static std::atomic<unsigned long long> counter{0};
-    if (!destination.parent_path().empty()) std::filesystem::create_directories(destination.parent_path());
     auto result = destination;
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    result += ".tmp-" + std::to_string(stamp) + "-" + std::to_string(counter++);
+#ifdef _WIN32
+    const auto pid = GetCurrentProcessId();
+#else
+    const auto pid = getpid();
+#endif
+    result += "." + std::string(tag) + "-" + std::to_string(pid) + "-" + std::to_string(stamp) + "-" + std::to_string(counter++);
     return result;
 }
-void publish_file(const std::filesystem::path& temporary, const std::filesystem::path& destination) {
+void publish_binary_file(const std::filesystem::path& temporary, const std::filesystem::path& destination) {
 #ifdef _WIN32
     if (!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
         throw std::runtime_error("Cannot replace output file (Windows error " + std::to_string(GetLastError()) + ")");
@@ -43,10 +47,13 @@ void publish_file(const std::filesystem::path& temporary, const std::filesystem:
     std::filesystem::rename(temporary, destination);
 #endif
 }
+namespace {
+void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
 }
 void write_binary_atomic(const std::filesystem::path& path, const std::function<void(std::ostream&)>& writer) {
     require(!path.empty(), "Output path must not be empty");
-    const auto temporary = temporary_path(path);
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+    const auto temporary = unique_sibling_path(path, "tmp");
     try {
         std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
         if (!out) throw std::runtime_error("Cannot create output: " + path.u8string());
@@ -55,7 +62,7 @@ void write_binary_atomic(const std::filesystem::path& path, const std::function<
         if (!out) throw std::runtime_error("Cannot write output: " + path.u8string());
         out.close();
         if (!out) throw std::runtime_error("Cannot close output: " + path.u8string());
-        publish_file(temporary, path);
+        publish_binary_file(temporary, path);
     } catch (...) {
         std::error_code ignored;
         std::filesystem::remove(temporary, ignored);
@@ -66,7 +73,7 @@ void write_pcm16_header(std::ostream& out, std::uint64_t frames, int rate, int c
     require(rate >= 8000 && rate <= 192000, "WAV rate must be in 8000..192000");
     require(channels == 1 || channels == 2, "WAV needs one or two channels");
     const auto frame_bytes = static_cast<std::uint16_t>(channels * 2);
-    require(frames <= (std::numeric_limits<std::uint32_t>::max() - 36ULL) / frame_bytes, "WAV exceeds the PCM RIFF size limit; choose a shorter preview or lower rate");
+    require(frames <= (std::numeric_limits<std::uint32_t>::max() - 44ULL) / frame_bytes, "WAV exceeds the PCM RIFF size limit; choose a shorter preview or lower rate");
     const auto bytes = static_cast<std::uint32_t>(frames * frame_bytes);
     const auto u16 = [&](std::uint16_t value) { out.put(static_cast<char>(value & 255)); out.put(static_cast<char>(value >> 8)); };
     const auto u32 = [&](std::uint32_t value) { u16(static_cast<std::uint16_t>(value)); u16(static_cast<std::uint16_t>(value >> 16)); };

@@ -45,6 +45,9 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - [Song arrangements](docs/song.md) with reusable patterns, explicit variations,
   portable snapshots and continuous instrument/room state. The original night
   sketch renders about 46 seconds through the same native runtime path.
+- An optional [persistent PCM cache](docs/cache.md), checked against source,
+  renderer build, parameters, crop bounds and complete WAV hashes, with recovery
+  and read-only access modes.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 

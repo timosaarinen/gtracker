@@ -277,7 +277,7 @@ std::string render_identity(const Pattern& p, const RenderOptions& options) {
     require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
     require(std::isfinite(options.tail_seconds) && options.tail_seconds >= 0 && options.tail_seconds <= 30, "tail must be in 0..30 seconds");
     // Versioned declarative bytes, never a compiler-dependent C struct dump.
-    json identity{{"schema", "gtracker.render-identity"}, {"version", 1}, {"renderer", GT_VERSION},
+    json identity{{"schema", "gtracker.render-identity"}, {"version", 1}, {"renderer", GT_VERSION}, {"renderer_build", gt_renderer_build_id()},
         {"pattern", json::parse(pattern_json(p))}, {"sample_rate", options.sample_rate},
         {"instrument_tail_seconds", options.tail_seconds}, {"bypass_production", options.bypass_production}};
     if (options.production_override) identity["production_override"] = production_value(*options.production_override);

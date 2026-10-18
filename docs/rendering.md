@@ -37,6 +37,9 @@ and file I/O, but excludes score compilation/renderer construction.
 
 `--progress-json` writes throttled JSON-line frame progress to stderr, leaving
 the final `--json` result on stdout. The developer wrapper preserves that split.
+Optional [persistent caching](cache.md) adds byte-progress phases and can skip
+generation/warm-up altogether on a checked hit; `crop_start_frame` remains the
+requested source-timeline position even then.
 Progress reaches the processing endpoint before publication; only the final
 successful report certifies a completed output file.
 
