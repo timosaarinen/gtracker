@@ -28,6 +28,14 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def utf8_stdio() -> None:
+    # Redirected Windows Python defaults to the ANSI code page even when the
+    # child/native JSON is UTF-8. Configure both sides of this CLI boundary.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 def git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(root), *args], capture_output=True, check=False
@@ -427,6 +435,21 @@ def main(argv: list[str] | None = None) -> int:
     recorder.configure_parser(recording)
     devices = commands.add_parser("input-devices", help="List current SDL recording-device selectors without starting capture.")
     devices.add_argument("--json", action="store_true")
+    probe = commands.add_parser("calibration-probe", help="Write an original two-second broadband timing reference; no devices.")
+    probe.add_argument("--output", required=True)
+    probe.add_argument("--sample-rate", type=int)
+    probe.add_argument("--seed", type=int)
+    align = commands.add_parser("align-audio", help="Bounded relative file delay; no physical latency/clock claim or automatic offset.")
+    align.add_argument("--reference", required=True)
+    align.add_argument("--recorded", required=True)
+    align.add_argument("--output")
+    align.add_argument("--max-offset-ms", type=float)
+    align.add_argument("--window-seconds", type=float)
+    align.add_argument("--reference-channel", type=int, choices=(1, 2))
+    align.add_argument("--recorded-channel", type=int, choices=(1, 2))
+    for alignment_command in (probe, align):
+        alignment_command.add_argument("--profile", choices=PROFILES, default="headless")
+        alignment_command.add_argument("--json", action="store_true")
     for take_command in (importer, inspector):
         take_command.add_argument("--profile", choices=PROFILES, default="headless")
         take_command.add_argument("--json", action="store_true")
@@ -472,6 +495,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "input-devices":
             command = [str(executable(ROOT, "desktop", "gtracker_capture")), "devices"]
             if args.json: command.append("--json")
+        elif args.command in ("calibration-probe", "align-audio"):
+            command = [str(executable(ROOT, args.profile, "gtracker_cli")), args.command]
+            for option in ("output", "sample_rate", "seed", "reference", "recorded", "max_offset_ms", "window_seconds", "reference_channel", "recorded_channel"):
+                value = getattr(args, option, None)
+                if value is not None: command += ["--" + option.replace("_", "-"), str(value)]
+            if args.json: command.append("--json")
         elif args.command in ("import-take", "take-info"):
             operation = "import" if args.command == "import-take" else "inspect"
             path = args.input if args.command == "import-take" else args.take
@@ -495,11 +524,12 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
-        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info", "input-devices") and args.json))["returncode"]
+        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info", "input-devices", "calibration-probe", "align-audio") and args.json))["returncode"]
     except (RuntimeError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
 
 
 if __name__ == "__main__":
+    utf8_stdio()
     raise SystemExit(main())

@@ -74,7 +74,8 @@ Nominal beat zero is `pre_roll_frames + count_in_frames` in the application
 input stream. Input/output device start offset, buffering latency and clock
 drift are **uncalibrated**. This mapping neither measures latency nor quantizes
 the performance. Sample-rate conversion does not establish clock alignment.
-Real loopback/input-offset calibration remains a separate qualification step.
+The [relative-delay tool](alignment.md) provides a bounded loopback/reference
+comparison; physical input latency and clock qualification remain separate.
 
 Ctrl+C, a `--cancel-file PATH` appearing, input removal/reconfiguration, and
 stream failures stop servicing. Already received samples are written as a

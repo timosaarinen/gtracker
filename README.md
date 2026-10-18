@@ -31,6 +31,9 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   selection, nominal sample timing, count-in/metronome and partial recovery;
   `dev.py record-take` connects it to checked bundles and metadata-only analysis.
   Generated/dummy input checks are distinct from real-device qualification.
+- An original broadband loopback reference and [bounded file-delay estimator](docs/alignment.md)
+  with match/ambiguity diagnostics and source hashes. Physical latency and clock
+  drift remain separately measured work; authoring offsets stay explicit.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 

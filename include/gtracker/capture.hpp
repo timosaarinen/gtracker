@@ -27,6 +27,7 @@ struct CaptureOptions {
     double tail_seconds = 2;
     int count_in_beats = 4;
     bool metronome = false;
+    bool calibration_reference = false;
     bool silent = false;
     bool realtime_simulation = false;
     std::uint64_t simulate_disconnect_frame = 0; // File simulation only.

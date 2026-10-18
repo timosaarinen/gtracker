@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker relative file delay result v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema", "version", "ok", "status", "mode", "estimator", "renderer_version", "reference", "recorded", "sample_rate_hz", "offset_frames", "offset_seconds", "candidate_offset_frames", "search_max_offset_frames", "reference_window_frames", "coarse_step_frames", "refinement_start_frame", "refinement_window_frames", "coarse_score", "alternative_score", "fine_score", "polarity", "resolution_frames", "elapsed_ms", "drift_measured", "physical_latency_measured", "note"],
+  "properties": {
+    "schema": {"const": "gtracker.alignment-result"}, "version": {"const": 1},
+    "ok": {"type": "boolean"},
+    "status": {"enum": ["matched", "no_match", "no_signal", "ambiguous", "insufficient_overlap", "search_boundary"]},
+    "mode": {"const": "relative_file_delay"},
+    "estimator": {"const": "envelope-pearson-refine-v1"},
+    "renderer_version": {"type": "string"},
+    "reference": {"$ref": "#/$defs/source"}, "recorded": {"$ref": "#/$defs/source"},
+    "sample_rate_hz": {"type": "integer", "minimum": 8000, "maximum": 192000},
+    "offset_frames": {"type": ["integer", "null"], "minimum": -384000, "maximum": 384000},
+    "offset_seconds": {"type": ["number", "null"], "minimum": -2, "maximum": 2},
+    "candidate_offset_frames": {"type": "integer", "minimum": -384000, "maximum": 384000},
+    "search_max_offset_frames": {"type": "integer", "minimum": 8, "maximum": 384000},
+    "reference_window_frames": {"type": "integer", "minimum": 1, "maximum": 960000},
+    "coarse_step_frames": {"type": "integer", "minimum": 8, "maximum": 192},
+    "refinement_start_frame": {"type": "integer", "minimum": 0, "maximum": 960000},
+    "refinement_window_frames": {"type": "integer", "minimum": 0, "maximum": 2048},
+    "coarse_score": {"$ref": "#/$defs/score"}, "alternative_score": {"$ref": "#/$defs/score"}, "fine_score": {"$ref": "#/$defs/score"},
+    "polarity": {"enum": [-1, 0, 1]}, "resolution_frames": {"const": 1},
+    "elapsed_ms": {"type": "number", "minimum": 0},
+    "drift_measured": {"const": false}, "physical_latency_measured": {"const": false},
+    "note": {"type": "string"}
+  },
+  "allOf": [{
+    "if": {"properties": {"status": {"const": "matched"}}},
+    "then": {"properties": {"ok": {"const": true}, "offset_frames": {"type": "integer"}, "offset_seconds": {"type": "number"}}},
+    "else": {"properties": {"ok": {"const": false}, "offset_frames": {"type": "null"}, "offset_seconds": {"type": "null"}}}
+  }],
+  "$defs": {
+    "score": {"type": "number", "minimum": 0, "maximum": 1},
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "frames", "channels", "sample_width_bits", "selected_channel"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "frames": {"type": "integer", "minimum": 1, "maximum": 33554432},
+        "channels": {"enum": [1, 2]}, "sample_width_bits": {"enum": [8, 16, 24, 32]},
+        "selected_channel": {"enum": [1, 2]}
+      }
+    }
+  }
+}

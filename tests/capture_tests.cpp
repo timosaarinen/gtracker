@@ -25,6 +25,11 @@ int main() {
         }
         rejects([&] { gtracker::plan_capture(options, 7999, 1); }, "bad rate accepted");
         rejects([&] { gtracker::plan_capture(options, 48000, 3); }, "implicit channel loss accepted");
+        options.calibration_reference = true;
+        options.count_in_beats = 1;
+        rejects([&] { gtracker::plan_capture(options, 48000, 1); }, "truncated calibration reference accepted");
+        options.calibration_reference = false;
+        options.count_in_beats = 4;
         options.pre_roll_seconds = std::numeric_limits<double>::quiet_NaN();
         rejects([&] { gtracker::plan_capture(options, 48000, 1); }, "nonfinite plan accepted");
         options.pre_roll_seconds = 0;

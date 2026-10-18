@@ -1,5 +1,6 @@
 #include "gtracker/capture.hpp"
 #include "gtracker/audio_source.hpp"
+#include "gtracker/alignment.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <chrono>
@@ -66,7 +67,11 @@ std::vector<std::int16_t> make_reference(const CaptureOptions& options, const Ca
             result[static_cast<std::size_t>(start + n)] = static_cast<std::int16_t>(std::lround(std::sin(phase) * envelope * 5000));
         }
     };
-    for (int i = 0; i < options.count_in_beats; ++i)
+    if (options.calibration_reference) {
+        const auto probe = calibration_probe(plan.sample_rate, options.pattern.seed);
+        require(probe.size() <= plan.count_in_frames, "Calibration reference requires at least two seconds of count-in");
+        std::copy(probe.begin(), probe.end(), result.begin() + static_cast<std::ptrdiff_t>(plan.pre_roll_frames));
+    } else for (int i = 0; i < options.count_in_beats; ++i)
         click(plan.pre_roll_frames + static_cast<std::uint64_t>(std::llround(i * beat_frames)), i == 0);
     if (options.metronome) for (int i = 0; i < static_cast<int>(std::ceil(options.pattern.length_beats)); ++i)
         click(plan.pattern_zero_frame + static_cast<std::uint64_t>(std::llround(i * beat_frames)), i % 4 == 0);
@@ -206,6 +211,8 @@ CapturePlan plan_capture(const CaptureOptions& options, int rate, int channels) 
     plan.musical_frames = static_cast<std::uint64_t>(std::ceil(options.pattern.length_beats * 60.0 / options.pattern.bpm * rate));
     plan.tail_frames = static_cast<std::uint64_t>(std::llround(options.tail_seconds * rate));
     plan.total_frames = plan.pattern_zero_frame + plan.musical_frames + plan.tail_frames;
+    require(!options.calibration_reference || plan.count_in_frames >= static_cast<std::uint64_t>(rate) * 2,
+            "Calibration reference requires at least two seconds of count-in");
     require(plan.total_frames <= static_cast<std::uint64_t>(rate) * 120, "Capture exceeds the short-take limit of 120 seconds");
     require(plan.total_frames * channels <= 32 * 1024 * 1024, "Capture exceeds the 32 Mi-sample preview limit");
     return plan;

@@ -86,5 +86,13 @@ ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
 LeakSanitizer was blocked there. Intel Mac and current cross-platform
 qualification remain outstanding. Keep issue #1 open for those real checks.
 
-Next: add a bounded calibration path and an end-to-end musical feature or polish.
+Next: add one continuous guitar gesture end-to-end while preserving the baseline.
 Real takes, clock/latency calibration and transcription need separate evidence.
+
+The native CLI now generates original deterministic broadband probes and checks
+bounded relative file delay with source hashes, selected channels, polarity and
+ambiguous/boundary/no-match states. Capture's optional `--calibration-probe`
+queues and saves that reference on the nominal input timeline. Generated routed
+comparison tests recover the injected sample delay while leaving the take
+uncalibrated. Equal rates, matched files and the one-frame search resolution do
+not qualify physical input/output latency or drift. See docs/alignment.md.

@@ -70,6 +70,7 @@ def verify_completed_capture(path: Path, report: dict, pattern: dict, job_id: st
 def record_take(pattern_path: Path, output: Path, *, device: str | None = None, simulate: Path | None = None,
                 sample_rate: int | None = None, channels: int | None = None, count_in: int = 4,
                 pre_roll: float = 1, tail: float = 2, metronome: bool = False, silent: bool = False,
+                calibration_probe: bool = False,
                 realtime_simulation: bool = False, simulate_disconnect_frame: int | None = None,
                 simulate_cancel_frame: int | None = None, cancel_file: Path | None = None,
                 job_id: str | None = None) -> dict:
@@ -107,7 +108,7 @@ def record_take(pattern_path: Path, output: Path, *, device: str | None = None, 
             command += ["--simulate", str(simulate.resolve())]
         for name, value in (("sample-rate", sample_rate), ("channels", channels), ("simulate-disconnect-frame", simulate_disconnect_frame), ("simulate-cancel-frame", simulate_cancel_frame)):
             if value is not None: command += ["--" + name, str(value)]
-        for name, value in (("metronome", metronome), ("silent", silent), ("realtime-simulation", realtime_simulation)):
+        for name, value in (("metronome", metronome), ("silent", silent), ("calibration-probe", calibration_probe), ("realtime-simulation", realtime_simulation)):
             if value: command.append("--" + name)
         process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
         interrupted = False
@@ -204,6 +205,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pre-roll", type=float, default=1)
     parser.add_argument("--tail", type=float, default=2)
     parser.add_argument("--metronome", action="store_true")
+    parser.add_argument("--calibration-probe", action="store_true")
     parser.add_argument("--silent", action="store_true")
     parser.add_argument("--realtime-simulation", action="store_true")
     parser.add_argument("--simulate-disconnect-frame", type=int)
@@ -241,4 +243,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    dev.utf8_stdio()
     raise SystemExit(main())

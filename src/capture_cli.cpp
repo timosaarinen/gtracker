@@ -38,6 +38,7 @@ void help() {
         "      (--device default|INDEX|EXACT_NAME | --simulate PCM_WAV)\n"
         "      [--sample-rate HZ] [--channels 1|2] [--count-in BEATS]\n"
         "      [--pre-roll SECONDS] [--tail SECONDS] [--metronome] [--silent]\n"
+        "      [--calibration-probe] (replaces count-in with a two-second reference)\n"
         "      [--job-id ID] [--cancel-file PATH] [--json]\n"
         "      [--realtime-simulation] [--simulate-disconnect-frame N]\n"
         "      [--simulate-cancel-frame N]\n\n"
@@ -74,6 +75,7 @@ int capture_main(int argc, char** argv) {
             require(seen.insert(flag).second, "Duplicate option: " + flag);
             if (flag == "--json") continue;
             if (flag == "--metronome") { options.metronome = true; continue; }
+            if (flag == "--calibration-probe") { options.calibration_reference = true; continue; }
             if (flag == "--silent") { options.silent = true; continue; }
             if (flag == "--realtime-simulation") { options.realtime_simulation = true; continue; }
             if (flag == "--help") { help(); return 0; }
@@ -147,6 +149,8 @@ int capture_main(int argc, char** argv) {
                 {"planned_frames", plan.total_frames}, {"captured_frames", result.captured_frames}, {"input_offset_frames", 0}, {"offset_status", "uncalibrated"}}},
             {"reference_path", result.reference_mono.empty() ? json(nullptr) : json("reference.wav")}, {"reference_played", result.reference_played},
             {"reference_sha256", reference_hash},
+            {"reference_kind", options.calibration_reference ? "broadband_probe" : "count_in"},
+            {"reference_seed", options.calibration_reference ? json(options.pattern.seed) : json(nullptr)},
             {"metronome", options.metronome}, {"simulation_input_sha256", result.simulation_input_sha256},
             {"simulation", {{"realtime", options.realtime_simulation}, {"disconnect_frame", options.simulate_disconnect_frame}, {"cancel_after_frame", cancel_after}}},
             {"timing_note", "Sample clock is the application input stream. Input/output start offset, device latency and clock drift have not been measured; SRC does not calibrate them."}};

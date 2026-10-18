@@ -1,6 +1,7 @@
 #include "gtracker/project.hpp"
 #include "gtracker/core.h"
 #include "gtracker/take.hpp"
+#include "gtracker/alignment.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <cmath>
@@ -18,6 +19,10 @@ void help() {
         "                       [--script LUA] [--json]\n"
         "  gtracker_cli transform PATTERN --script LUA --output PATTERN [--json]\n"
         "  gtracker_cli take-info TAKE [--json]\n"
+        "  gtracker_cli calibration-probe --output WAV [--sample-rate HZ] [--seed N] [--json]\n"
+        "  gtracker_cli align-audio --reference WAV --recorded WAV [--max-offset-ms MS]\n"
+        "      [--window-seconds S] [--reference-channel 1|2] [--recorded-channel 1|2]\n"
+        "      [--output JSON] [--json]\n"
         "  gtracker_cli --version\n\n"
         "Patterns use schema v1, beat times, one-based string numbers (highest first).\n"
         "The current instrument is an independent plucked-string/body-tap baseline.\n";
@@ -28,6 +33,79 @@ double number(const std::string& text, const char* flag) {
     if (used != text.size() || !std::isfinite(value)) throw std::runtime_error(std::string("Invalid value for ") + flag);
     return value;
 }
+int alignment_command(int argc, char** argv, bool as_json) {
+    using json = nlohmann::json;
+    const bool probe = std::string(argv[1]) == "calibration-probe";
+    std::filesystem::path output, reference, recorded;
+    int rate = 48000;
+    std::uint32_t seed = 42;
+    gtracker::AlignmentOptions options;
+    for (int i = 2; i < argc; ++i) {
+        const std::string flag = argv[i];
+        if (flag == "--json") continue;
+        if (flag == "--help") { help(); return 0; }
+        if (i + 1 >= argc) throw std::runtime_error("Missing value for " + flag);
+        const std::string value = argv[++i];
+        if (value.empty()) throw std::runtime_error("Empty value for " + flag);
+        if (flag == "--output") output = std::filesystem::u8path(value);
+        else if (flag == "--reference" && !probe) reference = std::filesystem::u8path(value);
+        else if (flag == "--recorded" && !probe) recorded = std::filesystem::u8path(value);
+        else if (flag == "--sample-rate" && probe) {
+            const double parsed = number(value, "--sample-rate");
+            if (parsed < 8000 || parsed > 192000 || std::floor(parsed) != parsed) throw std::runtime_error("Probe rate must be an integer in 8000..192000");
+            rate = static_cast<int>(parsed);
+        } else if (flag == "--seed" && probe) {
+            const double parsed = number(value, "--seed");
+            if (parsed < 0 || parsed > 4294967295.0 || std::floor(parsed) != parsed) throw std::runtime_error("Probe seed must be an unsigned 32-bit integer");
+            seed = static_cast<std::uint32_t>(parsed);
+        } else if (flag == "--max-offset-ms" && !probe) options.max_offset_seconds = number(value, "--max-offset-ms") / 1000;
+        else if (flag == "--window-seconds" && !probe) options.window_seconds = number(value, "--window-seconds");
+        else if ((flag == "--reference-channel" || flag == "--recorded-channel") && !probe) {
+            const double parsed = number(value, "--channel");
+            if (parsed != 1 && parsed != 2) throw std::runtime_error("Alignment channels are one-based 1 or 2");
+            (flag == "--reference-channel" ? options.reference_channel : options.recorded_channel) = static_cast<int>(parsed) - 1;
+        } else throw std::runtime_error("Unknown or inapplicable alignment option: " + flag);
+    }
+    if (!output.empty() && std::filesystem::exists(output)) throw std::runtime_error("Alignment/probe output already exists; choose a new file");
+    if (probe) {
+        if (output.empty()) throw std::runtime_error("calibration-probe requires --output WAV");
+        const auto samples = gtracker::calibration_probe(rate, seed);
+        gtracker::write_pcm16_wav(output, samples, rate, 1);
+        const auto audio = gtracker::load_pcm_wav(output);
+        json report{{"ok", true}, {"schema", "gtracker.calibration-probe"}, {"version", 1}, {"renderer_version", GT_VERSION},
+            {"output", output.u8string()}, {"sha256", audio.sha256}, {"sample_rate_hz", rate}, {"frames", audio.frames}, {"seed", seed},
+            {"note", "Generated reference only; no playback, recording or physical latency measurement performed."}};
+        if (as_json) std::cout << report.dump(2) << '\n';
+        else std::cout << "Generated two-second reference: " << output.u8string() << '\n';
+        return 0;
+    }
+    if (reference.empty() || recorded.empty()) throw std::runtime_error("align-audio requires --reference and --recorded WAV paths");
+    const auto ref = gtracker::load_pcm_wav(reference);
+    const auto rec = gtracker::load_pcm_wav(recorded);
+    const auto result = gtracker::estimate_file_delay(ref, rec, options);
+    const bool matched = result.status == "matched";
+    const auto source = [](const auto& path, const auto& audio, int channel) {
+        return json{{"path", path.u8string()}, {"sha256", audio.sha256}, {"frames", audio.frames}, {"channels", audio.channels},
+            {"sample_width_bits", audio.sample_width_bits}, {"selected_channel", channel + 1}};
+    };
+    json report{{"schema", "gtracker.alignment-result"}, {"version", 1}, {"ok", matched}, {"status", result.status},
+        {"mode", "relative_file_delay"}, {"estimator", "envelope-pearson-refine-v1"}, {"renderer_version", GT_VERSION},
+        {"reference", source(reference, ref, options.reference_channel)}, {"recorded", source(recorded, rec, options.recorded_channel)},
+        {"sample_rate_hz", ref.sample_rate}, {"offset_frames", matched ? json(result.candidate_offset_frames) : json(nullptr)},
+        {"offset_seconds", matched ? json(static_cast<double>(result.candidate_offset_frames) / ref.sample_rate) : json(nullptr)},
+        {"candidate_offset_frames", result.candidate_offset_frames}, {"search_max_offset_frames", result.max_offset_frames},
+        {"reference_window_frames", result.reference_window_frames}, {"coarse_step_frames", result.coarse_step_frames},
+        {"refinement_start_frame", result.refinement_start_frame}, {"refinement_window_frames", result.refinement_window_frames},
+        {"coarse_score", result.coarse_score}, {"alternative_score", result.alternative_score}, {"fine_score", result.fine_score},
+        {"polarity", result.polarity}, {"resolution_frames", 1}, {"elapsed_ms", result.elapsed_ms},
+        {"drift_measured", false}, {"physical_latency_measured", false},
+        {"note", "Positive offset means the recorded waveform is later than the reference file. Scores are bounded match diagnostics, not probabilities. File origins, device start/buffering and clock drift are not separated. Applying an authoring offset remains manual."}};
+    const auto text = report.dump(2) + "\n";
+    if (!output.empty()) gtracker::write_text_atomic(output, text);
+    if (as_json) std::cout << text;
+    else std::cout << "Relative file delay: " << result.status << "; candidate " << result.candidate_offset_frames << " frames; fine score " << result.fine_score << '\n';
+    return matched ? 0 : 1;
+}
 }
 
 int cli_main(int argc, char** argv) {
@@ -37,6 +115,7 @@ int cli_main(int argc, char** argv) {
         if (argc == 1 || std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h") { help(); return 0; }
         if (std::string(argv[1]) == "--version") { std::cout << "gtracker " << GT_VERSION << "\n"; return 0; }
         const std::string command = argv[1];
+        if (command == "calibration-probe" || command == "align-audio") return alignment_command(argc, argv, as_json);
         if (command != "validate" && command != "render" && command != "transform" && command != "take-info") throw std::runtime_error("Unknown command: " + command);
         if (argc < 3 || std::string(argv[2]).rfind("--", 0) == 0) throw std::runtime_error("A pattern/take path is required");
         const auto input = std::filesystem::u8path(argv[2]);

@@ -26,6 +26,8 @@
     "timing": {"$ref": "#/$defs/timing"},
     "reference_path": {"enum": [null, "reference.wav"]},
     "reference_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "reference_kind": {"enum": ["count_in", "broadband_probe"]},
+    "reference_seed": {"type": ["integer", "null"], "minimum": 0, "maximum": 4294967295},
     "reference_played": {"type": "boolean"},
     "metronome": {"type": "boolean"},
     "simulation_input_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},

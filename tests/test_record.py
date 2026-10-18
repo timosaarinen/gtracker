@@ -42,13 +42,13 @@ class RecordTakeTests(unittest.TestCase):
         self.environment.start()
         self.addCleanup(self.environment.stop)
 
-    def make_source(self, rate, channels):
+    def make_source(self, rate, channels, seconds=2):
         with wave.open(str(self.source), "wb") as audio:
             audio.setframerate(rate)
             audio.setnchannels(channels)
             audio.setsampwidth(2)
             audio.writeframes(b"".join(struct.pack("<h", ((frame * 11 + channel * 9001) % 65536) - 32768)
-                                      for frame in range(rate * 2) for channel in range(channels)))
+                                      for frame in range(rate * seconds) for channel in range(channels)))
 
     def capture(self, **options):
         arguments = dict(simulate=self.source, count_in=1, pre_roll=0.1, tail=0.1, job_id="generated-workflow")
@@ -173,6 +173,34 @@ class RecordTakeTests(unittest.TestCase):
         (self.output / "source.wav").write_bytes((self.output / "source.wav").read_bytes() + b"changed")
         with self.assertRaisesRegex(ValueError, "source"):
             record.verify_completed_capture(self.output, capture, self.score, "generated-workflow", pattern_hash)
+
+    def test_generated_loopback_reference_and_delay_keep_calibration_explicit(self):
+        self.make_source(48000, 2, seconds=4)
+        first = self.capture(count_in=4, calibration_probe=True)
+        self.assertTrue(first["ok"], first)
+        receipt = takes.read_json(self.output / "capture.json")
+        self.assertEqual(receipt["reference_kind"], "broadband_probe")
+        self.assertEqual(receipt["reference_seed"], self.score["seed"])
+        with wave.open(str(self.output / "reference.wav"), "rb") as audio:
+            reference = struct.unpack("<" + "h" * audio.getnframes(), audio.readframes(audio.getnframes()))
+        delay = 137
+        with wave.open(str(self.source), "wb") as audio:
+            audio.setframerate(48000); audio.setnchannels(2); audio.setsampwidth(2)
+            audio.writeframes(b"".join(struct.pack("<hh", reference[n - delay] if delay <= n < len(reference) + delay else 0,
+                                                          -(reference[n - delay] if delay <= n < len(reference) + delay else 0))
+                                      for n in range(len(reference) + delay)))
+        self.output = self.directory / "simulated-loopback"
+        second = self.capture(count_in=4, calibration_probe=True)
+        self.assertTrue(second["ok"], second)
+        aligned = subprocess.run([str(CLI), "align-audio", "--reference", str(self.output / "reference.wav"),
+                                  "--recorded", str(self.output / "source.wav"), "--recorded-channel", "2", "--json"],
+                                 capture_output=True, encoding="utf-8", timeout=15)
+        self.assertEqual(aligned.returncode, 0, aligned.stdout + aligned.stderr)
+        result = json.loads(aligned.stdout)
+        self.assertEqual(result["offset_frames"], delay)
+        self.assertEqual(result["polarity"], -1)
+        self.assertFalse(result["physical_latency_measured"])
+        self.assertEqual(takes.read_json(self.output / "take.json")["alignment"]["offset_status"], "uncalibrated")
 
     def test_existing_output_and_implicit_input_are_refused_before_launch(self):
         with mock.patch.object(record.subprocess, "Popen") as process:
