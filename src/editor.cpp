@@ -280,6 +280,7 @@ struct Editor {
     bool view_all_context = false;
     bool auto_wave_gain = true;
     bool tab_keyboard_focus = false;
+    bool reveal_tab_cursor = false;
     FretEntry fret_entry;
     bool recovery_enabled = true, open_recovery_panel = false;
     std::optional<gtracker::RecoveryCopies> recovery;
@@ -676,6 +677,7 @@ struct Editor {
     }
 
     void move_cursor(int beats, int lanes, int edge = 0) {
+        reveal_tab_cursor = true;
         end_fret_entry();
         document.end_edit();
         const auto& pattern = document.pattern();
@@ -1181,7 +1183,7 @@ void tab_keyboard(Editor& editor) {
     if (ImGui::IsKeyPressed(ImGuiKey_B,false)) editor.attempt([&] { editor.enter_mark(true); });
 }
 
-void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* shared = nullptr) {
+void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* shared = nullptr, bool scrollable = false) {
     size.x = std::max(size.x, 200.0f);
     size.y = std::max(size.y, 170.0f);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
@@ -1376,6 +1378,12 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
     if (panning && !ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && ImGui::GetIO().MouseDelta.x != 0)
         editor.pan_timeline(-static_cast<double>(ImGui::GetIO().MouseDelta.x) / (right - left) * geometry.view.span());
     tab_keyboard(editor);
+    if (scrollable && editor.reveal_tab_cursor) {
+        const float y=lane_y(std::clamp(editor.cursor_lane,0,strings));
+        const float first=ImGui::GetWindowPos().y,last=first+ImGui::GetWindowHeight();
+        if (y-lane_height*.5f < first || y+lane_height*.5f > last) ImGui::SetScrollFromPosY(y-first,.5f);
+        editor.reveal_tab_cursor=false;
+    }
 }
 
 void slide_inspector(Editor& editor) {
@@ -1874,6 +1882,13 @@ void render_button(Editor& editor) {
     }
 }
 
+void toolbar_next(const char* label,float spacing = -1,float item_width = 0) {
+    if (spacing < 0) spacing=ImGui::GetStyle().ItemSpacing.x;
+    const float right=ImGui::GetCursorScreenPos().x+ImGui::GetContentRegionAvail().x;
+    const float width=item_width > 0 ? item_width : ImGui::CalcTextSize(label).x+2*ImGui::GetStyle().FramePadding.x;
+    if (ImGui::GetItemRectMax().x+spacing+width <= right) ImGui::SameLine(0,spacing);
+}
+
 void interface(Editor& editor) {
     const auto* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -1885,11 +1900,11 @@ void interface(Editor& editor) {
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "gtracker");
     ImGui::SameLine();
     ImGui::TextDisabled(" /  ACOUSTIC PATTERN EDITOR");
-    ImGui::SameLine();
-    const float title_width = ImGui::CalcTextSize(editor.document.pattern().name.c_str()).x + 180.0f;
-    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - title_width));
-    ImGui::Text("%s%s  |  r%llu", editor.document.pattern().name.c_str(), editor.document.dirty() ? " *" : "",
-                static_cast<unsigned long long>(editor.document.pattern().revision));
+    const auto title=editor.document.pattern().name+(editor.document.dirty() ? " *" : "")+"  |  r"+std::to_string(editor.document.pattern().revision);
+    toolbar_next(title.c_str());
+    const float title_width = ImGui::CalcTextSize(title.c_str()).x;
+    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(),ImGui::GetWindowWidth()-ImGui::GetStyle().WindowPadding.x-title_width));
+    ImGui::TextWrapped("%s",title.c_str());
     ImGui::Separator();
 
     ImGui::SetNextItemWidth(std::max(200.0f, ImGui::GetContentRegionAvail().x - 146.0f));
@@ -1913,46 +1928,46 @@ void interface(Editor& editor) {
         editor.attempt([&]() { editor.undo(); });
     }
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    toolbar_next("Redo");
     ImGui::BeginDisabled(!editor.document.can_redo());
     if (ImGui::Button("Redo")) {
         editor.attempt([&]() { editor.undo(true); });
     }
     ImGui::EndDisabled();
-    ImGui::SameLine(0.0f, 20.0f);
+    toolbar_next("+ Pluck",20);
     if (ImGui::Button("+ Pluck")) {
         editor.attempt([&]() { editor.add("pluck"); });
     }
-    ImGui::SameLine();
+    toolbar_next("+ Damp");
     if (ImGui::Button("+ Damp")) {
         editor.attempt([&]() { editor.add("damp"); });
     }
-    ImGui::SameLine();
+    toolbar_next("+ Body hit");
     if (ImGui::Button("+ Body hit")) {
         editor.attempt([&]() { editor.add("body_hit"); });
     }
-    ImGui::SameLine();
     const bool slides_enabled = gtracker::supports_slides(editor.document.pattern());
+    toolbar_next(slides_enabled ? "+ Slide" : "Enable slides");
     if (ImGui::Button(slides_enabled ? "+ Slide" : "Enable slides")) {
         editor.attempt([&] { if (slides_enabled) editor.add_slide(); else editor.set_model("contact_0_2"); });
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip(slides_enabled ? "Add a continuous fret curve on the current string. It retains ringing vibration." : "Select the experimental contact model and v2 format. Undo restores the previous model; the original baseline remains selectable.");
-    ImGui::SameLine(0.0f, 20.0f);
+    toolbar_next(editor.rendering() ? "Cancel render" : "Render",20);
     render_button(editor);
-    ImGui::SameLine();
     ImGui::BeginDisabled(editor.rendering());
     const char* play_label = editor.source ? (editor.current_audio() ? "Play synth" : "Render + Play synth")
                                            : (editor.current_audio() ? "Play" : "Render + Play");
+    toolbar_next(play_label);
     if (ImGui::Button(play_label)) {
         editor.attempt([&]() { editor.play(); });
     }
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    toolbar_next("Stop");
     if (ImGui::Button("Stop")) {
         editor.stop();
         editor.message("Stopped playback.");
     }
-    ImGui::SameLine();
+    toolbar_next("Export WAV");
     if (ImGui::Button("Export WAV")) editor.open_export_panel = true;
 
     double bpm = editor.document.pattern().bpm;
@@ -1984,10 +1999,12 @@ void interface(Editor& editor) {
     if (ImGui::Combo("##snap", &snap, snaps, 3)) {
         editor.snap = snap == 0 ? 0.25f : (snap == 1 ? 0.5f : 1.0f);
     }
-    ImGui::SameLine();
     const auto strings = editor.document.pattern().tuning_midi.size(), events = editor.document.pattern().events.size(), slides = editor.document.pattern().gestures.size();
-    ImGui::TextDisabled("%zu string%s | %zu event%s, %zu slide%s | cursor %.2f", strings, strings == 1 ? "" : "s",
-                        events, events == 1 ? "" : "s", slides, slides == 1 ? "" : "s", editor.cursor_beat);
+    char counts[180];
+    std::snprintf(counts,sizeof(counts),"%zu string%s | %zu event%s, %zu slide%s | cursor %.2f",strings,strings == 1 ? "" : "s",
+        events,events == 1 ? "" : "s",slides,slides == 1 ? "" : "s",editor.cursor_beat);
+    toolbar_next(counts);
+    ImGui::TextDisabled("%s",counts);
 
     if (editor.source) {
         if (ImGui::Button("Play source")) editor.attempt([&]() { editor.play_source(); });
@@ -2001,8 +2018,10 @@ void interface(Editor& editor) {
         const bool detach = ImGui::Button("Detach");
         ImGui::SameLine();
         const auto& take = editor.source->take;
-        ImGui::TextDisabled("%s | %.1f kHz, %d ch | source %.1f BPM | metadata job", take.source_name.c_str(),
+        ImGui::PushStyleColor(ImGuiCol_Text,ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextWrapped("%s | %.1f kHz, %d ch | source %.1f BPM | metadata job", take.source_name.c_str(),
                             take.audio.sample_rate / 1000.0, take.audio.channels, take.alignment.bpm);
+        ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) {
             ImGui::BeginTooltip();
             ImGui::TextWrapped("%s", take.source_name.c_str());
@@ -2016,35 +2035,40 @@ void interface(Editor& editor) {
         if (detach) editor.detach_source();
     }
 
-    const float waveform_height = 136.0f;
-    const float main_height = std::max(350.0f, ImGui::GetContentRegionAvail().y - 65.0f);
+    const float footer_height=2*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetStyle().WindowPadding.y+8;
+    const float main_height = std::max(250.0f, ImGui::GetContentRegionAvail().y - footer_height);
+    const float waveform_height = std::clamp(main_height-180,110.0f,136.0f);
     const float inspector_width = 268.0f;
     const float canvas_width = std::max(300.0f, ImGui::GetContentRegionAvail().x - inspector_width - 8.0f);
     ImGui::BeginChild("Timeline", ImVec2(canvas_width, main_height), ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::TextDisabled(editor.tab_keyboard_focus ? "TAB / slide (keyboard)" : "TAB / slide");
+    ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(editor.tab_keyboard_focus ? cyan : quiet_color),"TAB / slide");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Highest string first. Fret = pluck, / = slide, x = damp, + = body hit. Wheel zooms; middle-drag pans. Shift+wheel pans the tab.");
-    ImGui::SameLine();
+    toolbar_next("Pattern");
     if (ImGui::Button("Pattern")) editor.fit_timeline(false);
-    ImGui::SameLine();
+    toolbar_next("Context");
     if (ImGui::Button("Context")) editor.fit_timeline(true);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Show the whole preserved source and rendered decay tail on the same beat axis.");
-    ImGui::SameLine();
+    toolbar_next("-");
     if (ImGui::Button("-##zoom")) editor.zoom_timeline(2, (editor.view.first + editor.view.last) * 0.5);
-    ImGui::SameLine();
+    toolbar_next("+");
     if (ImGui::Button("+##zoom")) editor.zoom_timeline(0.5, (editor.view.first + editor.view.last) * 0.5);
-    ImGui::SameLine();
+    toolbar_next("Auto scale",-1,ImGui::GetFrameHeight()+ImGui::GetStyle().ItemInnerSpacing.x+ImGui::CalcTextSize("Auto scale").x);
     ImGui::Checkbox("Auto scale", &editor.auto_wave_gain);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Fit the wave's display scale. Played/exported samples keep their original level.");
     const auto canvas_origin = ImGui::GetCursorScreenPos();
     const auto available = ImGui::GetContentRegionAvail();
-    const ImVec2 canvas_size(available.x, std::max(170.0f, available.y - waveform_height - 8));
+    const float canvas_view_height=std::max(60.0f,available.y-waveform_height-8);
+    const float content_height=42+(editor.document.pattern().tuning_midi.size()+1)*(ImGui::GetTextLineHeight()+10);
+    const ImVec2 canvas_size(available.x,std::max(canvas_view_height,content_height));
     // Measure/draw the plot first, then use its exact data rectangle for the tab.
     // Both widgets therefore share current-frame bounds even during plot zoom.
-    ImGui::SetCursorScreenPos(ImVec2(canvas_origin.x, canvas_origin.y + canvas_size.y + 8));
+    ImGui::SetCursorScreenPos(ImVec2(canvas_origin.x, canvas_origin.y + canvas_view_height + 8));
     const auto geometry = waveform(editor, waveform_height);
     ImGui::SetCursorScreenPos(canvas_origin);
-    canvas(editor, canvas_size, &geometry);
+    ImGui::BeginChild("Tab lanes",ImVec2(available.x,canvas_view_height),ImGuiChildFlags_None,ImGuiWindowFlags_NoScrollWithMouse);
+    canvas(editor, canvas_size, &geometry,true);
+    ImGui::EndChild();
     ImGui::EndChild();
     ImGui::SameLine();
     ImGui::BeginChild("Inspector", ImVec2(0.0f, main_height), ImGuiChildFlags_Borders);
@@ -2064,6 +2088,11 @@ void interface(Editor& editor) {
         ImGui::TextColored(ImVec4(1.0f, 0.46f, 0.38f, 1.0f), "%s", editor.status.c_str());
     } else {
         ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "%s", editor.status.c_str());
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip(); ImGui::PushTextWrapPos(ImGui::GetFontSize()*40);
+        ImGui::TextUnformatted(editor.status.c_str());
+        ImGui::PopTextWrapPos(); ImGui::EndTooltip();
     }
     if (editor.tab_keyboard_focus) {
         ImGui::TextDisabled("Arrows move | 0-9 fret | X damp | B body hit | Esc leaves tab input");

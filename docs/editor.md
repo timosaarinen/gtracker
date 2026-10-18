@@ -35,6 +35,9 @@ appear as fallback glyphs even though the filename bytes are preserved.
   nearest equal-tempered note name for its configured MIDI tuning. The prototype
   displays 1–12 independent strings from the document; paired twelve-string
   courses are future work.
+  Lanes keep readable spacing in short windows; use the tab's vertical scrollbar
+  to reach lower strings/body. Keyboard navigation reveals its active lane.
+  Wheel input still zooms/pans musical time rather than vertically scrolling.
 - **Fret numbers:** a number is a `pluck` event. `x` is a `damp` event on that
   string. `+` on the amber body lane is a `body_hit` event.
 - **Selection:** click an event to inspect it. The inspector edits its type,
@@ -73,6 +76,12 @@ The path field at the top is explicit: enter a filename, then select `Load` or
 The marker compares musical content with the last successful save, so undoing
 back to that content makes the document clean even though its revision advances.
 Loading clears the current undo/redo history.
+
+Toolbar buttons and long title/source details wrap when space is limited. The
+inspector scrolls independently, and the waveform stays below the tab's scrolling
+lanes. Hover the status line to read its full message. Dummy captures at the
+980×680 minimum with normal and 125% programmatic text/style scales check layout;
+they do not qualify an operating system's actual display scaling or input.
 
 Loading another pattern or closing the window with unsaved edits opens a
 **Save / Discard / Cancel** dialog. Escape cancels. The dialog has a separate

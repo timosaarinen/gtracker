@@ -870,6 +870,38 @@ void timeline_navigation(Host& host, const Arguments& original, const std::files
 }
 }
 
+void layout_review(Host& host,const Arguments& args,const std::filesystem::path& fixture) {
+    Arguments source_args=args; source_args.document.clear(); source_args.take=fixture;
+    Editor editor(source_args);
+    auto score=editor.document.pattern();
+    score.tuning_midi={64,59,55,50,45,40,35,30,28,26,24,23};
+    editor.commit(score,"Twelve independent slots layout fixture");
+    const auto original_style=ImGui::GetStyle();
+    const float original_font_scale=ImGui::GetIO().FontGlobalScale;
+    SDL_SetWindowSize(host.window,980,680);
+    auto draw=[&] { interface(editor); };
+    frame(host,draw);frame(host,draw);
+    host.screenshot(std::filesystem::current_path()/"editor-layout-minimum.bmp");
+    ImGui::GetStyle().ScaleAllSizes(1.25f);ImGui::GetIO().FontGlobalScale=1.25f;
+    frame(host,draw);frame(host,draw);
+    host.screenshot(std::filesystem::current_path()/"editor-layout-scaled.bmp");
+    const auto generation=editor.document.generation();
+    editor.tab_keyboard_focus=true;
+    for (int i=0;i<12;++i) {
+        frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_DownArrow,true); });
+        frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_DownArrow,false); });
+    }
+    frame(host,draw);frame(host,draw);
+    check_ui(editor.cursor_lane==12 && !editor.reveal_tab_cursor && editor.document.generation()==generation,
+        "scaled twelve-slot keyboard navigation did not reveal the body lane without editing");
+    check_ui(editor.tab_geometry.left==editor.timeline_geometry.left && editor.tab_geometry.right==editor.timeline_geometry.right,
+        "vertical tab scrolling broke source/tab pixel alignment");
+    host.screenshot(std::filesystem::current_path()/"editor-layout-scaled-body.bmp");
+    ImGui::GetStyle()=original_style;ImGui::GetIO().FontGlobalScale=original_font_scale;
+    SDL_SetWindowSize(host.window,1152,760);
+    frame(host,draw);
+}
+
 int main(int argc, char** argv) {
     try {
         check_ui(argc == 4, "Expected source root, generated take and proposal manifests");
@@ -897,6 +929,7 @@ int main(int argc, char** argv) {
         recovery_workflow(host,args);
         keyboard_entry(host,args);
         timeline_navigation(host, args, std::filesystem::path(argv[2]));
+        layout_review(host,args,std::filesystem::path(argv[2]));
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");
         std::filesystem::remove_all(directory);

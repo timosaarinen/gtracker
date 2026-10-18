@@ -314,6 +314,11 @@ if(GT_BUILD_TESTS)
       set_tests_properties(editor_ui PROPERTIES FIXTURES_REQUIRED "editor_take_files;editor_proposal_files")
       set_tests_properties(editor_ui editor_smoke editor_take_smoke editor_slide_smoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_RENDER_DRIVER=software;SDL_AUDIODRIVER=dummy" TIMEOUT 40)
+      if(GT_ENABLE_SANITIZERS)
+        # The full synthetic editor workflow includes native renders and PCM
+        # comparisons; instrumented Debug runs take longer than Release smoke.
+        set_tests_properties(editor_ui PROPERTIES TIMEOUT 180)
+      endif()
     endif()
   endif()
 endif()
