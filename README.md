@@ -27,6 +27,9 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   source-sample timing, manual/uncalibrated offsets and checked analysis identity.
   A native PCM/take reader verifies hashes and formats without Python at playback;
   the editor overlays source/synth waveforms and compares original mono/stereo PCM.
+- A separate native SDL3 [capture tool](docs/capture.md) with explicit input
+  selection, nominal sample timing, count-in/metronome and partial recovery;
+  generated/dummy input checks are distinct from real-device qualification.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 

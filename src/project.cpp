@@ -275,4 +275,26 @@ void write_wav(const std::filesystem::path& path, const std::vector<float>& mono
         }
     });
 }
+
+void write_pcm16_wav(const std::filesystem::path& path, const std::vector<std::int16_t>& samples, int sample_rate, int channels) {
+    require(sample_rate >= 8000 && sample_rate <= 192000, "WAV sample rate is out of range");
+    require(channels == 1 || channels == 2, "Captured WAV requires one or two channels");
+    require(!samples.empty() && samples.size() % static_cast<std::size_t>(channels) == 0, "Captured WAV needs complete nonempty PCM frames");
+    require(samples.size() <= (std::numeric_limits<std::uint32_t>::max() - 36ULL) / 2, "WAV exceeds RIFF size limit");
+    write_file(path, [&](std::ostream& out) {
+        const auto u16 = [&](std::uint16_t value) { out.put(static_cast<char>(value & 255)); out.put(static_cast<char>(value >> 8)); };
+        const auto u32 = [&](std::uint32_t value) { u16(static_cast<std::uint16_t>(value)); u16(static_cast<std::uint16_t>(value >> 16)); };
+        const auto bytes = static_cast<std::uint32_t>(samples.size() * 2);
+        const auto frame_bytes = static_cast<std::uint16_t>(channels * 2);
+        out.write("RIFF", 4); u32(36 + bytes); out.write("WAVEfmt ", 8); u32(16);
+        u16(1); u16(static_cast<std::uint16_t>(channels)); u32(static_cast<std::uint32_t>(sample_rate));
+        u32(static_cast<std::uint32_t>(sample_rate) * frame_bytes); u16(frame_bytes); u16(16);
+        out.write("data", 4); u32(bytes);
+        for (auto value : samples) u16(static_cast<std::uint16_t>(value));
+    });
+}
+
+void write_text_atomic(const std::filesystem::path& path, std::string_view text) {
+    write_file(path, [&](std::ostream& out) { out.write(text.data(), static_cast<std::streamsize>(text.size())); });
+}
 } // namespace gtracker

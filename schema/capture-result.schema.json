@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/timosaarinen/gtracker/schema/capture-result.schema.json",
+  "title": "gtracker application capture receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "version", "renderer_version", "job_id", "ok", "status", "error", "source_kind", "audio_driver", "device_name", "device_format", "application_encoding", "format_conversion", "source", "pattern_path", "pattern_sha256", "source_pattern_revision", "timing", "reference_path", "reference_sha256", "reference_played", "metronome", "simulation_input_sha256", "simulation", "timing_note"],
+  "properties": {
+    "schema": {"const": "gtracker.capture-result"},
+    "version": {"const": 1},
+    "renderer_version": {"type": "string"},
+    "job_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "ok": {"type": "boolean"},
+    "status": {"enum": ["complete", "cancelled", "disconnected", "source_exhausted", "failed"]},
+    "error": {"type": "string"},
+    "source_kind": {"enum": ["file_simulation", "sdl_simulated_driver", "sdl_recording"]},
+    "audio_driver": {"type": "string"},
+    "device_name": {"type": "string"},
+    "device_format": {"$ref": "#/$defs/device_format"},
+    "application_encoding": {"const": "PCM_S16LE"},
+    "format_conversion": {"type": "boolean"},
+    "source": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/source"}]},
+    "pattern_path": {"const": "pattern.gtrk.json"},
+    "pattern_sha256": {"$ref": "#/$defs/hash"},
+    "source_pattern_revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "timing": {"$ref": "#/$defs/timing"},
+    "reference_path": {"enum": [null, "reference.wav"]},
+    "reference_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "reference_played": {"type": "boolean"},
+    "metronome": {"type": "boolean"},
+    "simulation_input_sha256": {"type": "string", "pattern": "^([0-9a-f]{64})?$"},
+    "simulation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["realtime", "disconnect_frame", "cancel_after_frame"],
+      "properties": {
+        "realtime": {"type": "boolean"},
+        "disconnect_frame": {"$ref": "#/$defs/count"},
+        "cancel_after_frame": {"$ref": "#/$defs/count"}
+      }
+    },
+    "timing_note": {"type": "string"}
+  },
+  "$defs": {
+    "count": {"type": "integer", "minimum": 0, "maximum": 33554432},
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "device_format": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sample_rate_hz", "channels", "encoding", "buffer_frames"],
+      "properties": {
+        "sample_rate_hz": {"type": "integer", "minimum": 0},
+        "channels": {"type": "integer", "minimum": 0},
+        "encoding": {"type": "string"},
+        "buffer_frames": {"type": "integer", "minimum": 0}
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "sample_rate_hz", "channels", "sample_width_bits", "frames", "size_bytes"],
+      "properties": {
+        "path": {"const": "source.wav"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "sample_rate_hz": {"type": "integer", "minimum": 8000, "maximum": 192000},
+        "channels": {"enum": [1, 2]},
+        "sample_width_bits": {"const": 16},
+        "frames": {"type": "integer", "minimum": 1, "maximum": 33554432},
+        "size_bytes": {"type": "integer", "minimum": 46, "maximum": 67108908}
+      }
+    },
+    "timing": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sample_rate_hz", "channels", "tempo_bpm", "pattern_length_beats", "pre_roll_frames", "count_in_frames", "pattern_zero_frame", "musical_frames", "tail_frames", "planned_frames", "captured_frames", "input_offset_frames", "offset_status"],
+      "properties": {
+        "sample_rate_hz": {"type": "integer", "minimum": 0, "maximum": 192000},
+        "channels": {"type": "integer", "minimum": 0, "maximum": 2},
+        "tempo_bpm": {"type": "number", "minimum": 20, "maximum": 400},
+        "pattern_length_beats": {"type": "number", "exclusiveMinimum": 0, "maximum": 256},
+        "pre_roll_frames": {"$ref": "#/$defs/count"},
+        "count_in_frames": {"$ref": "#/$defs/count"},
+        "pattern_zero_frame": {"$ref": "#/$defs/count"},
+        "musical_frames": {"$ref": "#/$defs/count"},
+        "tail_frames": {"$ref": "#/$defs/count"},
+        "planned_frames": {"$ref": "#/$defs/count"},
+        "captured_frames": {"$ref": "#/$defs/count"},
+        "input_offset_frames": {"const": 0},
+        "offset_status": {"const": "uncalibrated"}
+      }
+    }
+  }
+}

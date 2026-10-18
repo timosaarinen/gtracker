@@ -52,6 +52,9 @@ Pattern load_pattern(const std::filesystem::path& path);
 void save_pattern(const Pattern& pattern, const std::filesystem::path& path);
 RenderResult render_pattern(const Pattern& pattern, const RenderOptions& options = {});
 void write_wav(const std::filesystem::path& path, const std::vector<float>& mono, int sample_rate);
+// Store application-captured PCM samples exactly, retaining interleaved channels.
+void write_pcm16_wav(const std::filesystem::path& path, const std::vector<std::int16_t>& samples, int sample_rate, int channels);
+void write_text_atomic(const std::filesystem::path& path, std::string_view text);
 
 // A script is an undoable whole-document operation at the caller. The function
 // validates a copy and commits it only if the script and validation succeed.

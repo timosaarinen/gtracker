@@ -24,8 +24,9 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
     result = [(dev.executable(root, profile, "gtracker_cli"), "gtracker_cli" + (".exe" if os.name == "nt" else ""))]
     if profile == "desktop":
         result.append((dev.executable(root, profile, "gtracker_editor"), "gtracker_editor" + (".exe" if os.name == "nt" else "")))
+        result.append((dev.executable(root, profile, "gtracker_capture"), "gtracker_capture" + (".exe" if os.name == "nt" else "")))
     for name in ("examples/campfire.gtrk.json", "scripts/soften.lua", "schema/pattern.schema.json", "schema/take.schema.json",
-                 "docs/editor.md", "docs/synthesis.md", "docs/takes.md", "THIRD_PARTY_NOTICES.md"):
+                 "schema/capture-result.schema.json", "docs/editor.md", "docs/synthesis.md", "docs/takes.md", "docs/capture.md", "THIRD_PARTY_NOTICES.md"):
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
     dependencies = root / ".local/build" / profile / "_deps"
@@ -62,7 +63,7 @@ def write_package(root: Path, profile: str, output: Path, source: dict) -> dict:
     build_options = {}
     cache = build_directory / "CMakeCache.txt"
     if cache.is_file():
-        for name in ("CMAKE_BUILD_TYPE", "GT_BUILD_TOOLS", "GT_BUILD_EDITOR", "GT_ENABLE_LUA", "GT_ENABLE_SANITIZERS"):
+        for name in ("CMAKE_BUILD_TYPE", "GT_BUILD_TOOLS", "GT_BUILD_EDITOR", "GT_BUILD_CAPTURE", "GT_ENABLE_LUA", "GT_ENABLE_SANITIZERS"):
             match = re.search(r"^" + name + r":[^=]+=(.*)$", cache.read_text(encoding="utf-8"), re.MULTILINE)
             if match: build_options[name] = match.group(1)
     toolchain = {}
@@ -107,7 +108,7 @@ def write_package(root: Path, profile: str, output: Path, source: dict) -> dict:
 
 def build_package(root: Path, profile: str, output: Path) -> dict:
     before = dev.source_state(root)
-    targets = ["gtracker_cli"] + (["gtracker_editor"] if profile == "desktop" else [])
+    targets = ["gtracker_cli"] + (["gtracker_editor", "gtracker_capture"] if profile == "desktop" else [])
     # Explicit targets prevent leftover executables from a now-disabled target
     # from entering an otherwise successful incremental package build.
     code = dev.run_command(root, ["cmake", "--build", "--preset", profile, "--config", "Release", "--target", *targets])["returncode"]

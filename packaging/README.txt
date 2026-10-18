@@ -17,6 +17,8 @@ examples from a read-only installation. --resource-dir PATH overrides resources.
 Open a preserved take with --take PATH/TO/take.json to compare its source audio
 with the native synth. Source playback and hash verification need no Python.
 See docs/takes.md for the optional Python import workflow in a source checkout.
+Desktop packages also include gtracker_capture for explicit device/file capture,
+nominal sample timing and partial-take recovery. See docs/capture.md before use.
 
 Command-line examples (use .exe on Windows):
 
@@ -35,4 +37,5 @@ The package manifest records the source fingerprint and build platform; that is
 provenance, not evidence that another operating system or physical device passed.
 
 Patterns, script filenames and CLI JSON use UTF-8. The bundled UI font has limited
-glyph coverage. This prototype has no microphone capture or automatic transcript.
+glyph coverage. Microphone hardware and latency require separate qualification;
+the generated/dummy capture checks do not establish them. No transcript exists.

@@ -10,19 +10,19 @@
       "name": "headless", "inherits": "base",
       "displayName": "Core, CLI and Lua; no desktop dependencies",
       "binaryDir": "${sourceDir}/.local/build/headless",
-      "cacheVariables": {"GT_BUILD_EDITOR": "OFF", "GT_ENABLE_LUA": "ON"}
+      "cacheVariables": {"GT_BUILD_EDITOR": "OFF", "GT_BUILD_CAPTURE": "OFF", "GT_ENABLE_LUA": "ON"}
     },
     {
       "name": "desktop", "inherits": "base",
       "displayName": "Native SDL3/ImGui editor, core, CLI and Lua",
       "binaryDir": "${sourceDir}/.local/build/desktop",
-      "cacheVariables": {"GT_BUILD_EDITOR": "ON", "GT_ENABLE_LUA": "ON"}
+      "cacheVariables": {"GT_BUILD_EDITOR": "ON", "GT_BUILD_CAPTURE": "ON", "GT_ENABLE_LUA": "ON"}
     },
     {
       "name": "core-only", "inherits": "base",
       "displayName": "Dependency-free instrument and C ABI tests",
       "binaryDir": "${sourceDir}/.local/build/core-only",
-      "cacheVariables": {"GT_BUILD_EDITOR": "OFF", "GT_BUILD_TOOLS": "OFF", "GT_ENABLE_LUA": "OFF"}
+      "cacheVariables": {"GT_BUILD_EDITOR": "OFF", "GT_BUILD_CAPTURE": "OFF", "GT_BUILD_TOOLS": "OFF", "GT_ENABLE_LUA": "OFF"}
     },
     {
       "name": "sanitize", "inherits": "headless",

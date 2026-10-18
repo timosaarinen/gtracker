@@ -55,8 +55,13 @@ or the Source take inspector. It overlays source/synth on a beat axis, retains
 pre-roll, switches original stereo/rate to the mono synth and back, and preserves
 the take's pattern association on save/reopen. The generated stereo UI fixture
 passes guarded-load cancellation, A/B transport, save/reopen and source-byte
-preservation checks; actual comparison frames were inspected. No microphone
-capture or musical transcription has been added.
+preservation checks; actual comparison frames were inspected. The separate SDL3
+capture CLI now implements explicit input selection, PCM16 application capture,
+count-in/metronome, retained context and cancelled/disconnected partials. File
+simulation opens no device; dummy drivers are labelled. Generated 44.1/48 kHz
+mono/stereo PCM and recovery checks pass. Real-device capture remains untested;
+input/output clock alignment is uncalibrated. See docs/capture.md. Musical
+transcription remains unavailable.
 The native CLI now also exposes `take-info` using the shared bounded PCM reader,
 SHA-256 source verification and checked job/timing/metrics. Focused PCM tests
 cover channel/width/rate variants, unknown chunks, truncation and buffer bounds;
@@ -75,6 +80,6 @@ ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
 LeakSanitizer was blocked there. Intel Mac and current cross-platform
 qualification remain outstanding. Keep issue #1 open for those real checks.
 
-Next: extend issue #2 with explicit capture/device selection and a synthetic
-capture path, then a bounded end-to-end musical feature or polish.
+Next: connect completed capture to take import/analysis and source comparison,
+then add a bounded calibration path and an end-to-end musical feature or polish.
 Real takes, clock/latency calibration and transcription need separate evidence.

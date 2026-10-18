@@ -1,5 +1,6 @@
 #include "gtracker/audio_source.hpp"
 #include "gtracker/hash.hpp"
+#include "gtracker/project.hpp"
 
 #include <cmath>
 #include <filesystem>
@@ -107,6 +108,19 @@ void malformed(const std::filesystem::path& path) {
         rejects([&] { gtracker::load_pcm_wav(path); }, "malformed WAV accepted");
     }
 }
+
+void captured_pcm(const std::filesystem::path& path) {
+    const std::vector<std::int16_t> samples = {-32768, 32767, 0, 1234, -999, 16384};
+    gtracker::write_pcm16_wav(path, samples, 44100, 2);
+    const auto audio = gtracker::load_pcm_wav(path);
+    check(audio.frames == 3 && audio.channels == 2 && audio.sample_rate == 44100, "captured PCM format changed");
+    for (std::size_t i = 0; i < samples.size(); ++i)
+        check(static_cast<int>(audio.interleaved[i] * 32768) == samples[i], "captured PCM lost original sample bits");
+    rejects([&] { gtracker::write_pcm16_wav(path, samples, 44100, 3); }, "unsupported capture channels accepted");
+    rejects([&] { gtracker::write_pcm16_wav(path, {1, 2, 3}, 44100, 2); }, "partial capture frame accepted");
+    rejects([&] { gtracker::write_pcm16_wav(path, {}, 44100, 1); }, "empty capture accepted");
+    check(gtracker::load_pcm_wav(path).sha256 == audio.sha256, "invalid capture write replaced source");
+}
 }
 
 int main() {
@@ -115,6 +129,7 @@ int main() {
         const auto path = std::filesystem::current_path() / "generated-source-test.wav";
         formats(path);
         malformed(path);
+        captured_pcm(path);
         std::filesystem::remove(path);
         std::cout << "source audio: SHA-256, PCM widths/rates/channels, chunks and bounds passed\n";
         return 0;
