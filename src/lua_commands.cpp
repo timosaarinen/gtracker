@@ -9,6 +9,8 @@ extern "C" {
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -134,8 +136,21 @@ void apply_lua(Pattern& pattern, const std::filesystem::path& script_path) {
     register_command(state.get(), working, "add_note", add_note);
     lua_setglobal(state.get(), "gtracker");
 
-    const std::string filename = script_path.string();
-    int result = luaL_loadfile(state.get(), filename.c_str());
+    // C stdio's narrow fopen cannot open arbitrary UTF-8 paths on Windows.
+    // std::ifstream(path) uses the native filesystem representation instead.
+    std::ifstream source(script_path, std::ios::binary);
+    if (!source) throw std::runtime_error("Cannot open Lua script: " + script_path.u8string());
+    std::string code((std::istreambuf_iterator<char>(source)), std::istreambuf_iterator<char>());
+    if (source.bad()) throw std::runtime_error("Cannot read Lua script: " + script_path.u8string());
+    std::size_t begin = code.compare(0, 3, "\xef\xbb\xbf") == 0 ? 3 : 0;
+    // Keep Lua's text-file conveniences and original line numbers. Bytecode is
+    // still accepted for trusted local scripts, as with luaL_loadfile.
+    if (begin < code.size() && code[begin] == '#') {
+        const auto end = code.find('\n', begin);
+        begin = end == std::string::npos ? code.size() : end;
+    }
+    const std::string filename = "@" + script_path.u8string();
+    int result = luaL_loadbuffer(state.get(), code.data() + begin, code.size() - begin, filename.c_str());
     if (result == LUA_OK) {
         result = lua_pcall(state.get(), 0, 0, 0);
     }

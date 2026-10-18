@@ -18,6 +18,15 @@ regression passes. The UI checks include dummy playback and preserve an actual
 modal framebuffer. Logs/source fingerprints are under `.local/nightshift/`.
 No DSP change was made; the original 48 kHz demo remains in `.local/demo.wav`.
 
+CLI and Lua path handling now also use UTF-8 on Windows, including wide CRT
+arguments and native-path script reads (BOM/shebang line numbers retained).
+`python -m unittest discover -s tests -p test_cli.py -v` passes four native CLI
+integration cases. Missing Unicode paths and arbitrary-byte Lua errors originally
+crashed JSON error reporting; failures now return valid JSON and exit 2. These
+Python tests explicitly skip if no headless CLI is built. The default editor
+font still lacks some non-Latin glyphs; byte-preserving paths are not a full
+internationalized text-layout claim.
+
 ## Initial bootstrap — 2026-10-18
 
 The starting architecture is implemented: independent C++ instrument/C ABI,

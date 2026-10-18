@@ -20,6 +20,10 @@ suggests `.local/sketch.gtrk.json` as the save path. Relative pattern and script
 paths resolve against the process working directory. The prototype's path fields
 hold at most 1,023 bytes; longer launch paths are rejected before loading or
 applying anything, so the displayed save/script path is never silently truncated.
+Pattern, WAV and Lua filenames round-trip through UTF-8 on Windows as well as
+Unix; the CLI uses Windows' original wide command-line arguments. The bundled
+default UI font has limited glyph coverage, so some non-Latin filename characters
+appear as fallback glyphs even though the filename bytes are preserved.
 
 ## Editing a pattern
 

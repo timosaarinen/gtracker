@@ -186,7 +186,9 @@ std::string pattern_json(const Pattern& p) {
 }
 
 Pattern load_pattern(const std::filesystem::path& path) {
-    const auto size = std::filesystem::file_size(path);
+    std::error_code error;
+    const auto size = std::filesystem::file_size(path, error);
+    require(!error, "Cannot inspect pattern: " + path.u8string() + " (filesystem error " + std::to_string(error.value()) + ")");
     require(size <= max_document_bytes, "Pattern JSON exceeds the 1 MiB prototype limit");
     std::ifstream in(path, std::ios::binary);
     require(static_cast<bool>(in), "Cannot open pattern: " + path.u8string());
