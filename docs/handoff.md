@@ -348,3 +348,19 @@ records the source fingerprint and synthetic/dummy-only scope. The UI test
 clicks the actual shared selector rows, checks missing/invalid outputs and input
 removal isolation, and preserves the choice across original source/synth formats.
 `editor-audio-output.bmp` was inspected. Physical routing remains unqualified.
+
+Committed recovery `2201aa9` passed Ubuntu GCC9 native21, Python96 without skips,
+desktop29 and Clang10 ASan/UBSan21. The isolated clone's logs use `.local/recovery-`
+and its CI receipt is `20261018T081300Z-f2026735`. Output-selector qualification
+on Linux follows its separate committed checkpoint.
+
+The original Night Watch example adds four editable retained-model phrases and
+a 192-beat/12-placement song. `.local/night-watch.wav` is the 48 kHz stereo render
+(124.966 seconds, no clipping); `.local/night-watch-dry.wav` is the mono bypass.
+All five small authored JSON files ship in developer ZIPs; generated PCM stays
+ignored. `.local/nightshift/night-watch-checks/report.json` records parameters,
+source/build identity, hashes, native validation, exact transition preview and
+byte-identical snapshot rendering with 997-frame blocks. Package tests5 passed.
+The first audit report write failed on a Python Path serialization mistake in
+the ignored helper; converting command arguments to strings fixed the receipt.
+No physical listening or performance judgement is claimed.

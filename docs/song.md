@@ -18,6 +18,26 @@ eight expanded placements. The complete source snapshot is about 9 KB; the
 48 kHz stereo PCM is about 8.9 MB. The CLI reports both exact sizes separately.
 This example is generated from authored notes/gestures, not a transcription.
 
+For a longer original example, **Night Watch** arranges four sixteen-beat
+fingerstyle phrases in E minor, C major seventh, G major and D major. Twelve
+expanded placements make 192 beats at 96 BPM, with explicit dynamics, timing
+variations, nine slides, gentle synthetic body taps and a final release. All
+phrases explicitly use `retained_0_5`; the earlier examples keep their models.
+The arrangement owns seed 4242 and a `room_v1` production chain with 16% wet,
+1.2-second decay and +3 dB output gain. Its source snapshot is about 43 KB.
+
+```sh
+python tools/dev.py validate-song examples/night-watch.gsong.json --json
+python tools/dev.py render-song examples/night-watch.gsong.json --tail 3 --output .local/night-watch.wav --json
+python tools/dev.py render-song examples/night-watch.gsong.json --tail 3 --bypass-production --output .local/night-watch-dry.wav --json
+```
+
+At 48 kHz the stereo version lasts about 124.97 seconds including instrument and
+room tails. Dry bypass produces mono and bypasses the production gain too. These
+are original authored scores and native renders; signal checks do not substitute
+for a listening assessment. Open any `night-watch-*.gtrk.json` phrase in the
+editor to change it, then rerender the song; no audio is committed to the repo.
+
 ## Sources and musical timing
 
 `schema/song.schema.json` describes `gtracker.song` version 1. `patterns` defines

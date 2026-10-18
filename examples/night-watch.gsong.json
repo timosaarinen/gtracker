@@ -1,0 +1,140 @@
+{
+  "schema": "gtracker.song",
+  "version": 1,
+  "name": "Night Watch — original 12-phrase fingerstyle study",
+  "revision": 1,
+  "tempo_bpm": 96,
+  "seed": 4242,
+  "instrument_pattern": "ember",
+  "patterns": [
+    {
+      "id": "ember",
+      "file": "night-watch-ember.gtrk.json"
+    },
+    {
+      "id": "lantern",
+      "file": "night-watch-lantern.gtrk.json"
+    },
+    {
+      "id": "stars",
+      "file": "night-watch-stars.gtrk.json"
+    },
+    {
+      "id": "road",
+      "file": "night-watch-road.gtrk.json"
+    }
+  ],
+  "order": [
+    {
+      "id": "first-light",
+      "pattern": "ember",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.62,
+      "gap_beats": 0
+    },
+    {
+      "id": "lanterns",
+      "pattern": "lantern",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.7,
+      "gap_beats": 0
+    },
+    {
+      "id": "stars",
+      "pattern": "stars",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.76,
+      "gap_beats": 0
+    },
+    {
+      "id": "road",
+      "pattern": "road",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.72,
+      "gap_beats": 0
+    },
+    {
+      "id": "embers",
+      "pattern": "ember",
+      "repeat": 2,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.88,
+      "gap_beats": 0
+    },
+    {
+      "id": "linger",
+      "pattern": "lantern",
+      "repeat": 1,
+      "time_scale": 1.25,
+      "transpose": 0,
+      "strength_scale": 0.8,
+      "gap_beats": 0
+    },
+    {
+      "id": "hurry",
+      "pattern": "stars",
+      "repeat": 1,
+      "time_scale": 0.75,
+      "transpose": 0,
+      "strength_scale": 0.86,
+      "gap_beats": 0
+    },
+    {
+      "id": "homeward",
+      "pattern": "road",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.8,
+      "gap_beats": 0
+    },
+    {
+      "id": "return",
+      "pattern": "ember",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.76,
+      "gap_beats": 0
+    },
+    {
+      "id": "last-lantern",
+      "pattern": "lantern",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.62,
+      "gap_beats": 0
+    },
+    {
+      "id": "sleep",
+      "pattern": "ember",
+      "repeat": 1,
+      "time_scale": 1,
+      "transpose": 0,
+      "strength_scale": 0.5,
+      "gap_beats": 0
+    }
+  ],
+  "production": {
+    "schema": "gtracker.production",
+    "version": 1,
+    "algorithm": "room_v1",
+    "enabled": true,
+    "wet": 0.16,
+    "decay_seconds": 1.2,
+    "damping": 0.4,
+    "predelay_ms": 16,
+    "width": 0.85,
+    "output_gain_db": 3
+  }
+}

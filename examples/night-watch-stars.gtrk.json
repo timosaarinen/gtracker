@@ -1,0 +1,92 @@
+{
+  "schema_version": 2,
+  "name": "Night Watch — G major, original four-bar phrase",
+  "revision": 1,
+  "tempo_bpm": 96,
+  "length_beats": 16,
+  "seed": 4242,
+  "instrument": {
+    "model": "retained_0_5",
+    "tuning_midi": [
+      64,
+      59,
+      55,
+      50,
+      45,
+      40
+    ],
+    "decay_seconds": 4,
+    "brightness": 0.78,
+    "body_mix": 0.15
+  },
+  "events": [
+    {"id": "stars-b1-p1", "type": "pluck", "beat": 0, "string": 6, "fret": 3, "strength": 0.6},
+    {"id": "stars-b1-p2", "type": "pluck", "beat": 0.506, "string": 3, "fret": 0, "strength": 0.35},
+    {"id": "stars-b1-p3", "type": "pluck", "beat": 1.011, "string": 2, "fret": 3, "strength": 0.39},
+    {"id": "stars-b1-p4", "type": "pluck", "beat": 1.518, "string": 1, "fret": 3, "strength": 0.49},
+    {"id": "stars-b1-tap1.985", "type": "body_hit", "beat": 1.985, "strength": 0.105},
+    {"id": "stars-b1-p5", "type": "pluck", "beat": 2.005, "string": 4, "fret": 0, "strength": 0.47},
+    {"id": "stars-b1-p6", "type": "pluck", "beat": 2.512, "string": 3, "fret": 0, "strength": 0.32},
+    {"id": "stars-b1-p7", "type": "pluck", "beat": 3.009, "string": 2, "fret": 3, "strength": 0.38},
+    {"id": "stars-b1-p8", "type": "pluck", "beat": 3.516, "string": 1, "fret": 5, "strength": 0.43},
+    {"id": "stars-b1-tap3.985", "type": "body_hit", "beat": 3.985, "strength": 0.075},
+    {"id": "stars-b2-p1", "type": "pluck", "beat": 4, "string": 6, "fret": 3, "strength": 0.558},
+    {"id": "stars-b2-p2", "type": "pluck", "beat": 4.506, "string": 3, "fret": 0, "strength": 0.3255},
+    {"id": "stars-b2-p3", "type": "pluck", "beat": 5.011, "string": 2, "fret": 3, "strength": 0.3627},
+    {"id": "stars-b2-p4", "type": "pluck", "beat": 5.518, "string": 1, "fret": 3, "strength": 0.4557},
+    {"id": "stars-b2-tap1.985", "type": "body_hit", "beat": 5.985, "strength": 0.105},
+    {"id": "stars-b2-p5", "type": "pluck", "beat": 6.005, "string": 4, "fret": 0, "strength": 0.4371},
+    {"id": "stars-b2-p6", "type": "pluck", "beat": 6.512, "string": 3, "fret": 0, "strength": 0.2976},
+    {"id": "stars-b2-p7", "type": "pluck", "beat": 7.009, "string": 2, "fret": 3, "strength": 0.3534},
+    {"id": "stars-b2-p8", "type": "pluck", "beat": 7.516, "string": 1, "fret": 0, "strength": 0.3999},
+    {"id": "stars-b2-tap3.985", "type": "body_hit", "beat": 7.985, "strength": 0.075},
+    {"id": "stars-b3-p1", "type": "pluck", "beat": 8, "string": 6, "fret": 3, "strength": 0.6},
+    {"id": "stars-b3-p2", "type": "pluck", "beat": 8.506, "string": 3, "fret": 0, "strength": 0.35},
+    {"id": "stars-b3-p3", "type": "pluck", "beat": 9.011, "string": 2, "fret": 3, "strength": 0.39},
+    {"id": "stars-b3-p4", "type": "pluck", "beat": 9.518, "string": 1, "fret": 3, "strength": 0.49},
+    {"id": "stars-b3-tap1.985", "type": "body_hit", "beat": 9.985, "strength": 0.105},
+    {"id": "stars-b3-p5", "type": "pluck", "beat": 10.005, "string": 4, "fret": 0, "strength": 0.47},
+    {"id": "stars-b3-p6", "type": "pluck", "beat": 10.512, "string": 3, "fret": 0, "strength": 0.32},
+    {"id": "stars-b3-p7", "type": "pluck", "beat": 11.009, "string": 2, "fret": 3, "strength": 0.38},
+    {"id": "stars-b3-p8", "type": "pluck", "beat": 11.516, "string": 1, "fret": 2, "strength": 0.43},
+    {"id": "stars-b3-tap3.985", "type": "body_hit", "beat": 11.985, "strength": 0.075},
+    {"id": "stars-b4-p1", "type": "pluck", "beat": 12, "string": 6, "fret": 3, "strength": 0.558},
+    {"id": "stars-b4-p2", "type": "pluck", "beat": 12.506, "string": 3, "fret": 0, "strength": 0.3255},
+    {"id": "stars-b4-p3", "type": "pluck", "beat": 13.011, "string": 2, "fret": 3, "strength": 0.3627},
+    {"id": "stars-b4-p4", "type": "pluck", "beat": 13.518, "string": 1, "fret": 0, "strength": 0.4557},
+    {"id": "stars-b4-tap1.985", "type": "body_hit", "beat": 13.985, "strength": 0.105},
+    {"id": "stars-b4-p5", "type": "pluck", "beat": 14.005, "string": 4, "fret": 0, "strength": 0.4371},
+    {"id": "stars-b4-p6", "type": "pluck", "beat": 14.512, "string": 3, "fret": 0, "strength": 0.2976},
+    {"id": "stars-b4-p7", "type": "pluck", "beat": 15.009, "string": 2, "fret": 3, "strength": 0.3534},
+    {"id": "stars-b4-p8", "type": "pluck", "beat": 15.516, "string": 1, "fret": 3, "strength": 0.3999},
+    {"id": "stars-release-1", "type": "damp", "beat": 15.95, "string": 1, "strength": 0.86},
+    {"id": "stars-release-2", "type": "damp", "beat": 15.95, "string": 2, "strength": 0.86},
+    {"id": "stars-release-3", "type": "damp", "beat": 15.95, "string": 3, "strength": 0.86},
+    {"id": "stars-release-4", "type": "damp", "beat": 15.95, "string": 4, "strength": 0.86},
+    {"id": "stars-release-5", "type": "damp", "beat": 15.95, "string": 5, "strength": 0.86},
+    {"id": "stars-release-6", "type": "damp", "beat": 15.95, "string": 6, "strength": 0.86},
+    {"id": "stars-b4-tap3.985", "type": "body_hit", "beat": 15.985, "strength": 0.075}
+  ],
+  "gestures": [
+    {
+      "id": "stars-melody-motion",
+      "type": "slide",
+      "beat": 1.518,
+      "string": 1,
+      "points": [
+        {
+          "beat": 0,
+          "fret": 3
+        },
+        {
+          "beat": 0.4,
+          "fret": 5
+        },
+        {
+          "beat": 0.8,
+          "fret": 3
+        }
+      ]
+    }
+  ]
+}

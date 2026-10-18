@@ -50,8 +50,9 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - [Bounded streamed WAV export](docs/rendering.md), exact previews with native
   state warm-up, progress and handled cancellation that preserves old output.
 - [Song arrangements](docs/song.md) with reusable patterns, explicit variations,
-  portable snapshots and continuous instrument/room state. The original night
-  sketch renders about 46 seconds through the same native runtime path.
+  portable snapshots and continuous instrument/room state. Original examples
+  include a 46-second sketch and **Night Watch**, a two-minute fingerstyle study
+  using four editable phrases through the same native runtime path.
 - An optional [persistent PCM cache](docs/cache.md), checked against source,
   renderer build, parameters, crop bounds and complete WAV hashes, with recovery
   and read-only access modes.
