@@ -162,6 +162,13 @@ struct RenderJob {
     std::atomic<std::uint64_t> completed_frames{0}, total_frames{0};
 };
 
+struct FretEntry {
+    std::string id;
+    int value = 0, digits = 0;
+    double time = -1;
+    std::uint64_t generation = 0;
+};
+
 CompletedRender render_snapshot(const Pattern& pattern, const gtracker::RenderControl& control = {}) {
     CompletedRender result;
     result.audio = gtracker::render_pattern(pattern, {}, control);
@@ -254,6 +261,8 @@ struct Editor {
     bool follow_view_fit = true;
     bool view_all_context = false;
     bool auto_wave_gain = true;
+    bool tab_keyboard_focus = false;
+    FretEntry fret_entry;
     std::string status = "Select a fret number, edit the inspector, then Render and Play.";
     std::array<char, 1024> path{};
     std::array<char, 1024> script_path{};
@@ -393,6 +402,7 @@ struct Editor {
     }
 
     void undo(bool redo = false) {
+        end_fret_entry();
         if (document.undo(redo)) {
             changed();
             message(redo ? "Redid document edit." : "Undid document edit.");
@@ -400,6 +410,7 @@ struct Editor {
     }
 
     void loaded() {
+        end_fret_entry(); tab_keyboard_focus = false;
         proposals.reset(); proposal_alternatives.clear();
         source = std::move(pending_source);
         pending_source.reset();
@@ -496,6 +507,7 @@ struct Editor {
     }
 
     void save() {
+        end_fret_entry();
         document.save(save_destination(path.data()));
         restore_active_path();
         message("Saved " + std::string(path.data()) + ".");
@@ -519,6 +531,92 @@ struct Editor {
                 return id;
             }
         }
+    }
+
+    void end_fret_entry() {
+        if (fret_entry.time >= 0) document.end_edit();
+        fret_entry = {};
+    }
+
+    bool at_cursor(const Event& event) const {
+        const int lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
+        return lane == cursor_lane && std::abs(event.beat-cursor_beat) <= 1e-9;
+    }
+
+    void move_cursor(int beats, int lanes, int edge = 0) {
+        end_fret_entry();
+        document.end_edit();
+        const auto& pattern = document.pattern();
+        const double proposed = cursor_beat + beats * static_cast<double>(snap);
+        if (edge < 0) cursor_beat = 0;
+        else if (edge > 0) cursor_beat = std::floor(std::nextafter(pattern.length_beats,0.0)/snap)*snap;
+        else if (proposed >= 0 && proposed < pattern.length_beats) cursor_beat = proposed;
+        else if (proposed < 0) cursor_beat = 0;
+        cursor_lane = std::clamp(cursor_lane+lanes,0,static_cast<int>(pattern.tuning_midi.size()));
+        selected = -1; selected_gesture = -1;
+        int matches = 0;
+        for (std::size_t i = 0; i < pattern.events.size(); ++i) if (at_cursor(pattern.events[i])) {
+            selected = static_cast<int>(i); ++matches;
+        }
+        if (matches > 1) selected = -1;
+        if (selected < 0) for (std::size_t i = 0; i < pattern.gestures.size(); ++i)
+            if (pattern.gestures[i].string_index == cursor_lane && std::abs(pattern.gestures[i].beat-cursor_beat) <= 1e-9) { selected_gesture = static_cast<int>(i); break; }
+        if (cursor_beat < view.first || cursor_beat > view.last) {
+            const auto bounds = timeline_extent();
+            view.pan(cursor_beat < view.first ? cursor_beat-view.first : cursor_beat-view.last, bounds.first, bounds.last);
+            follow_view_fit = false;
+        }
+    }
+
+    int cursor_event() const {
+        const auto& events = document.pattern().events;
+        if (selected >= 0 && selected < static_cast<int>(events.size()) && at_cursor(events[static_cast<std::size_t>(selected)])) return selected;
+        int found = -1;
+        for (std::size_t i = 0; i < events.size(); ++i) if (at_cursor(events[i])) {
+            if (found >= 0) throw std::runtime_error("Several events share this cell. Select the event to edit first.");
+            found = static_cast<int>(i);
+        }
+        return found;
+    }
+
+    void enter_fret(int digit, double time) {
+        const auto& pattern = document.pattern();
+        if (cursor_lane < 0 || cursor_lane >= static_cast<int>(pattern.tuning_midi.size())) throw std::runtime_error("Frets belong on string lanes. B adds a body hit.");
+        int index = cursor_event();
+        const bool continuing = fret_entry.time >= 0 && time-fret_entry.time <= .8 && fret_entry.digits == 1 &&
+            fret_entry.generation == document.generation() && index >= 0 && pattern.events[static_cast<std::size_t>(index)].id == fret_entry.id;
+        const int value = continuing ? fret_entry.value*10+digit : digit;
+        if (value > 36) { end_fret_entry(); throw std::runtime_error("Frets are 0..36. The first digit remains."); }
+        if (!continuing) { end_fret_entry(); document.end_edit(); }
+        Event event;
+        if (index >= 0) event = pattern.events[static_cast<std::size_t>(index)];
+        else { event.id = new_id(); event.beat = cursor_beat; event.string_index = cursor_lane; event.strength = .65f; }
+        if (event.type != "pluck") event.strength = .65f;
+        event.type = "pluck"; event.fret = static_cast<float>(value);
+        const std::string key = "tab-fret-" + event.id;
+        if (index >= 0) replace_event(static_cast<std::size_t>(index),event,key);
+        else {
+            Pattern next = pattern;
+            for (auto& gesture : next.gestures) if (gesture.beat == event.beat && gesture.string_index == event.string_index) gesture.points.front().fret = event.fret;
+            next.events.push_back(event);
+            commit(std::move(next),"Entered fret",key);
+            index = static_cast<int>(document.pattern().events.size())-1;
+        }
+        selected = index; selected_gesture = -1;
+        fret_entry = {event.id,value,continuing ? 2 : 1,time,document.generation()};
+        if (fret_entry.digits == 2) document.end_edit();
+    }
+
+    void enter_mark(bool body) {
+        end_fret_entry(); document.end_edit();
+        if (body) cursor_lane = static_cast<int>(document.pattern().tuning_midi.size());
+        else if (cursor_lane >= static_cast<int>(document.pattern().tuning_midi.size())) throw std::runtime_error("Choose a string lane for damping.");
+        const int index = cursor_event();
+        if (index < 0) { add(body ? "body_hit" : "damp"); return; }
+        Event event = document.pattern().events[static_cast<std::size_t>(index)];
+        event.type = body ? "body_hit" : "damp";
+        event.strength = body ? .65f : 1.0f;
+        replace_event(static_cast<std::size_t>(index),event,{});
     }
 
     void add(const char* type) {
@@ -546,8 +644,8 @@ struct Editor {
     void replace_event(std::size_t index, Event event, const std::string& key) {
         Pattern next = document.pattern();
         const auto& before = next.events.at(index);
-        if (before.type == "pluck" && event.type == "pluck" && before.beat == event.beat &&
-            before.string_index == event.string_index && before.fret != event.fret) {
+        if (event.type == "pluck" && before.beat == event.beat &&
+            before.string_index == event.string_index && (before.type != "pluck" || before.fret != event.fret)) {
             bool shared = false;
             for (auto& gesture : next.gestures) if (gesture.beat == event.beat && gesture.string_index == event.string_index) {
                 gesture.points.front().fret = event.fret;
@@ -627,7 +725,7 @@ struct Editor {
         if (rendering()) {
             return;
         }
-        document.end_edit();
+        end_fret_entry(); document.end_edit();
         const Pattern snapshot = document.pattern();
         gtracker::validate_pattern(snapshot);
         pending_generation = document.generation();
@@ -850,6 +948,32 @@ std::string tuning_label(double midi) {
     return std::string(names[(note % 12 + 12) % 12]) + std::to_string(note / 12 - 1);
 }
 
+void tab_keyboard(Editor& editor) {
+    const auto& io = ImGui::GetIO();
+    const double time = ImGui::GetTime();
+    if (io.AppFocusLost) { editor.tab_keyboard_focus = false; editor.end_fret_entry(); return; }
+    if (editor.fret_entry.time >= 0 && (time-editor.fret_entry.time > .8 || !editor.tab_keyboard_focus)) editor.end_fret_entry();
+    if (editor.document.pending() != gtracker::EditorDocument::Pending::none) { editor.end_fret_entry(); return; }
+    if (!editor.tab_keyboard_focus) return;
+    if (io.WantTextInput || ImGui::IsAnyItemActive() || ImGui::IsPopupOpen("",ImGuiPopupFlags_AnyPopup)) { editor.end_fret_entry(); return; }
+    if (ImGui::IsKeyPressed(ImGuiKey_Tab,false) || ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {
+        editor.tab_keyboard_focus = false; editor.end_fret_entry(); return;
+    }
+    if (io.KeyCtrl || io.KeySuper || io.KeyAlt || io.KeyShift) { editor.end_fret_entry(); return; }
+    const auto route = ImGuiInputFlags_RouteGlobal | ImGuiInputFlags_Repeat;
+    if (ImGui::Shortcut(ImGuiKey_LeftArrow,route)) editor.move_cursor(-1,0);
+    if (ImGui::Shortcut(ImGuiKey_RightArrow,route)) editor.move_cursor(1,0);
+    if (ImGui::Shortcut(ImGuiKey_UpArrow,route)) editor.move_cursor(0,-1);
+    if (ImGui::Shortcut(ImGuiKey_DownArrow,route)) editor.move_cursor(0,1);
+    if (ImGui::Shortcut(ImGuiKey_Home,route)) editor.move_cursor(0,0,-1);
+    if (ImGui::Shortcut(ImGuiKey_End,route)) editor.move_cursor(0,0,1);
+    for (int digit = 0; digit <= 9; ++digit)
+        if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_0+digit),false) || ImGui::IsKeyPressed(static_cast<ImGuiKey>(ImGuiKey_Keypad0+digit),false))
+            editor.attempt([&] { editor.enter_fret(digit,time); });
+    if (ImGui::IsKeyPressed(ImGuiKey_X,false)) editor.attempt([&] { editor.enter_mark(false); });
+    if (ImGui::IsKeyPressed(ImGuiKey_B,false)) editor.attempt([&] { editor.enter_mark(true); });
+}
+
 void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* shared = nullptr) {
     size.x = std::max(size.x, 200.0f);
     size.y = std::max(size.y, 170.0f);
@@ -858,6 +982,9 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
     const bool hovered = ImGui::IsItemHovered();
     const bool panning = ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Middle);
     const bool clicked = ImGui::IsItemClicked(ImGuiMouseButton_Left);
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !clicked) {
+        editor.tab_keyboard_focus = false; editor.end_fret_entry();
+    }
     const bool double_clicked = hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
     auto* draw = ImGui::GetWindowDrawList();
     draw->PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true);
@@ -922,6 +1049,9 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
     const float cursor_x = beat_x(editor.cursor_beat);
     draw->AddLine(ImVec2(cursor_x, top), ImVec2(cursor_x, origin.y + size.y - 7.0f),
                    IM_COL32(246, 188, 94, 75));
+    const float cursor_y = lane_y(std::clamp(editor.cursor_lane,0,strings));
+    draw->AddRect(ImVec2(cursor_x-12,cursor_y-lane_height*.4f), ImVec2(cursor_x+12,cursor_y+lane_height*.4f),
+                  editor.tab_keyboard_focus ? cyan : IM_COL32(246,188,94,100),3,0,1.5f);
     int hit = -1;
     int gesture_hit = -1;
     const ImVec2 mouse = ImGui::GetIO().MousePos;
@@ -994,14 +1124,17 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
         ImGui::EndTooltip();
     }
     if (clicked) {
+        editor.end_fret_entry(); editor.tab_keyboard_focus = false;
         editor.document.end_edit();
         if (hit >= 0) {
+            editor.tab_keyboard_focus = true;
             editor.selected = hit;
             editor.selected_gesture = -1;
             const auto& event = editor.document.pattern().events[static_cast<std::size_t>(hit)];
             editor.cursor_beat = event.beat;
             editor.cursor_lane = event.type == "body_hit" ? strings : event.string_index;
         } else if (gesture_hit >= 0) {
+            editor.tab_keyboard_focus = true;
             editor.selected = -1;
             editor.selected_gesture = gesture_hit;
             const auto& gesture = editor.document.pattern().gestures[static_cast<std::size_t>(gesture_hit)];
@@ -1019,6 +1152,7 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
             editor.cursor_lane = std::clamp(static_cast<int>((mouse.y - top) / lane_height), 0, strings);
             editor.selected = -1;
             editor.selected_gesture = -1;
+            editor.tab_keyboard_focus = true;
             if (double_clicked) {
                 editor.attempt([&]() { editor.add(editor.cursor_lane == strings ? "body_hit" : "pluck"); });
             }
@@ -1034,6 +1168,7 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
     }
     if (panning && !ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && ImGui::GetIO().MouseDelta.x != 0)
         editor.pan_timeline(-static_cast<double>(ImGui::GetIO().MouseDelta.x) / (right - left) * geometry.view.span());
+    tab_keyboard(editor);
 }
 
 void slide_inspector(Editor& editor) {
@@ -1187,7 +1322,8 @@ void inspector(Editor& editor) {
     ImGui::Separator();
     if (slide) slide_inspector(editor);
     else if (editor.selected < 0 || editor.selected >= static_cast<int>(editor.document.pattern().events.size())) {
-        ImGui::TextWrapped("Select a fret number, slide or body hit. Double-click an empty lane to add an event.");
+        ImGui::TextWrapped(editor.tab_keyboard_focus ? "Use arrows and digits in the active tab. Select a note or slide for detailed controls." :
+                           "Select a fret number, slide or body hit. Click a cell to type frets; double-click to add an event.");
     } else {
         Event event = editor.document.pattern().events[static_cast<std::size_t>(editor.selected)];
         ImGui::PushID(event.id.c_str());
@@ -1387,6 +1523,7 @@ void keyboard(Editor& editor) {
     // Shortcut routing reserves Space before ImGui's next navigation update;
     // a focused button must not activate from the same transport key press.
     if (ImGui::Shortcut(ImGuiKey_Space, ImGuiInputFlags_RouteGlobal)) {
+        editor.end_fret_entry();
         editor.attempt([&]() {
             if (editor.playing || editor.play_after_render) {
                 editor.stop();
@@ -1513,8 +1650,9 @@ void interface(Editor& editor) {
         editor.snap = snap == 0 ? 0.25f : (snap == 1 ? 0.5f : 1.0f);
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("%zu strings | %zu events, %zu slides | cursor %.2f", editor.document.pattern().tuning_midi.size(),
-                        editor.document.pattern().events.size(), editor.document.pattern().gestures.size(), editor.cursor_beat);
+    const auto strings = editor.document.pattern().tuning_midi.size(), events = editor.document.pattern().events.size(), slides = editor.document.pattern().gestures.size();
+    ImGui::TextDisabled("%zu string%s | %zu event%s, %zu slide%s | cursor %.2f", strings, strings == 1 ? "" : "s",
+                        events, events == 1 ? "" : "s", slides, slides == 1 ? "" : "s", editor.cursor_beat);
 
     if (editor.source) {
         if (ImGui::Button("Play source")) editor.attempt([&]() { editor.play_source(); });
@@ -1549,7 +1687,7 @@ void interface(Editor& editor) {
     const float canvas_width = std::max(300.0f, ImGui::GetContentRegionAvail().x - inspector_width - 8.0f);
     ImGui::BeginChild("Timeline", ImVec2(canvas_width, main_height), ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::TextDisabled("TAB / slide");
+    ImGui::TextDisabled(editor.tab_keyboard_focus ? "TAB / slide (keyboard)" : "TAB / slide");
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Highest string first. Fret = pluck, / = slide, x = damp, + = body hit. Wheel zooms; middle-drag pans. Shift+wheel pans the tab.");
     ImGui::SameLine();
     if (ImGui::Button("Pattern")) editor.fit_timeline(false);
@@ -1592,7 +1730,9 @@ void interface(Editor& editor) {
     } else {
         ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "%s", editor.status.c_str());
     }
-    if (!editor.rendered.audio.samples.empty() && !editor.current_audio()) {
+    if (editor.tab_keyboard_focus) {
+        ImGui::TextDisabled("Arrows move | 0-9 fret | X damp | B body hit | Esc leaves tab input");
+    } else if (!editor.rendered.audio.samples.empty() && !editor.current_audio()) {
         ImGui::TextDisabled("Waveform: previous revision.  Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo");
     } else {
         ImGui::TextDisabled("Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo | Delete selection");

@@ -308,3 +308,16 @@ cancel button and verifies no playback/history change or replacement preview.
 Windows CI `.local/ci/runs/20261018T071826Z-30c5adc9/report.json` passed20 native
 and94 Python (one POSIX-only skip), with fresh desktop28 also passing. GUI/device
 interaction and hard real-time cancellation latency remain unqualified.
+
+Keyboard tab entry now supports bare arrow/Home/End navigation, number-row/keypad
+frets, two-digit grouping/timeout, X damping and B body hits. Existing event IDs,
+fractional timing and linked initial slide frets survive edit/undo. Navigation
+does not mutate the score; coincident ambiguous events require selection. The
+active cell and shortcut hints are visible. Fields, popups, unsaved-work dialogs,
+window focus loss, Escape/Tab and outside-pattern source context protect entry.
+Windows desktop28 passed against the stable recorded source fingerprint in
+`.local/nightshift/keyboard-checks.json`; the synthetic UI additionally exercises
+invalid37, timeout-separated undo, damp/pluck replacement, keypad, text/numeric
+focus, the actual unsaved dialog, focus loss and fractional slide editing.
+The actual main framebuffer `editor-keyboard-main.bmp` was inspected. No physical
+typing qualification is inferred from those injected inputs.

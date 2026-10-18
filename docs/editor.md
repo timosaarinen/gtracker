@@ -44,6 +44,20 @@ appear as fallback glyphs even though the filename bytes are preserved.
   `+ Damp`, and `+ Body hit` buttons insert at that cursor. Double-click empty
   string/body space to insert a pluck/body hit directly.
 - **Deletion:** select an event, then use `Delete event` or the Delete key.
+- **Keyboard tab entry:** click a string/body cell to activate its outlined
+  cursor. Bare arrows move by the current snap and between lanes; Home/End reach
+  the first/final snap position. Navigation edits no musical data and preserves
+  an existing cursor's fractional offset. Type a fret with the number row or
+  numeric keypad: two digits within 0.8 seconds form one fret and one undo step.
+  Frets are 0–36; an invalid second digit leaves the first and reports an error.
+  A later entry replaces the cell as a separate edit. Digits keep an existing
+  event's ID/timing and update linked initial slide contact in the same operation.
+  `X` enters full damping on the string; `B` enters a body hit at the cursor beat.
+  A selected/unique existing event is replaced, otherwise a new event is added;
+  ambiguous coincident events require selection. Escape/Tab leaves tab input.
+  Text/numeric fields, popups, dialogs and window focus loss protect musical
+  entry; click the canvas again to resume. Retained context outside the pattern
+  does not activate entry.
 - **Pattern settings:** edit BPM and pattern length above the canvas. Reducing
   the length past existing events is rejected; move or delete those events first.
 - **Instrument settings:** expand `Instrument controls` to adjust decay,
@@ -231,9 +245,9 @@ contact/retained model selection, reviewed single-note proposal acceptance, basi
 JSON load/save, document undo/redo, a small Lua command API, asynchronous rendering,
 queued playback, waveform inspection, and unattended UI capture.
 
-Future work includes editor recording controls (CLI capture exists), musical
+Future work includes editor recording controls (CLI capture exists),
 general guitar transcription, hammer/pull-off and additional contact/expression gestures,
 an arrangement UI (CLI songs exist), course-aware twelve-string instruments,
-richer keyboard tab entry, autosave/recovery and output-device selection.
+chord/selection shortcuts, autosave/recovery and output-device selection.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.

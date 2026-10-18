@@ -516,6 +516,104 @@ void proposal_workflow(Host& host, const Arguments& original, const std::filesys
     check_ui(guarded.status_error && guarded.document.pattern().events.empty() && !guarded.document.dirty(), "source changed after loading but stale proposals were accepted");
 }
 
+void keyboard_entry(Host& host, const Arguments& args) {
+    Editor editor(args);
+    auto empty = editor.document.pattern(); empty.events.clear(); empty.gestures.clear();
+    editor.document = gtracker::EditorDocument(empty); editor.selected = -1; editor.fit_timeline(false);
+    ImVec2 origin, input_a, input_b, number_a, number_b;
+    double number=1;
+    std::array<char,64> text{};
+    auto draw = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20,20)); ImGui::SetNextWindowSize(ImVec2(760,460));
+        ImGui::Begin("Keyboard tab regression");
+        if (editor.document.pending() == gtracker::EditorDocument::Pending::none) keyboard(editor);
+        origin = ImGui::GetCursorScreenPos(); canvas(editor,ImVec2(700,360));
+        ImGui::InputText("A path field",text.data(),text.size()); input_a=ImGui::GetItemRectMin(); input_b=ImGui::GetItemRectMax();
+        ImGui::InputDouble("A numeric field",&number); number_a=ImGui::GetItemRectMin(); number_b=ImGui::GetItemRectMax();
+        unsaved_dialog(editor);
+        ImGui::End();
+    };
+    auto key = [&](ImGuiKey value) {
+        frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(value,true); });
+        frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(value,false); });
+    };
+    auto click = [&](double beat,int lane) {
+        const float x=editor.tab_geometry.beat_x(beat), y=origin.y+32+(lane+.5f)*(360-42)/7;
+        frame(host,draw,[&] { ImGui::GetIO().AddMousePosEvent(x,y); ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,true); });
+        frame(host,draw,[&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,false); });
+    };
+    frame(host,draw); frame(host,draw); click(1,0);
+    check_ui(editor.tab_keyboard_focus && editor.cursor_beat == 1 && editor.cursor_lane == 0,"canvas click did not focus keyboard entry at the clicked cell");
+    key(ImGuiKey_1); const auto id=editor.document.pattern().events.front().id; key(ImGuiKey_2);
+    check_ui(editor.document.pattern().events.size() == 1 && editor.document.pattern().events.front().fret == 12 && editor.document.pattern().events.front().id == id,
+             "two-digit entry duplicated the event or lost its stable ID");
+    editor.undo(); check_ui(editor.document.pattern().events.empty() && !editor.document.dirty(),"two fret digits did not undo in one operation");
+    editor.undo(true); const auto generation=editor.document.generation(); key(ImGuiKey_RightArrow);
+    check_ui(editor.cursor_beat == 1.5 && editor.selected == -1 && editor.document.generation() == generation,"arrow navigation edited data or failed to move the tab cursor");
+    key(ImGuiKey_3); key(ImGuiKey_6);
+    check_ui(editor.document.pattern().events.back().fret == 36,"highest supported two-digit fret was rejected");
+    key(ImGuiKey_3); key(ImGuiKey_7);
+    check_ui(editor.status_error && editor.document.pattern().events.back().fret == 3,"invalid fret37 was silently accepted");
+    editor.undo(); check_ui(editor.document.pattern().events.back().fret == 36,"invalid-prefix undo did not restore the previous complete cell");
+    key(ImGuiKey_2); for (int i=0;i<55;++i) frame(host,draw); key(ImGuiKey_3);
+    check_ui(editor.document.pattern().events.back().fret == 3,"expired fret entry unexpectedly became23");
+    editor.undo(); check_ui(editor.document.pattern().events.back().fret == 2,"a later entry coalesced into an old undo operation");
+    editor.undo(); check_ui(editor.document.pattern().events.back().fret == 36,"prefix timeout lost the earlier cell");
+    key(ImGuiKey_DownArrow); key(ImGuiKey_X);
+    check_ui(editor.document.pattern().events.back().type == "damp" && editor.document.pattern().events.back().string_index == 1,"X did not enter damping on the current string");
+    const auto damp_id=editor.document.pattern().events.back().id;
+    const auto count=editor.document.pattern().events.size(); key(ImGuiKey_0);
+    check_ui(editor.document.pattern().events.size() == count && editor.document.pattern().events.back().id == damp_id && editor.document.pattern().events.back().type == "pluck",
+             "typing over a damp cell duplicated the event or lost its ID");
+    key(ImGuiKey_X);
+    key(ImGuiKey_B); check_ui(editor.cursor_lane == 6 && editor.document.pattern().events.back().type == "body_hit","B did not enter a body hit at the cursor beat");
+    const auto before_input=gtracker::pattern_json(editor.document.pattern());
+    frame(host,draw,[&] { ImGui::GetIO().AddMousePosEvent((input_a.x+input_b.x)*.5f,(input_a.y+input_b.y)*.5f); ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,false); ImGui::GetIO().AddInputCharactersUTF8("23"); });
+    key(ImGuiKey_2); key(ImGuiKey_Delete); key(ImGuiKey_RightArrow);
+    check_ui(!editor.tab_keyboard_focus && gtracker::pattern_json(editor.document.pattern()) == before_input,"tab keys edited musical data while a path field was active");
+    frame(host,draw,[&] { ImGui::GetIO().AddMousePosEvent((number_a.x+number_b.x)*.5f,(number_a.y+number_b.y)*.5f); ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,false); });
+    key(ImGuiKey_5); key(ImGuiKey_LeftArrow);
+    check_ui(gtracker::pattern_json(editor.document.pattern()) == before_input,"tab digits/navigation edited music while a numeric field was active");
+    editor.document.request_close(); frame(host,draw); frame(host,draw); key(ImGuiKey_6);
+    check_ui(gtracker::pattern_json(editor.document.pattern()) == before_input && editor.document.pending() == gtracker::EditorDocument::Pending::close,
+             "unsaved-work dialog let a tab digit edit the document");
+    key(ImGuiKey_Escape);
+    check_ui(editor.document.pending() == gtracker::EditorDocument::Pending::none,"Escape did not cancel the keyboard test's unsaved-work dialog");
+    key(ImGuiKey_Escape); click(1.5,0); key(ImGuiKey_Escape);
+    check_ui(!editor.tab_keyboard_focus,"Escape did not leave keyboard tab entry");
+    const auto escaped=gtracker::pattern_json(editor.document.pattern()); key(ImGuiKey_4);
+    check_ui(gtracker::pattern_json(editor.document.pattern()) == escaped,"unfocused digit edited a fret");
+    click(1.5,0); frame(host,draw,[&] { ImGui::GetIO().AddFocusEvent(false); });
+    frame(host,draw); key(ImGuiKey_5);
+    check_ui(!editor.tab_keyboard_focus && gtracker::pattern_json(editor.document.pattern()) == escaped,"window focus loss did not release musical keyboard input");
+
+    auto linked=empty; linked.schema_version=2; linked.model="contact_0_2";
+    linked.events={{"original-id","pluck",.333333333333,0,2.5f,.7f}};
+    linked.gestures={{"original-curve","slide",.333333333333,0,{{0,2.5f},{.5,7}}}};
+    editor.document=gtracker::EditorDocument(linked); editor.cursor_lane=0; editor.selected=0; editor.selected_gesture=-1;
+    click(.333333333333,0); key(ImGuiKey_Keypad1); key(ImGuiKey_Keypad2);
+    check_ui(editor.document.pattern().events.front().id == "original-id" && editor.document.pattern().events.front().beat == linked.events.front().beat &&
+             editor.document.pattern().events.front().fret == 12 && editor.document.pattern().gestures.front().points.front().fret == 12,
+             "keypad entry quantized source timing, replaced IDs or broke shared initial contact");
+    editor.undo(); check_ui(editor.document.pattern().events.front().fret == 2.5f && editor.document.pattern().gestures.front().points.front().fret == 2.5f,
+                            "linked keyboard contact/fret edit did not undo together");
+    const auto linked_generation=editor.document.generation(); key(ImGuiKey_RightArrow);
+    check_ui(editor.cursor_beat == linked.events.front().beat+.5 && editor.document.generation() == linked_generation,"arrow movement quantized an unsnapped existing cursor");
+    editor.request_render(); editor.pending.wait(); editor.poll_render();
+    frame(host,[&] { interface(editor); }); frame(host,[&] { interface(editor); });
+    host.screenshot(std::filesystem::current_path()/"editor-keyboard-main.bmp");
+    auto ambiguous=linked; ambiguous.events.push_back(ambiguous.events.front()); ambiguous.events.back().id="another-pluck";
+    editor.document=gtracker::EditorDocument(ambiguous); editor.cursor_beat=linked.events.front().beat; editor.cursor_lane=0; editor.selected=-1;
+    frame(host,draw); frame(host,draw);
+    const auto ambiguous_before=gtracker::pattern_json(editor.document.pattern()); key(ImGuiKey_4);
+    check_ui(editor.status_error && gtracker::pattern_json(editor.document.pattern()) == ambiguous_before,"keyboard entry silently chose among coincident events");
+    key(ImGuiKey_Home); check_ui(editor.cursor_beat == 0,"Home did not reach beat zero");
+    key(ImGuiKey_End); check_ui(editor.cursor_beat == 7.5,"End did not reach the final snap position inside the pattern");
+    frame(host,draw); host.screenshot(std::filesystem::current_path()/"editor-keyboard-entry.bmp");
+}
+
 void timeline_navigation(Host& host, const Arguments& original, const std::filesystem::path& manifest) {
     Arguments args = original;
     args.document.clear(); args.take = manifest;
@@ -575,6 +673,10 @@ void timeline_navigation(Host& host, const Arguments& original, const std::files
     }
     check_ui(gtracker::pattern_json(editor.document.pattern()) == document && editor.document.generation() == generation && !editor.document.dirty(),
              "viewport navigation or context double-click edited musical data/history");
+    frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_4,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_4,false); });
+    check_ui(gtracker::pattern_json(editor.document.pattern()) == document && !editor.tab_keyboard_focus,
+             "retained-context click enabled editing at an old in-pattern cursor");
     check_ui(file_bytes(editor.source->take.source_path) == source, "view navigation altered preserved audio");
 }
 }
@@ -601,6 +703,7 @@ int main(int argc, char** argv) {
         slide_authoring(host, args);
         production_authoring(host, args);
         proposal_workflow(host, args, std::filesystem::path(argv[3]));
+        keyboard_entry(host,args);
         timeline_navigation(host, args, std::filesystem::path(argv[2]));
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");
