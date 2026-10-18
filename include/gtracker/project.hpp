@@ -19,6 +19,18 @@ struct Event {
     float strength = 0.7f;
 };
 
+struct FretPoint {
+    double beat = 0; // Offset from the gesture start, never quantized on load/save.
+    float fret = 0;
+};
+struct Gesture {
+    std::string id;
+    std::string type = "slide";
+    double beat = 0;
+    int string_index = 0;
+    std::vector<FretPoint> points;
+};
+
 struct Pattern {
     std::string name = "Untitled";
     std::uint64_t revision = 1;
@@ -30,6 +42,9 @@ struct Pattern {
     float brightness = 0.6f;
     float body_mix = 0.15f;
     std::vector<Event> events;
+    int schema_version = 1;
+    std::string model = "baseline_0_1";
+    std::vector<Gesture> gestures;
 };
 
 struct RenderOptions {

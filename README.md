@@ -5,7 +5,7 @@ tool for **Lust of War**. Compose in horizontal tabs, use Lua for musical editin
 and develop audio-to-pattern analysis against the same native instrument that
 will render music in the game.
 
-**Status: working 0.1 prototype.** This is an audible development foundation,
+**Status: working 0.2 prototype.** This is an audible development foundation,
 not yet a realistic guitar instrument or an automatic guitar transcriber.
 
 ## What works now
@@ -14,6 +14,9 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   fractional frets, damping and synthetic body taps; no stored audio samples.
 - Versioned JSON patterns, strict validation, stable event IDs, beat timing,
   explicit tuning and seed, and mono 16-bit PCM WAV export.
+- Explicit v2 [continuous slide curves](docs/gestures.md) through save/reopen,
+  Lua, native rendering and tab editing/undo. The experimental contact model
+  retains vibration; the original v1 baseline remains selectable and unchanged.
 - Native SDL3 + Dear ImGui/ImPlot editor: horizontal string/body lanes, event
   selection and editing, add/delete, undo/redo, load/save, asynchronous rendering,
   queued playback, waveform preview, keyboard shortcuts, grouped control undo
@@ -38,7 +41,7 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   repository guard, issue templates and manual cross-platform qualification.
 
 The core supports 1–12 independent string slots. Twelve strings are **not yet**
-six paired courses. Slides, bends, hammer-ons, pull-offs, contact physics,
+six paired courses. Bends, hammer-ons, pull-offs, physical contact/collision models,
 microphone recording in the editor, song arrangement and room reverb are roadmap
 work. The existing model is a reference to compare with future physical models.
 

@@ -24,8 +24,8 @@ void help() {
         "      [--window-seconds S] [--reference-channel 1|2] [--recorded-channel 1|2]\n"
         "      [--output JSON] [--json]\n"
         "  gtracker_cli --version\n\n"
-        "Patterns use schema v1, beat times, one-based string numbers (highest first).\n"
-        "The current instrument is an independent plucked-string/body-tap baseline.\n";
+        "Patterns use v1 baseline or explicit v2 models/slide curves, beat times,\n"
+        "and one-based string numbers (highest first). Contact_0_2 is experimental.\n";
 }
 double number(const std::string& text, const char* flag) {
     std::size_t used = 0;
@@ -164,8 +164,9 @@ int cli_main(int argc, char** argv) {
         auto pattern = gtracker::load_pattern(input);
         if (!script.empty()) gtracker::apply_lua(pattern, script);
         nlohmann::json report{{"ok", true}, {"command", command}, {"renderer_version", GT_VERSION},
-            {"schema_version", 1}, {"input", input.u8string()}, {"pattern_revision", pattern.revision},
-            {"events", pattern.events.size()}, {"strings", pattern.tuning_midi.size()}, {"seed", pattern.seed}};
+            {"schema_version", pattern.schema_version}, {"input", input.u8string()}, {"pattern_revision", pattern.revision},
+            {"events", pattern.events.size()}, {"gestures", pattern.gestures.size()}, {"instrument_model", pattern.model},
+            {"strings", pattern.tuning_midi.size()}, {"seed", pattern.seed}};
         if (command == "render") {
             const auto rendered = gtracker::render_pattern(pattern, options);
             gtracker::write_wav(output, rendered.mono, rendered.sample_rate);

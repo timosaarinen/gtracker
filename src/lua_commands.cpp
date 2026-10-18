@@ -7,6 +7,8 @@ extern "C" {
 }
 
 #include <cmath>
+#include <algorithm>
+#include <array>
 #include <cstdio>
 #include <limits>
 #include <fstream>
@@ -20,6 +22,14 @@ namespace {
 
 Pattern& document(lua_State* state) {
     return *static_cast<Pattern*>(lua_touserdata(state, lua_upvalueindex(1)));
+}
+
+std::string next_id(const Pattern& pattern) {
+    for (std::size_t suffix = pattern.events.size() + pattern.gestures.size() + 1;; ++suffix) {
+        const std::string id = "lua-" + std::to_string(suffix);
+        if (std::none_of(pattern.events.begin(), pattern.events.end(), [&](const Event& event) { return event.id == id; }) &&
+            std::none_of(pattern.gestures.begin(), pattern.gestures.end(), [&](const Gesture& gesture) { return gesture.id == id; })) return id;
+    }
 }
 
 // Lua errors use longjmp. Finish every C++ exception handler and destroy its
@@ -51,6 +61,8 @@ int transpose(lua_State* state) {
                 event.fret = static_cast<float>(event.fret + semitones);
             }
         }
+        for (auto& gesture : pattern.gestures) for (auto& point : gesture.points)
+            point.fret = static_cast<float>(point.fret + semitones);
     });
 }
 
@@ -84,26 +96,54 @@ int add_note(lua_State* state) {
             throw std::invalid_argument("add_note string number is outside the instrument");
         }
         Event event;
-        std::size_t suffix = pattern.events.size() + 1;
-        for (;;) {
-            event.id = "lua-" + std::to_string(suffix++);
-            bool duplicate = false;
-            for (const auto& existing : pattern.events) {
-                if (existing.id == event.id) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                break;
-            }
-        }
+        event.id = next_id(pattern);
         event.type = "pluck";
         event.beat = beat;
         event.string_index = static_cast<int>(string_number - 1);
         event.fret = static_cast<float>(fret);
         event.strength = static_cast<float>(strength);
         pattern.events.push_back(std::move(event));
+    });
+}
+
+int set_model(lua_State* state) {
+    const char* model = luaL_checkstring(state, 1);
+    return edit(state, [model](Pattern& pattern) {
+        pattern.schema_version = 2;
+        pattern.model = model; // Validation rejects unsupported models/data loss.
+    });
+}
+
+int add_slide(lua_State* state) {
+    const double beat = luaL_checknumber(state, 1);
+    const lua_Integer string_number = luaL_checkinteger(state, 2);
+    luaL_checktype(state, 3, LUA_TTABLE);
+    const auto count = lua_rawlen(state, 3);
+    if (count < 2 || count > 256) return luaL_error(state, "add_slide needs 2..256 points");
+    // All locals across Lua's checking/longjmp boundary are trivially
+    // destructible. Construct owning C++ vectors only inside edit(), afterwards.
+    std::array<FretPoint, 256> points{};
+    for (std::size_t i = 0; i < count; ++i) {
+        lua_rawgeti(state, 3, static_cast<lua_Integer>(i + 1));
+        luaL_checktype(state, -1, LUA_TTABLE);
+        lua_getfield(state, -1, "beat");
+        points[i].beat = luaL_checknumber(state, -1);
+        lua_pop(state, 1);
+        lua_getfield(state, -1, "fret");
+        points[i].fret = static_cast<float>(luaL_checknumber(state, -1));
+        lua_pop(state, 2);
+    }
+    return edit(state, [beat, string_number, points, count](Pattern& pattern) {
+        if (pattern.schema_version != 2 || pattern.model != "contact_0_2")
+            throw std::invalid_argument("add_slide requires explicit gtracker.set_model('contact_0_2') first");
+        if (string_number < 1 || string_number > static_cast<lua_Integer>(pattern.tuning_midi.size()))
+            throw std::invalid_argument("add_slide string is outside the instrument");
+        Gesture gesture;
+        gesture.id = next_id(pattern);
+        gesture.beat = beat;
+        gesture.string_index = static_cast<int>(string_number - 1);
+        gesture.points.assign(points.begin(), points.begin() + static_cast<std::ptrdiff_t>(count));
+        pattern.gestures.push_back(std::move(gesture));
     });
 }
 
@@ -134,6 +174,8 @@ void apply_lua(Pattern& pattern, const std::filesystem::path& script_path) {
     register_command(state.get(), working, "set_tempo", set_tempo);
     register_command(state.get(), working, "scale_strength", scale_strength);
     register_command(state.get(), working, "add_note", add_note);
+    register_command(state.get(), working, "set_model", set_model);
+    register_command(state.get(), working, "add_slide", add_slide);
     lua_setglobal(state.get(), "gtracker");
 
     // C stdio's narrow fopen cannot open arbitrary UTF-8 paths on Windows.

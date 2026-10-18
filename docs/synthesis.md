@@ -94,7 +94,7 @@ The 0.2 native core also exposes an explicitly selected experimental
 `baseline_0_1`. The original `gt_config`/`gt_event` layouts and entry points are
 unchanged; new callers can use `gt_set_performance` with copied `gt_slide`
 descriptors and relative-frame fret points. No C/C++ memory layout is a file
-format. Pattern/CLI/editor support is a separate layer.
+format. [Pattern v2 and native authoring](gestures.md) use the same model/API.
 
 The contact prototype linearly interpolates fret points at native sample
 resolution and changes a ringing string's delay length without replucking it.

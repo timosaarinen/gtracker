@@ -223,6 +223,7 @@ struct Editor {
     int audio_rate = 0;
     int audio_channels = 0;
     int selected = 0;
+    int selected_gesture = -1;
     int cursor_lane = 0;
     double cursor_beat = 0.0;
     float snap = 0.5f;
@@ -262,6 +263,10 @@ struct Editor {
         }
         if (document.pattern().events.empty()) {
             selected = -1;
+        } else {
+            const auto& event = document.pattern().events.front();
+            cursor_beat = event.beat;
+            cursor_lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
         }
     }
 
@@ -300,6 +305,8 @@ struct Editor {
         if (selected >= static_cast<int>(document.pattern().events.size())) {
             selected = static_cast<int>(document.pattern().events.size()) - 1;
         }
+        if (selected_gesture >= static_cast<int>(document.pattern().gestures.size())) selected_gesture = -1;
+        if (selected_gesture >= 0) selected = -1;
     }
 
     void commit(Pattern next, const char* action, const std::string& edit_key = {}) {
@@ -331,8 +338,14 @@ struct Editor {
         set_text(path, document.filename().u8string());
         if (source) set_text(take_path, source->take.manifest_path.u8string());
         selected = document.pattern().events.empty() ? -1 : 0;
+        selected_gesture = -1;
         cursor_beat = 0.0;
         cursor_lane = 0;
+        if (selected >= 0) {
+            const auto& event = document.pattern().events.front();
+            cursor_beat = event.beat;
+            cursor_lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
+        }
         changed();
         message("Loaded " + document.pattern().name + ".");
     }
@@ -402,13 +415,15 @@ struct Editor {
         commit(std::move(next), "Applied Lua script");
     }
 
-    std::string new_id() const {
+    std::string new_id(const char* prefix = "event-") const {
         const auto& pattern = document.pattern();
-        std::size_t suffix = pattern.events.size() + 1;
+        std::size_t suffix = pattern.events.size() + pattern.gestures.size() + 1;
         for (;;) {
-            const std::string id = "event-" + std::to_string(suffix++);
+            const std::string id = prefix + std::to_string(suffix++);
             if (std::none_of(pattern.events.begin(), pattern.events.end(),
-                             [&](const Event& event) { return event.id == id; })) {
+                             [&](const Event& event) { return event.id == id; }) &&
+                std::none_of(pattern.gestures.begin(), pattern.gestures.end(),
+                             [&](const gtracker::Gesture& gesture) { return gesture.id == id; })) {
                 return id;
             }
         }
@@ -425,11 +440,89 @@ struct Editor {
         event.strength = event.type == "damp" ? 1.0f : 0.65f;
         next.events.push_back(std::move(event));
         commit(std::move(next), "Added event");
+        selected_gesture = -1;
         selected = static_cast<int>(document.pattern().events.size()) - 1;
+    }
+
+    void set_model(const char* model) {
+        Pattern next = document.pattern();
+        next.schema_version = 2;
+        next.model = model;
+        commit(std::move(next), "Selected explicit v2 instrument model");
+    }
+
+    void replace_event(std::size_t index, Event event, const std::string& key) {
+        Pattern next = document.pattern();
+        const auto& before = next.events.at(index);
+        if (before.type == "pluck" && event.type == "pluck" && before.beat == event.beat &&
+            before.string_index == event.string_index && before.fret != event.fret) {
+            bool shared = false;
+            for (auto& gesture : next.gestures) if (gesture.beat == event.beat && gesture.string_index == event.string_index) {
+                gesture.points.front().fret = event.fret;
+                shared = true;
+            }
+            if (shared) for (auto& other : next.events) if (other.type == "pluck" && other.beat == event.beat && other.string_index == event.string_index)
+                other.fret = event.fret;
+        }
+        next.events[index] = event;
+        commit(std::move(next), "Edited event", key);
+        cursor_beat = event.beat;
+        cursor_lane = event.type == "body_hit" ? static_cast<int>(document.pattern().tuning_midi.size()) : event.string_index;
+    }
+
+    void replace_slide(std::size_t index, gtracker::Gesture gesture, const std::string& key) {
+        if (gesture.points.empty()) throw std::invalid_argument("A slide requires fret points.");
+        Pattern next = document.pattern();
+        const auto& before = next.gestures.at(index);
+        if (before.beat == gesture.beat && before.string_index == gesture.string_index &&
+            before.points.front().fret != gesture.points.front().fret) {
+            for (auto& event : next.events) if (event.type == "pluck" && event.beat == gesture.beat && event.string_index == gesture.string_index)
+                event.fret = gesture.points.front().fret;
+        }
+        next.gestures[index] = gesture;
+        commit(std::move(next), "Edited slide curve", key);
+        cursor_beat = gesture.beat;
+        cursor_lane = gesture.string_index;
+    }
+
+    void add_slide() {
+        const auto& pattern = document.pattern();
+        if (pattern.model != "contact_0_2") throw std::runtime_error("Enable slides before adding a contact curve.");
+        if (cursor_lane < 0 || cursor_lane >= static_cast<int>(pattern.tuning_midi.size())) throw std::runtime_error("Choose a string lane for the slide.");
+        Pattern next = pattern;
+        gtracker::Gesture gesture;
+        gesture.id = new_id("slide-");
+        gesture.beat = std::clamp(cursor_beat, 0.0, std::nextafter(pattern.length_beats, 0.0));
+        gesture.string_index = cursor_lane;
+        double duration = std::min(1.0, pattern.length_beats - gesture.beat);
+        double last_contact = -1;
+        float fret = 0;
+        for (const auto& event : pattern.events) if (event.type == "pluck" && event.string_index == cursor_lane) {
+            if (event.beat <= gesture.beat && event.beat >= last_contact) { last_contact = event.beat; fret = event.fret; }
+            if (event.beat > gesture.beat) duration = std::min(duration, event.beat - gesture.beat);
+        }
+        for (const auto& existing : pattern.gestures) if (existing.string_index == cursor_lane) {
+            const double end = existing.beat + existing.points.back().beat;
+            if (existing.beat <= gesture.beat && end > gesture.beat) throw std::runtime_error("The string already has a slide at this beat.");
+            if (end <= gesture.beat && end > last_contact) { last_contact = end; fret = existing.points.back().fret; }
+            if (existing.beat > gesture.beat) duration = std::min(duration, existing.beat - gesture.beat);
+        }
+        gesture.points = {{0, fret}, {duration, fret <= 34 ? fret + 2 : fret - 2}};
+        next.gestures.push_back(std::move(gesture));
+        commit(std::move(next), "Added continuous slide");
+        selected = -1;
+        selected_gesture = static_cast<int>(document.pattern().gestures.size()) - 1;
     }
 
     void erase() {
         const auto& pattern = document.pattern();
+        if (selected_gesture >= 0 && selected_gesture < static_cast<int>(pattern.gestures.size())) {
+            Pattern next = pattern;
+            next.gestures.erase(next.gestures.begin() + selected_gesture);
+            commit(std::move(next), "Deleted slide");
+            selected_gesture = -1;
+            return;
+        }
         if (selected < 0 || selected >= static_cast<int>(pattern.events.size())) {
             return;
         }
@@ -694,7 +787,31 @@ void canvas(Editor& editor, ImVec2 size) {
     draw->AddLine(ImVec2(cursor_x, top), ImVec2(cursor_x, origin.y + size.y - 7.0f),
                    IM_COL32(246, 188, 94, 75));
     int hit = -1;
+    int gesture_hit = -1;
     const ImVec2 mouse = ImGui::GetIO().MousePos;
+    for (std::size_t i = 0; i < editor.document.pattern().gestures.size(); ++i) {
+        const auto& gesture = editor.document.pattern().gestures[i];
+        const bool selected = static_cast<int>(i) == editor.selected_gesture;
+        const auto color = selected ? amber : IM_COL32(187, 143, 76, 210);
+        const float y = lane_y(gesture.string_index);
+        float minimum = gesture.points.front().fret, maximum = minimum;
+        for (const auto& point : gesture.points) { minimum = std::min(minimum, point.fret); maximum = std::max(maximum, point.fret); }
+        const auto point_y = [&](float fret) {
+            return y + 6.0f + (maximum > minimum ? (0.5f - (fret - minimum) / (maximum - minimum)) * std::min(12.0f, lane_height * 0.3f) : 0);
+        };
+        ImVec2 previous(beat_x(gesture.beat), point_y(gesture.points.front().fret));
+        for (const auto& point : gesture.points) {
+            const ImVec2 position(beat_x(gesture.beat + point.beat), point_y(point.fret));
+            draw->AddLine(previous, position, color, selected ? 2.5f : 1.5f);
+            draw->AddCircleFilled(position, selected ? 3.5f : 2.5f, color);
+            previous = position;
+        }
+        const float x0 = beat_x(gesture.beat), x1 = previous.x;
+        draw->AddTriangleFilled(previous, ImVec2(previous.x - 7, previous.y - 4), ImVec2(previous.x - 7, previous.y + 4), color);
+        draw->AddText(ImVec2((x0 + x1) * 0.5f - 3, y - 14), color, "/");
+        if (hovered && mouse.x >= x0 - 5 && mouse.x <= x1 + 5 && std::abs(mouse.y - y) <= lane_height * 0.43f)
+            gesture_hit = static_cast<int>(i);
+    }
     for (std::size_t i = 0; i < editor.document.pattern().events.size(); ++i) {
         const auto& event = editor.document.pattern().events[i];
         const bool body = event.type == "body_hit";
@@ -730,20 +847,34 @@ void canvas(Editor& editor, ImVec2 size) {
         ImGui::BeginTooltip();
         ImGui::Text("%s | beat %.3f | strength %.2f", event.type.c_str(), event.beat, event.strength);
         ImGui::EndTooltip();
+    } else if (hovered && gesture_hit >= 0) {
+        const auto& gesture = editor.document.pattern().gestures[static_cast<std::size_t>(gesture_hit)];
+        ImGui::BeginTooltip();
+        ImGui::Text("Slide %g / %g | beat %.6f | %zu points", static_cast<double>(gesture.points.front().fret),
+                    static_cast<double>(gesture.points.back().fret), gesture.beat, gesture.points.size());
+        ImGui::EndTooltip();
     }
     if (clicked) {
         editor.document.end_edit();
         if (hit >= 0) {
             editor.selected = hit;
+            editor.selected_gesture = -1;
             const auto& event = editor.document.pattern().events[static_cast<std::size_t>(hit)];
             editor.cursor_beat = event.beat;
             editor.cursor_lane = event.type == "body_hit" ? strings : event.string_index;
+        } else if (gesture_hit >= 0) {
+            editor.selected = -1;
+            editor.selected_gesture = gesture_hit;
+            const auto& gesture = editor.document.pattern().gestures[static_cast<std::size_t>(gesture_hit)];
+            editor.cursor_beat = gesture.beat;
+            editor.cursor_lane = gesture.string_index;
         } else if (mouse.y >= top && mouse.x >= left && mouse.x <= right) {
             const double beat = static_cast<double>((mouse.x - left) / (right - left)) * editor.document.pattern().length_beats;
             editor.cursor_beat = std::clamp(std::round(beat / editor.snap) * editor.snap,
                                             0.0, std::nextafter(editor.document.pattern().length_beats, 0.0));
             editor.cursor_lane = std::clamp(static_cast<int>((mouse.y - top) / lane_height), 0, strings);
             editor.selected = -1;
+            editor.selected_gesture = -1;
             if (double_clicked) {
                 editor.attempt([&]() { editor.add(editor.cursor_lane == strings ? "body_hit" : "pluck"); });
             }
@@ -751,23 +882,78 @@ void canvas(Editor& editor, ImVec2 size) {
     }
 }
 
+void slide_inspector(Editor& editor) {
+    auto gesture = editor.document.pattern().gestures[static_cast<std::size_t>(editor.selected_gesture)];
+    ImGui::PushID(gesture.id.c_str());
+    ImGui::TextDisabled("%s", gesture.id.c_str());
+    ImGui::TextWrapped("Contact moves while the string rings. Add a pluck to excite the string.");
+    const auto commit = [&](const std::string& key) {
+        editor.replace_slide(static_cast<std::size_t>(editor.selected_gesture), gesture, key);
+    };
+    const auto edit = [&](bool changed) { edit_control(editor, changed, commit); };
+    ImGui::TextUnformatted("Start beat");
+    ImGui::SetNextItemWidth(-1);
+    edit(ImGui::InputDouble("##slide_beat", &gesture.beat, editor.snap, 1.0, "%.15g"));
+    int string = gesture.string_index + 1;
+    ImGui::TextUnformatted("String (1 = highest lane)");
+    ImGui::SetNextItemWidth(-1);
+    const bool string_changed = ImGui::InputInt("##slide_string", &string);
+    if (string_changed) gesture.string_index = std::clamp(string, 1, static_cast<int>(editor.document.pattern().tuning_midi.size())) - 1;
+    edit(string_changed);
+    int remove = -1;
+    if (ImGui::CollapsingHeader("Fret points", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (std::size_t i = 0; i < gesture.points.size(); ++i) {
+            ImGui::PushID(static_cast<int>(i));
+            ImGui::Text("Point %zu | beat offset", i + 1);
+            ImGui::BeginDisabled(i == 0);
+            ImGui::SetNextItemWidth(-1);
+            edit(ImGui::InputDouble("##point_beat", &gesture.points[i].beat, editor.snap, 1.0, "%.15g"));
+            ImGui::EndDisabled();
+            ImGui::TextUnformatted("Fret");
+            ImGui::SetNextItemWidth(-76);
+            const bool fret_changed = ImGui::InputFloat("##point_fret", &gesture.points[i].fret, 1, 5, "%.6g");
+            if (fret_changed) gesture.points[i].fret = std::clamp(gesture.points[i].fret, 0.0f, 36.0f);
+            edit(fret_changed);
+            if (i == 0 && ImGui::IsItemHovered()) ImGui::SetTooltip("A pluck at this same start shares the initial fret and is updated in the same undoable edit.");
+            ImGui::SameLine();
+            ImGui::BeginDisabled(i == 0 || gesture.points.size() <= 2);
+            if (ImGui::Button("Remove")) remove = static_cast<int>(i);
+            ImGui::EndDisabled();
+            ImGui::PopID();
+        }
+        if (remove >= 0) {
+            gesture.points.erase(gesture.points.begin() + remove);
+            editor.attempt([&] { commit({}); });
+        }
+        ImGui::BeginDisabled(gesture.points.size() >= 256);
+        if (ImGui::Button("+ Point", ImVec2(-1, 0))) {
+            std::size_t gap = 1;
+            for (std::size_t i = 2; i < gesture.points.size(); ++i)
+                if (gesture.points[i].beat - gesture.points[i - 1].beat > gesture.points[gap].beat - gesture.points[gap - 1].beat) gap = i;
+            const auto a = gesture.points[gap - 1], b = gesture.points[gap];
+            gesture.points.insert(gesture.points.begin() + static_cast<std::ptrdiff_t>(gap), {(a.beat + b.beat) * 0.5, (a.fret + b.fret) * 0.5f});
+            editor.attempt([&] { commit({}); });
+        }
+        ImGui::EndDisabled();
+    }
+    if (ImGui::Button("Delete slide", ImVec2(-1, 0))) editor.attempt([&] { editor.erase(); });
+    ImGui::PopID();
+}
+
 void inspector(Editor& editor) {
-    ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "EVENT");
+    const bool slide = editor.selected_gesture >= 0 && editor.selected_gesture < static_cast<int>(editor.document.pattern().gestures.size());
+    ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), slide ? "SLIDE" : "EVENT");
     ImGui::Separator();
-    if (editor.selected < 0 || editor.selected >= static_cast<int>(editor.document.pattern().events.size())) {
-        ImGui::TextWrapped("Select a fret number or body hit. Double-click an empty lane to add an event.");
+    if (slide) slide_inspector(editor);
+    else if (editor.selected < 0 || editor.selected >= static_cast<int>(editor.document.pattern().events.size())) {
+        ImGui::TextWrapped("Select a fret number, slide or body hit. Double-click an empty lane to add an event.");
     } else {
         Event event = editor.document.pattern().events[static_cast<std::size_t>(editor.selected)];
         ImGui::PushID(event.id.c_str());
         ImGui::TextDisabled("%s", event.id.c_str());
         auto edit = [&](bool changed) {
             edit_control(editor, changed, [&](const std::string& key) {
-                Pattern next = editor.document.pattern();
-                next.events[static_cast<std::size_t>(editor.selected)] = event;
-                editor.commit(std::move(next), "Edited event", key);
-                editor.cursor_beat = event.beat;
-                editor.cursor_lane = event.type == "body_hit" ? static_cast<int>(editor.document.pattern().tuning_midi.size())
-                                                              : event.string_index;
+                editor.replace_event(static_cast<std::size_t>(editor.selected), event, key);
             });
         };
         const char* types[] = {"Pluck", "Damp", "Body hit"};
@@ -802,6 +988,7 @@ void inspector(Editor& editor) {
                     event.fret = std::clamp(event.fret, 0.0f, 36.0f);
                 }
                 edit(fret_changed);
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("A slide at this same beat shares the initial fret and is updated in the same undoable edit.");
             }
         }
         ImGui::TextUnformatted(type == 1 ? "Damping amount" : "Strength");
@@ -816,6 +1003,13 @@ void inspector(Editor& editor) {
     ImGui::Spacing();
     ImGui::Separator();
     if (ImGui::TreeNode("Instrument controls")) {
+        const char* models[]{"Baseline 0.1", "Contact 0.2 (experimental)"};
+        int model = editor.document.pattern().model == "contact_0_2" ? 1 : 0;
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::Combo("##instrument_model", &model, models, 2))
+            editor.attempt([&] { editor.set_model(model == 1 ? "contact_0_2" : "baseline_0_1"); });
+        ImGui::TextDisabled("Pattern format v%d", editor.document.pattern().schema_version);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Existing v1 files keep the original baseline. Selecting a model explicitly uses v2; curves are preserved and cannot be flattened by choosing baseline.");
         float decay = editor.document.pattern().decay_seconds;
         float brightness = editor.document.pattern().brightness;
         float body_mix = editor.document.pattern().body_mix;
@@ -997,6 +1191,12 @@ void interface(Editor& editor) {
     if (ImGui::Button("+ Body hit")) {
         editor.attempt([&]() { editor.add("body_hit"); });
     }
+    ImGui::SameLine();
+    const bool slides_enabled = editor.document.pattern().model == "contact_0_2";
+    if (ImGui::Button(slides_enabled ? "+ Slide" : "Enable slides")) {
+        editor.attempt([&] { if (slides_enabled) editor.add_slide(); else editor.set_model("contact_0_2"); });
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip(slides_enabled ? "Add a continuous fret curve on the current string. It retains ringing vibration." : "Select the experimental contact model and v2 format. Undo restores the previous model; the original baseline remains selectable.");
     ImGui::SameLine(0.0f, 20.0f);
     ImGui::BeginDisabled(editor.rendering());
     if (ImGui::Button(editor.rendering() ? "Rendering..." : "Render")) {
@@ -1047,8 +1247,8 @@ void interface(Editor& editor) {
         editor.snap = snap == 0 ? 0.25f : (snap == 1 ? 0.5f : 1.0f);
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("%zu strings  |  %zu events  |  cursor %.2f", editor.document.pattern().tuning_midi.size(),
-                        editor.document.pattern().events.size(), editor.cursor_beat);
+    ImGui::TextDisabled("%zu strings | %zu events, %zu slides | cursor %.2f", editor.document.pattern().tuning_midi.size(),
+                        editor.document.pattern().events.size(), editor.document.pattern().gestures.size(), editor.cursor_beat);
 
     if (editor.source) {
         if (ImGui::Button("Play source")) editor.attempt([&]() { editor.play_source(); });
@@ -1085,7 +1285,7 @@ void interface(Editor& editor) {
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::TextDisabled("TAB  /  highest string first");
     ImGui::SameLine();
-    ImGui::TextDisabled("  fret = pluck   x = damp   + = body hit");
+    ImGui::TextDisabled("  fret = pluck   / = slide   x = damp   + = body hit");
     canvas(editor, ImGui::GetContentRegionAvail());
     ImGui::EndChild();
     ImGui::SameLine();
@@ -1102,7 +1302,7 @@ void interface(Editor& editor) {
     if (!editor.rendered.audio.mono.empty() && !editor.current_audio()) {
         ImGui::TextDisabled("Waveform: previous revision.  Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo");
     } else {
-        ImGui::TextDisabled("Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo | Delete event");
+        ImGui::TextDisabled("Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo | Delete selection");
     }
     unsaved_dialog(editor);
     ImGui::End();

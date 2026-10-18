@@ -64,6 +64,8 @@ jobs:
             .local/build/desktop/editor-unsaved-dialog.bmp
             .local/build/desktop/editor-source-comparison.bmp
             .local/build/desktop/editor-take-smoke.bmp
+            .local/build/desktop/editor-slide-smoke.bmp
+            .local/build/desktop/editor-slide-controls.bmp
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

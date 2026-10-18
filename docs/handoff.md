@@ -86,7 +86,8 @@ ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
 LeakSanitizer was blocked there. Intel Mac and current cross-platform
 qualification remain outstanding. Keep issue #1 open for those real checks.
 
-Next: add one continuous guitar gesture end-to-end while preserving the baseline.
+Next: polish a shared tab/wave beat viewport, then continue the planned sound/
+production or arrangement work in small verified increments.
 Real takes, clock/latency calibration and transcription need separate evidence.
 
 The native CLI now generates original deterministic broadband probes and checks
@@ -100,5 +101,11 @@ not qualify physical input/output latency or drift. See docs/alignment.md.
 Issue #3 core increment: `gt_create_model` explicitly selects `contact_0_2`;
 the legacy factory preserves `baseline_0_1`. Copied per-string slide points move
 contact without re-exciting vibration; damping, reset and render partitioning
-are covered by native tests. Core-only builds remain dependency-free. This is
-an experimental moving-delay model; pattern v2, Lua and editor authoring follow.
+are covered by native tests. Core-only builds remain dependency-free. Pattern v2
+now carries explicit model selection and local continuous slide points. The CLI,
+Lua and editor use the same renderer. The tab shows/selects slides; detailed
+unsnapped point edits, grouped undo, linked initial frets and save/reopen are
+implemented. V1 loading/saving stays v1. Unknown future gestures/models fail;
+sub-frame point collisions are rejected rather than flattened. The original
+slide study renders to `.local/slide-study.wav`. See docs/gestures.md. This is
+still an experimental moving-delay model, without a listening/realism claim.

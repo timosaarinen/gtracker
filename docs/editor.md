@@ -112,10 +112,15 @@ The first Lua API is deliberately coarse:
 
 | Function | Meaning |
 | --- | --- |
-| `gtracker.transpose(semitones)` | Shift the fret values of pluck events; tuning and damping locations stay fixed. |
+| `gtracker.transpose(semitones)` | Shift pluck and slide-point frets together; IDs, timing, tuning and damping locations stay fixed. |
 | `gtracker.set_tempo(bpm)` | Set pattern tempo. |
 | `gtracker.scale_strength(factor)` | Multiply pluck/body-hit strengths; damping amounts stay fixed. |
 | `gtracker.add_note(beat, string, fret, strength)` | Append a pluck with a generated unique ID; string is one-based and strength defaults to `0.7`. |
+| `gtracker.set_model(model)` | Explicitly select v2 `baseline_0_1` or experimental `contact_0_2`; existing slides prevent switching to baseline. |
+| `gtracker.add_slide(beat, string, points)` | Append a v2 contact curve; points contain local `beat`/`fret` values, starting at offset zero. |
+
+See [continuous slides](gestures.md) for the tab controls, model opt-in, shared
+initial fret editing, v1 compatibility and an original audible study.
 
 These operations work on a copy. The caller receives a new revision only after
 the script finishes and the whole resulting document validates. Lua/native
@@ -185,12 +190,13 @@ savepoints, revision bounds and history without SDL.
 
 ## Current scope
 
-Implemented: pluck/damp/body-hit pattern editing, basic instrument parameters,
+Implemented: pluck/damp/body-hit and continuous-slide editing, explicit baseline/
+contact model selection, basic instrument parameters,
 JSON load/save, document undo/redo, a small Lua command API, asynchronous rendering,
 queued playback, waveform inspection, and unattended UI capture.
 
-Future work includes recording, transcription integration, standard slide/hammer/
-pull-off markers and their physical gestures, continuous expression curves,
+Future work includes editor recording controls (CLI capture exists), musical
+transcription, hammer/pull-off and additional contact/expression gestures,
 multiple patterns and arrangement, course-aware twelve-string instruments,
 timeline zoom/scroll, richer keyboard tab entry, autosave/recovery, render
 cancellation, output-device selection, and reverb controls.

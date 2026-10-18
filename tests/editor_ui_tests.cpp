@@ -252,6 +252,112 @@ void source_workflow(Host& host, const Arguments& args, const std::filesystem::p
     check_ui(gtracker::load_pattern(directory / "pattern.gtrk.json").bpm == 110, "guarded take edit was not saved before loading");
     check_ui(file_bytes(directory / "source.wav") == source_before, "A/B/edit/save changed original source bytes");
 }
+
+void slide_authoring(Host& host, const Arguments& original) {
+    Arguments args = original;
+    args.document = original.document.parent_path() / std::filesystem::u8path(u8"slide-滑音.gtrk.json");
+    gtracker::save_pattern(gtracker::load_pattern(original.resource_dir / "examples/campfire.gtrk.json"), args.document);
+    Editor editor(args);
+    editor.set_model("contact_0_2");
+    editor.cursor_beat = 0;
+    editor.cursor_lane = 5;
+    editor.add_slide();
+    auto linked = editor.document.pattern().gestures.front();
+    linked.points.front().fret = 3;
+    editor.replace_slide(0, linked, {});
+    check_ui(editor.document.pattern().events.front().fret == 3, "initial curve edit did not update shared pluck fret");
+    auto linked_event = editor.document.pattern().events.front();
+    linked_event.fret = 4;
+    editor.replace_event(0, linked_event, {});
+    check_ui(editor.document.pattern().gestures.front().points.front().fret == 4, "pluck edit did not update shared initial curve fret");
+    editor.undo(); editor.undo(); editor.undo();
+    check_ui(editor.document.pattern().gestures.empty() && editor.document.pattern().events.front().fret == 0,
+             "linked fret edits were not independently undoable");
+    editor.cursor_beat = 0.25;
+    editor.cursor_lane = 5;
+    editor.add_slide();
+    const auto id = editor.document.pattern().gestures.front().id;
+    check_ui(editor.selected_gesture == 0 && editor.selected == -1, "new slide selection missing");
+
+    bool focus = true;
+    const auto controls = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20, 20));
+        ImGui::SetNextWindowSize(ImVec2(450, 680));
+        ImGui::Begin("Slide control regression");
+        if (focus) { ImGui::SetKeyboardFocusHere(); focus = false; }
+        slide_inspector(editor);
+        ImGui::End();
+    };
+    frame(host, controls);
+    frame(host, controls);
+    frame(host, controls, [&] {
+        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_A, true);
+    });
+    frame(host, controls, [&] {
+        auto& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiKey_A, false);
+        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        io.AddInputCharactersUTF8("0.31234567890123");
+    });
+    frame(host, controls, [&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, true); });
+    frame(host, controls, [&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Enter, false); });
+    check_ui(std::abs(editor.document.pattern().gestures.front().beat - 0.31234567890123) < 1e-14,
+             "real slide beat widget lost microtiming or did not commit");
+    editor.undo();
+    check_ui(editor.document.pattern().gestures.size() == 1 && editor.document.pattern().gestures.front().beat == 0.25,
+             "slide numeric entry did not undo as one operation");
+    editor.undo(true);
+    const auto edited_beat = editor.document.pattern().gestures.front().beat;
+
+    const ImVec2 origin(48, 80), size(800, 420);
+    const auto tab = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20, 20));
+        ImGui::SetNextWindowSize(ImVec2(900, 600));
+        ImGui::Begin("Slide canvas regression");
+        keyboard(editor);
+        ImGui::SetCursorScreenPos(origin);
+        canvas(editor, size);
+        ImGui::End();
+    };
+    editor.selected_gesture = -1;
+    frame(host, tab);
+    const float x = origin.x + 64 + static_cast<float>((edited_beat + 0.5) / 8) * (size.x - 84);
+    const float y = origin.y + 32 + 5.5f * ((size.y - 42) / 7);
+    frame(host, tab, [&] {
+        ImGui::GetIO().AddMousePosEvent(x, y);
+        ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    });
+    frame(host, tab, [&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false); });
+    check_ui(editor.selected_gesture == 0 && editor.selected == -1, "tab could not select continuous slide");
+    frame(host, tab, [&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Delete, true); });
+    check_ui(editor.document.pattern().gestures.empty(), "Delete did not remove selected curve");
+    frame(host, tab, [&] {
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Delete, false);
+        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Z, true);
+    });
+    check_ui(editor.document.pattern().gestures.size() == 1 && editor.document.pattern().gestures.front().id == id, "keyboard undo lost slide ID");
+    frame(host, tab, [&] {
+        ImGui::GetIO().AddKeyEvent(ImGuiKey_Z, false);
+        ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, false);
+    });
+    editor.attempt([&] { editor.set_model("baseline_0_1"); });
+    check_ui(editor.status_error && editor.document.pattern().model == "contact_0_2", "baseline selection flattened curves");
+    editor.save();
+    Editor reopened(args);
+    check_ui(reopened.document.pattern().schema_version == 2 && reopened.document.pattern().gestures.front().beat == edited_beat,
+             "editor save/reopen lost curve format or microtiming");
+    reopened.selected = -1;
+    reopened.selected_gesture = 0;
+    reopened.request_render();
+    reopened.pending.wait();
+    reopened.poll_render();
+    check_ui(reopened.rendered.audio.mono == gtracker::render_pattern(reopened.document.pattern()).mono, "editor used different curve renderer from native CLI/library");
+    frame(host, [&] { interface(reopened); });
+    frame(host, [&] { interface(reopened); });
+    host.screenshot(std::filesystem::current_path() / "editor-slide-controls.bmp");
+}
 }
 
 int main(int argc, char** argv) {
@@ -272,6 +378,7 @@ int main(int argc, char** argv) {
         render_and_dummy_audio(args);
         writable_defaults(args);
         source_workflow(host, args, std::filesystem::path(argv[2]));
+        slide_authoring(host, args);
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");
         std::filesystem::remove_all(directory);

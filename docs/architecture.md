@@ -9,8 +9,9 @@ ringing/contact/room state across musical boundaries.
 
 The first end-to-end target is: play two bars, inspect a proposed pattern, correct
 a fret or articulation, render through the canonical instrument, and A/B it
-against the original take. Current code covers manual score authoring and native
-resynthesis; capture and transcription remain explicit follow-up work.
+against the original take. Current code covers manual/continuous-slide authoring,
+native resynthesis, explicit CLI capture and source comparison. Automatic musical
+transcription and separately qualified real-device timing remain future work.
 
 ## Boundaries that already exist
 
@@ -24,6 +25,16 @@ approximation and limits.
 beat positions into sample timestamps, configures the core and writes WAV files.
 Its native event snapshot is independent of the editor. Stable sorting preserves
 source order for equal-time events. An offline render includes an explicit tail.
+V1 keeps the original baseline. V2 carries explicit model selection and local
+slide curves; beat-to-frame conversion preserves their points or rejects
+sub-frame collisions rather than flattening them. Model/control state lives in
+the core and is shared by CLI/editor renders.
+
+**gtracker_capture_io** is an SDL3 device/file-simulation layer outside the core.
+Explicit selectors, original application PCM16 and nominal sample timing are
+reported separately from real-device qualification. Python's `record-take`
+controller retains failed/cancelled raw captures and connects completed results
+to preserved take bundles and metadata-only analysis.
 
 **gtracker_scripts** exposes coarse editing commands to embedded Lua. A command
 runs against a copy; validation succeeds before the caller receives the new

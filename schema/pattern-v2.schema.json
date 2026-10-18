@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gtracker explicit model and continuous slide pattern v2",
+  "description": "Native validation also checks shared event/gesture IDs, bounds, same-string overlap, excitation conflicts and sample-rate limits. Keep pattern.schema.json beside this schema.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events", "gestures"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "name": {"$ref": "pattern.schema.json#/properties/name"},
+    "revision": {"$ref": "pattern.schema.json#/properties/revision"},
+    "tempo_bpm": {"$ref": "pattern.schema.json#/properties/tempo_bpm"},
+    "length_beats": {"$ref": "pattern.schema.json#/properties/length_beats"},
+    "seed": {"$ref": "pattern.schema.json#/properties/seed"},
+    "events": {"$ref": "pattern.schema.json#/properties/events"},
+    "instrument": {
+      "type": "object", "additionalProperties": false,
+      "required": ["model", "tuning_midi", "decay_seconds", "brightness", "body_mix"],
+      "properties": {
+        "model": {"enum": ["baseline_0_1", "contact_0_2"]},
+        "tuning_midi": {"$ref": "pattern.schema.json#/properties/instrument/properties/tuning_midi"},
+        "decay_seconds": {"$ref": "pattern.schema.json#/properties/instrument/properties/decay_seconds"},
+        "brightness": {"$ref": "pattern.schema.json#/properties/instrument/properties/brightness"},
+        "body_mix": {"$ref": "pattern.schema.json#/properties/instrument/properties/body_mix"}
+      }
+    },
+    "gestures": {
+      "type": "array", "maxItems": 16384,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "type", "beat", "string", "points"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "type": {"const": "slide"},
+          "beat": {"type": "number", "minimum": 0, "exclusiveMaximum": 256},
+          "string": {"type": "integer", "minimum": 1, "maximum": 12},
+          "points": {
+            "type": "array", "minItems": 2, "maxItems": 256,
+            "prefixItems": [{"allOf": [{"$ref": "#/$defs/point"}, {"properties": {"beat": {"const": 0}}}]}],
+            "items": {"$ref": "#/$defs/point"}
+          }
+        }
+      }
+    }
+  },
+  "allOf": [{
+    "if": {"properties": {"instrument": {"properties": {"model": {"const": "baseline_0_1"}}}}},
+    "then": {"properties": {"gestures": {"maxItems": 0}}}
+  }],
+  "$defs": {
+    "point": {
+      "type": "object", "additionalProperties": false, "required": ["beat", "fret"],
+      "properties": {
+        "beat": {"type": "number", "minimum": 0, "maximum": 256},
+        "fret": {"type": "number", "minimum": 0, "maximum": 36}
+      }
+    }
+  }
+}

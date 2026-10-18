@@ -101,6 +101,10 @@ void check_core(gt_result result) {
 }
 
 void validate_pattern(const Pattern& p) {
+    require(p.schema_version == 1 || p.schema_version == 2, "Unsupported schema_version; expected 1 or 2");
+    require(p.model == "baseline_0_1" || p.model == "contact_0_2", "Unsupported instrument model: " + p.model);
+    require(p.schema_version == 2 || (p.model == "baseline_0_1" && p.gestures.empty()), "Schema v1 supports only baseline_0_1 with no gestures; explicitly select v2/contact_0_2");
+    require(p.gestures.empty() || p.model == "contact_0_2", "Slide gestures require the explicit contact_0_2 model");
     require(!p.name.empty() && p.name.size() <= 256, "name must contain 1..256 UTF-8 bytes");
     require(p.revision > 0 && p.revision <= 9007199254740991ULL, "revision must be a positive JSON-safe integer");
     require(std::isfinite(p.bpm) && p.bpm >= 20 && p.bpm <= 400, "tempo_bpm must be in 20..400");
@@ -122,21 +126,67 @@ void validate_pattern(const Pattern& p) {
         if (event.type != "body_hit")
             require(event.string_index >= 0 && static_cast<std::size_t>(event.string_index) < p.tuning_midi.size(), "Event string is outside the instrument");
     }
+    require(p.gestures.size() <= 16384, "Pattern limit is 16384 gestures");
+    std::size_t total_points = 0;
+    std::vector<const Gesture*> ordered;
+    std::vector<const Event*> plucks;
+    for (const auto& event : p.events) if (event.type == "pluck") plucks.push_back(&event);
+    std::stable_sort(plucks.begin(), plucks.end(), [](const Event* a, const Event* b) { return a->beat < b->beat; });
+    for (const auto& gesture : p.gestures) {
+        require(!gesture.id.empty() && gesture.id.size() <= 128 && ids.insert(gesture.id).second, "Event/gesture IDs must be unique and contain 1..128 bytes");
+        require(gesture.type == "slide", "Unsupported gesture type: " + gesture.type + "; only slide is implemented");
+        require(std::isfinite(gesture.beat) && gesture.beat >= 0 && gesture.beat < p.length_beats, "Gesture start must be inside the pattern");
+        require(gesture.string_index >= 0 && static_cast<std::size_t>(gesture.string_index) < p.tuning_midi.size(), "Gesture string is outside the instrument");
+        require(gesture.points.size() >= 2 && gesture.points.size() <= 256, "Slide requires 2..256 fret points");
+        require(total_points <= 65536 - gesture.points.size(), "Pattern exceeds 65536 fret points");
+        total_points += gesture.points.size();
+        require(gesture.points.front().beat == 0, "Slide's first point must have beat offset zero");
+        double previous = -1;
+        for (const auto& point : gesture.points) {
+            require(std::isfinite(point.beat) && point.beat > previous && point.beat <= 256, "Slide point offsets must be finite, nonnegative and strictly increasing");
+            require(std::isfinite(point.fret) && point.fret >= 0 && point.fret <= 36, "Slide fret must be in 0..36");
+            previous = point.beat;
+        }
+        const double end = gesture.beat + gesture.points.back().beat;
+        require(end <= p.length_beats + 1e-9, "Slide ends beyond the pattern");
+        const auto first = std::lower_bound(plucks.begin(), plucks.end(), gesture.beat, [](const Event* event, double beat) { return event->beat < beat; });
+        for (auto event = first; event != plucks.end() && (*event)->beat < end - 1e-9; ++event) {
+            if ((*event)->string_index == gesture.string_index)
+                require(std::abs((*event)->beat - gesture.beat) <= 1e-9 && (*event)->fret == gesture.points.front().fret,
+                        "Slide '" + gesture.id + "' conflicts with pluck '" + (*event)->id + "'; use its initial fret at the same start, or pluck after the slide");
+        }
+        ordered.push_back(&gesture);
+    }
+    std::stable_sort(ordered.begin(), ordered.end(), [](const Gesture* a, const Gesture* b) { return a->beat < b->beat; });
+    std::vector<double> ends(p.tuning_midi.size(), -1);
+    for (const auto* gesture : ordered) {
+        auto& end = ends[static_cast<std::size_t>(gesture->string_index)];
+        require(gesture->beat >= end - 1e-9, "Same-string slides cannot overlap");
+        end = gesture->beat + gesture->points.back().beat;
+    }
 }
 
 Pattern parse_pattern_json(std::string_view source) {
     require(source.size() <= max_document_bytes, "Pattern JSON exceeds the 1 MiB prototype limit");
     const auto doc = json::parse(source);
-    keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events"}, "pattern");
-    require(unsigned_integer(doc.at("schema_version"), 1, "schema_version") == 1, "Unsupported schema_version; expected 1");
+    require(doc.is_object(), "Pattern JSON must be an object");
+    const auto version = unsigned_integer(doc.at("schema_version"), 9007199254740991ULL, "schema_version");
+    require(version == 1 || version == 2, "Unsupported schema_version; expected 1 or 2");
+    if (version == 1) keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events"}, "pattern");
+    else keys(doc, {"schema_version", "name", "revision", "tempo_bpm", "length_beats", "seed", "instrument", "events", "gestures"}, "pattern v2");
     Pattern p;
+    p.schema_version = static_cast<int>(version);
     p.name = doc.at("name").get<std::string>();
     p.revision = unsigned_integer(doc.at("revision"), 9007199254740991ULL, "revision");
     p.bpm = real_number(doc.at("tempo_bpm"), "tempo_bpm");
     p.length_beats = real_number(doc.at("length_beats"), "length_beats");
     p.seed = static_cast<std::uint32_t>(unsigned_integer(doc.at("seed"), std::numeric_limits<std::uint32_t>::max(), "seed"));
     const auto& instrument = doc.at("instrument");
-    keys(instrument, {"tuning_midi", "decay_seconds", "brightness", "body_mix"}, "instrument");
+    if (version == 1) keys(instrument, {"tuning_midi", "decay_seconds", "brightness", "body_mix"}, "instrument");
+    else {
+        keys(instrument, {"tuning_midi", "decay_seconds", "brightness", "body_mix", "model"}, "instrument v2");
+        p.model = instrument.at("model").get<std::string>();
+    }
     const auto& tuning = instrument.at("tuning_midi");
     require(tuning.is_array() && !tuning.empty() && tuning.size() <= 12, "tuning_midi must contain 1..12 pitches");
     p.tuning_midi.clear();
@@ -164,6 +214,28 @@ Pattern parse_pattern_json(std::string_view source) {
         }
         p.events.push_back(event);
     }
+    if (version == 2) {
+        const auto& gestures = doc.at("gestures");
+        require(gestures.is_array() && gestures.size() <= 16384, "gestures must be an array of at most 16384 slides");
+        for (const auto& item : gestures) {
+            keys(item, {"id", "type", "beat", "string", "points"}, "gesture");
+            Gesture gesture;
+            gesture.id = item.at("id").get<std::string>();
+            gesture.type = item.at("type").get<std::string>();
+            require(gesture.type == "slide", "Unsupported gesture type: " + gesture.type + "; only slide is implemented");
+            gesture.beat = real_number(item.at("beat"), "gesture.beat");
+            const auto string = unsigned_integer(item.at("string"), 12, "gesture.string");
+            require(string > 0, "JSON gesture string numbers begin at 1");
+            gesture.string_index = static_cast<int>(string - 1);
+            const auto& points = item.at("points");
+            require(points.is_array() && points.size() >= 2 && points.size() <= 256, "Slide requires 2..256 points");
+            for (const auto& point : points) {
+                keys(point, {"beat", "fret"}, "slide point");
+                gesture.points.push_back({real_number(point.at("beat"), "slide point.beat"), static_cast<float>(real_number(point.at("fret"), "slide point.fret"))});
+            }
+            p.gestures.push_back(std::move(gesture));
+        }
+    }
     validate_pattern(p);
     return p;
 }
@@ -177,11 +249,20 @@ std::string pattern_json(const Pattern& p) {
         if (event.type == "pluck") item["fret"] = event.fret;
         events.push_back(std::move(item));
     }
-    json doc{{"schema_version", 1}, {"name", p.name}, {"revision", p.revision},
+    json doc{{"schema_version", p.schema_version}, {"name", p.name}, {"revision", p.revision},
         {"tempo_bpm", p.bpm}, {"length_beats", p.length_beats}, {"seed", p.seed},
         {"instrument", {{"tuning_midi", p.tuning_midi}, {"decay_seconds", p.decay_seconds},
                         {"brightness", p.brightness}, {"body_mix", p.body_mix}}},
         {"events", events}};
+    if (p.schema_version == 2) {
+        doc["instrument"]["model"] = p.model;
+        doc["gestures"] = json::array();
+        for (const auto& gesture : p.gestures) {
+            json points = json::array();
+            for (const auto& point : gesture.points) points.push_back({{"beat", point.beat}, {"fret", point.fret}});
+            doc["gestures"].push_back({{"id", gesture.id}, {"type", gesture.type}, {"beat", gesture.beat}, {"string", gesture.string_index + 1}, {"points", points}});
+        }
+    }
     return doc.dump(2) + "\n";
 }
 
@@ -221,7 +302,7 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     for (std::size_t i = 0; i < p.tuning_midi.size(); ++i)
         config.tuning_hz[i] = static_cast<float>(440.0 * std::pow(2.0, (p.tuning_midi[i] - 69.0) / 12.0));
     gt_synth* raw = nullptr;
-    check_core(gt_create(&config, &raw));
+    check_core(gt_create_model(&config, p.model == "contact_0_2" ? GT_MODEL_CONTACT_0_2 : GT_MODEL_BASELINE_0_1, &raw));
     std::unique_ptr<gt_synth, decltype(&gt_destroy)> synth(raw, gt_destroy);
     auto ordered = p.events;
     std::stable_sort(ordered.begin(), ordered.end(), [](const Event& a, const Event& b) { return a.beat < b.beat; });
@@ -240,7 +321,33 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
         event.strength = source.strength;
         events.push_back(event);
     }
-    check_core(gt_set_events(synth.get(), events.data(), events.size()));
+    auto ordered_gestures = p.gestures;
+    std::stable_sort(ordered_gestures.begin(), ordered_gestures.end(), [](const Gesture& a, const Gesture& b) { return a.beat < b.beat; });
+    std::vector<std::vector<gt_fret_point>> point_storage;
+    std::vector<gt_slide> slides;
+    point_storage.reserve(ordered_gestures.size()); slides.reserve(ordered_gestures.size());
+    for (const auto& gesture : ordered_gestures) {
+        gt_slide slide{};
+        slide.frame = static_cast<std::uint64_t>(std::llround(gesture.beat * seconds_per_beat * options.sample_rate));
+        slide.string_index = static_cast<std::uint32_t>(gesture.string_index);
+        require(slide.frame < musical_frames, "Slide '" + gesture.id + "' starts beyond the pattern after sample rounding");
+        point_storage.emplace_back();
+        auto& points = point_storage.back();
+        for (const auto& source : gesture.points) {
+            const double frequency = config.tuning_hz[slide.string_index] * std::exp2(static_cast<double>(source.fret) / 12.0);
+            require(frequency <= options.sample_rate / 4.0, "Slide '" + gesture.id + "' exceeds this sample rate's pitch limit");
+            const auto frame = static_cast<std::uint64_t>(std::llround((gesture.beat + source.beat) * seconds_per_beat * options.sample_rate));
+            require(frame <= musical_frames, "Slide '" + gesture.id + "' ends beyond the pattern after sample rounding");
+            require(frame >= slide.frame && (points.empty() || frame - slide.frame > points.back().frame_offset),
+                    "Slide '" + gesture.id + "' has points closer than one sample frame; increase sample rate or separate the points");
+            points.push_back({frame - slide.frame, source.fret});
+        }
+        slide.points = points.data(); slide.point_count = points.size();
+        slides.push_back(slide);
+    }
+    const auto loaded = gt_set_performance(synth.get(), events.data(), events.size(), slides.data(), slides.size());
+    require(loaded != GT_INVALID_ARGUMENT, "Performance curves/events conflict after sample rounding; increase sample rate or separate them");
+    check_core(loaded);
     RenderResult result;
     result.sample_rate = options.sample_rate;
     result.mono.resize(static_cast<std::size_t>(frame_count));

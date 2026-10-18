@@ -167,6 +167,10 @@ if(GT_BUILD_TESTS)
     target_link_libraries(gtracker_project_tests PRIVATE gtracker_scripts)
     gt_warnings(gtracker_project_tests)
     add_test(NAME project COMMAND gtracker_project_tests "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_executable(gtracker_gesture_project_tests tests/gesture_project_tests.cpp)
+    target_link_libraries(gtracker_gesture_project_tests PRIVATE gtracker_scripts gtracker_editor_state)
+    gt_warnings(gtracker_gesture_project_tests)
+    add_test(NAME gesture_project COMMAND gtracker_gesture_project_tests "${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME cli_validate COMMAND gtracker_cli validate "${CMAKE_CURRENT_SOURCE_DIR}/examples/campfire.gtrk.json" --json)
     add_test(NAME cli_render COMMAND gtracker_cli render "${CMAKE_CURRENT_SOURCE_DIR}/examples/campfire.gtrk.json"
       --output "${CMAKE_CURRENT_BINARY_DIR}/smoke.wav" --tail 0.5 --json)
@@ -203,8 +207,11 @@ if(GT_BUILD_TESTS)
       add_test(NAME editor_take_smoke COMMAND gtracker_editor --take "${editor_take_fixture}"
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/editor-data" --resource-dir "${CMAKE_CURRENT_SOURCE_DIR}"
         --smoke-test --frames 8 --screenshot "${CMAKE_CURRENT_BINARY_DIR}/editor-take-smoke.bmp")
+      add_test(NAME editor_slide_smoke COMMAND gtracker_editor "${CMAKE_CURRENT_SOURCE_DIR}/examples/slide-study.gtrk.json"
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/editor-data" --resource-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+        --smoke-test --frames 8 --screenshot "${CMAKE_CURRENT_BINARY_DIR}/editor-slide-smoke.bmp")
       set_tests_properties(editor_ui editor_take_smoke PROPERTIES FIXTURES_REQUIRED editor_take_files)
-      set_tests_properties(editor_ui editor_smoke editor_take_smoke PROPERTIES
+      set_tests_properties(editor_ui editor_smoke editor_take_smoke editor_slide_smoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_RENDER_DRIVER=software;SDL_AUDIODRIVER=dummy" TIMEOUT 40)
     endif()
   endif()
