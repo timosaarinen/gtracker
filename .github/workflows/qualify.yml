@@ -1,0 +1,57 @@
+name: Manual cross-platform qualification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qualify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: ${{ matrix.os }} / Release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15-intel]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Enable MSVC for the Ninja generator
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+      - name: Install pinned Ninja
+        run: python -m pip install --disable-pip-version-check ninja==1.11.1.4
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxrender-dev libxss-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libgl1-mesa-dev
+      - name: Inspect toolchain
+        run: python tools/dev.py doctor
+      - name: Run headless local qualification suite
+        run: python tools/dev.py ci
+      - name: Configure desktop
+        run: python tools/dev.py configure --profile desktop
+      - name: Compile desktop (does not exercise a real window or audio device)
+        run: python tools/dev.py build --profile desktop
+      - name: Preserve qualification evidence and example render
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: qualification-${{ matrix.os }}
+          path: |
+            .local/ci/
+            .local/demo.wav
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

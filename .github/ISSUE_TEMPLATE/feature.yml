@@ -1,0 +1,29 @@
+name: Feature or research slice
+description: Propose a small, testable addition to the instrument or tracker.
+body:
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Intended musical or user outcome
+      description: What should the user be able to hear, edit, record, or inspect?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: First useful implementation
+      description: Keep the slice concrete. Include a repeatable input, CLI/config controls, and dependencies where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Acceptance evidence
+      description: Specify what proves it works. Distinguish compilation, numerical checks, GUI interaction, listening, and microphone capture.
+    validations:
+      required: true
+  - type: textarea
+    id: research
+    attributes:
+      label: Research, alternatives, and remaining uncertainty
+      description: Link primary sources and label hypotheses. Optional.

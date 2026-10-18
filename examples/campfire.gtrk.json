@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "name": "First campfire - original prototype phrase",
+  "revision": 1,
+  "tempo_bpm": 90,
+  "length_beats": 8,
+  "seed": 42,
+  "instrument": {
+    "tuning_midi": [64, 59, 55, 50, 45, 40],
+    "decay_seconds": 2.5,
+    "brightness": 0.6,
+    "body_mix": 0.15
+  },
+  "events": [
+    {"id":"p01", "type":"pluck", "beat":0, "string":6, "fret":0, "strength":0.65},
+    {"id":"p02", "type":"pluck", "beat":0.5, "string":3, "fret":0, "strength":0.5},
+    {"id":"p03", "type":"pluck", "beat":1, "string":2, "fret":0, "strength":0.48},
+    {"id":"b01", "type":"body_hit", "beat":1, "strength":0.55},
+    {"id":"p04", "type":"pluck", "beat":1.5, "string":1, "fret":0, "strength":0.55},
+    {"id":"p05", "type":"pluck", "beat":2, "string":5, "fret":2, "strength":0.6},
+    {"id":"p06", "type":"pluck", "beat":2.5, "string":2, "fret":3, "strength":0.5},
+    {"id":"p07", "type":"pluck", "beat":3, "string":1, "fret":2, "strength":0.58},
+    {"id":"b02", "type":"body_hit", "beat":3, "strength":0.38},
+    {"id":"p08", "type":"pluck", "beat":4, "string":6, "fret":3, "strength":0.65},
+    {"id":"p09", "type":"pluck", "beat":4.5, "string":3, "fret":0, "strength":0.47},
+    {"id":"p10", "type":"pluck", "beat":5, "string":2, "fret":0, "strength":0.5},
+    {"id":"b03", "type":"body_hit", "beat":5, "strength":0.5},
+    {"id":"p11", "type":"pluck", "beat":5.5, "string":1, "fret":3, "strength":0.6},
+    {"id":"p12", "type":"pluck", "beat":6, "string":1, "fret":0, "strength":0.6},
+    {"id":"p13", "type":"pluck", "beat":6.05, "string":6, "fret":0, "strength":0.5},
+    {"id":"d01", "type":"damp", "beat":7.5, "string":6, "strength":0.95},
+    {"id":"d02", "type":"damp", "beat":7.5, "string":1, "strength":0.85}
+  ]
+}

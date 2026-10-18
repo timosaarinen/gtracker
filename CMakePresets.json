@@ -1,0 +1,46 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {"major": 3, "minor": 25, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "base", "hidden": true, "generator": "Ninja",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Release", "GT_BUILD_TESTS": "ON"}
+    },
+    {
+      "name": "headless", "inherits": "base",
+      "displayName": "Core, CLI and Lua; no desktop dependencies",
+      "binaryDir": "${sourceDir}/.local/build/headless",
+      "cacheVariables": {"GT_BUILD_EDITOR": "OFF", "GT_ENABLE_LUA": "ON"}
+    },
+    {
+      "name": "desktop", "inherits": "base",
+      "displayName": "Native SDL3/ImGui editor, core, CLI and Lua",
+      "binaryDir": "${sourceDir}/.local/build/desktop",
+      "cacheVariables": {"GT_BUILD_EDITOR": "ON", "GT_ENABLE_LUA": "ON"}
+    },
+    {
+      "name": "core-only", "inherits": "base",
+      "displayName": "Dependency-free instrument and C ABI tests",
+      "binaryDir": "${sourceDir}/.local/build/core-only",
+      "cacheVariables": {"GT_BUILD_EDITOR": "OFF", "GT_BUILD_TOOLS": "OFF", "GT_ENABLE_LUA": "OFF"}
+    },
+    {
+      "name": "sanitize", "inherits": "headless",
+      "binaryDir": "${sourceDir}/.local/build/sanitize",
+      "cacheVariables": {"CMAKE_BUILD_TYPE": "Debug", "GT_ENABLE_SANITIZERS": "ON"},
+      "condition": {"type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows"}
+    }
+  ],
+  "buildPresets": [
+    {"name": "headless", "configurePreset": "headless", "configuration": "Release"},
+    {"name": "desktop", "configurePreset": "desktop", "configuration": "Release"},
+    {"name": "core-only", "configurePreset": "core-only", "configuration": "Release"},
+    {"name": "sanitize", "configurePreset": "sanitize", "configuration": "Debug"}
+  ],
+  "testPresets": [
+    {"name": "headless", "configurePreset": "headless", "output": {"outputOnFailure": true}},
+    {"name": "desktop", "configurePreset": "desktop", "output": {"outputOnFailure": true}},
+    {"name": "core-only", "configurePreset": "core-only", "output": {"outputOnFailure": true}},
+    {"name": "sanitize", "configurePreset": "sanitize", "output": {"outputOnFailure": true}}
+  ]
+}
