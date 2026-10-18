@@ -121,7 +121,7 @@ transcription capability.
 
 ## Repeatable generated evaluation
 
-After building the native CLI, run:
+From a source checkout, after building the native CLI, run:
 
 ```sh
 python -m analysis.evaluate --output .local/evaluations/proposals-001 --json

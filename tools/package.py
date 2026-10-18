@@ -146,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output or Path(f".local/packages/gtracker-{args.profile}-{platform.system()}-{platform.machine()}.zip")
     try:
         manifest = build_package(dev.ROOT, args.profile, output)
-        print(f"Developer package: {output} ({len(manifest['files'])} files; {manifest['source']['revision']})")
+        print(f"Developer package: {output} ({len(manifest['files'])} payload files + manifest; {manifest['source']['revision']})")
         return 0
     except (OSError, RuntimeError, ValueError) as error:
         print(f"package: {error}", file=sys.stderr)

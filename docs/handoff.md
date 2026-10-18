@@ -1,8 +1,9 @@
 # Current handoff
 
-Night shift, 2026-10-18, 01:51–09:51 UTC. Work is still in progress until the
-requested end time. Read `README.md`, `AGENTS.md` and the relevant issue before
-editing. Local checks are authoritative; generated/private files stay in `.local/`.
+Night shift, 2026-10-18, requested eight-hour window starting about 01:51 UTC.
+This handoff records the completed implementation and checks as of 09:20 UTC.
+Read `README.md`, `AGENTS.md` and the relevant issue before editing. Local checks
+are authoritative; generated/private files stay in `.local/`.
 
 ## Shipped foundations
 
@@ -48,37 +49,42 @@ work; no hosted workflow, public release or issue communication was triggered.
 
 ## Verified source and platforms
 
-The last clean native/UI checkpoint is **44ed22e**, including the layout polish
-and sanitizer-only editor timeout adjustment. Its framebuffer names and focused
-source fingerprint are in `.local/nightshift/layout-checks.json`. The subsequent
-optional evaluation command passed five focused Python tests and its complete
-seven-case experiment in the standard-library analysis venv; fresh full Python
-checks follow that separate commit.
+The final implementation checkpoint is **239e599**. It passed Windows full CI
+and both platforms' expanded 101-test Python suites, plus the seven-case generated
+evaluation. Native/editor C++ has not changed since **44ed22e**, which passed the
+Linux native/desktop/sanitizer matrix below. Focused layout source fingerprints
+and framebuffer names are in `.local/nightshift/layout-checks.json`. Subsequent
+changes only clarify documentation and the package file-count message; package
+unit tests passed (5/5) after that message change.
 
-| Platform/toolchain | Actual evidence at 44ed22e |
+| Platform/toolchain | Actual evidence |
 | --- | --- |
-| Windows 11 AMD64, i7-10700K, Clang18.1.8 Release, Python3.12.6 | Headless21; Python96 with one POSIX-only interrupt skip; desktop29; dependency-free core-only7 |
-| Ubuntu20.04.6 WSL x86_64, GCC9.4 Release, Python3.11.9 | Headless21; Python96 without skips; desktop29 |
-| Same Ubuntu, Clang10 Debug ASan/UBSan | Headless21; separately compiled actual editor UI/fixtures3 passed CTest with the180-second limit (UI50.18s) |
+| Windows 11 AMD64, i7-10700K, Clang 18.1.8 Release, Python 3.12.6 | 21 headless / 101 Python tests at `239e599` (one POSIX-only interrupt skip); 29 desktop tests at `44ed22e`; 7 dependency-free core tests at `239e599` |
+| Ubuntu20.04.6 WSL x86_64, GCC 9.4 Release, Python 3.11.9 | 21 headless / 29 desktop tests at `44ed22e`; 101 Python tests and 7 generated evaluation cases at `239e599`, without skips |
+| Same Ubuntu, Clang 10 Debug ASan/UBSan | 21 headless tests; separately compiled actual editor UI + 2 fixtures passed CTest with the 180-second limit (UI: 50.18s) |
 
-Windows CI receipt: `.local/ci/runs/20261018T085704Z-26b9dba3/report.json`.
+Windows CI receipt: `.local/ci/runs/20261018T090834Z-30daa0a7/report.json`.
 Ubuntu CI receipt: `.local/qualification/ubuntu/.local/ci/runs/20261018T085759Z-ce545e54/report.json`.
-Other logs: `.local/nightshift/windows-layout-{ci,desktop}.log`,
+Other logs: `.local/nightshift/windows-evaluation-ci.log`, `.local/nightshift/windows-layout-desktop.log`,
 `.local/qualification/ubuntu/.local/layout-{desktop,clang}.log`,
 `.local/qualification/ubuntu/.local/layout-editor-asan-ui.log`.
-The core-only7 check last ran at9b01b08; subsequent edits are editor/config/Python.
+The current core-only log is `.local/nightshift/delivery-core.log`; Ubuntu
+Python/evaluation logs use `.local/qualification/ubuntu/.local/evaluation-`.
 
-At9b01b08, both 53-file Windows/Linux desktop ZIPs passed manifest/hash checks after moving
+At `239e599`, both Windows/Linux desktop ZIPs (53 payload files plus manifest)
+passed manifest/hash checks after moving
 into Unicode/space paths and launching from an unrelated directory. Windows ACL
 write/create denial was enforced on private extracted copies; the Linux audit
 also proved that denial through WSL. CLI transform/save/validate, exact song
 transition preview, cache miss/hit and dummy editor smoke preserved bundled
 bytes. Windows additionally exercised native proposal inspection and owned
 interruption recovery. Temporary ACLs were restored. Reports:
-`.local/nightshift/relocation-3a86c721/report.json` and
-`.local/nightshift/linux-relocation-d680716c/report.json`.
-The 43-file Windows headless ZIP also built. Packages require host runtimes and
-are developer artifacts, not a public release.
+`.local/nightshift/relocation-52c94f0e/report.json` and
+`.local/nightshift/linux-relocation-1b97bb54/report.json`.
+Both headless ZIPs also built (43 payload files plus manifest). Final refreshed
+archive hashes/provenance belong in `.local/nightshift/final-evidence.json`.
+An obsolete early preview ZIP is preserved under `.local/nightshift/archive/`.
+Packages require host runtimes and are developer artifacts, not a public release.
 
 Native compilation, synthetic UI/dummy playback, real window interaction,
 listening and microphone capture remain separate evidence. **No physical
@@ -129,13 +135,17 @@ machine/workload in `docs/retained.md` and local receipts.
 
 The old GCC9 ASan runtime in this WSL install repeatedly failed inside its runtime
 with recursive diagnostics; it is not a passing code check. Use the verified
-Clang10 build at `.local/build/sanitize-clang` in the isolated Ubuntu clone.
-An extra instrumented desktop test initially reached CTest's40-second limit;
-the same workflow passed directly with180 seconds. CMake now sets180 seconds
-for sanitizer `editor_ui` only; normal desktop limits stay40. Early new export
+Clang 10 build at `.local/build/sanitize-clang` in the isolated Ubuntu clone.
+An extra instrumented desktop test initially reached CTest's 40-second limit;
+the same workflow passed directly with 180 seconds. CMake now sets 180 seconds
+for sanitizer `editor_ui` only; normal desktop limits stay 40. Early new export
 test failures (a popup query outside an ImGui window, stale fixed test storage,
 and invalid schema/length fixtures) were corrected before the passing checks.
-A deeply nested invalid pattern also failed cleanly in a separate parser audit.
+The separate native input audit rejected 39 generated malformed/out-of-range
+patterns with structured errors on Windows Release and Clang 10 ASan/UBSan; a
+privately copied source also survived an attempted output alias. Reports are
+`.local/nightshift/native-input-audit/{report,clang-asan-report}.json`. This
+bounded audit supplements the suites; it is not exhaustive fuzzing.
 
 Next, complete physical Windows/Linux playback/capture and Intel Mac checks;
 then collect consented real guitar takes with timing/source uncertainty intact.
