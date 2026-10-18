@@ -1,22 +1,16 @@
 #include "gtracker/project.hpp"
 #include "gtracker/core.h"
 #include "gtracker/hash.hpp"
+#include "gtracker/io.hpp"
 
 #include <nlohmann/json.hpp>
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <set>
 #include <stdexcept>
-#include <system_error>
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#endif
 
 namespace gtracker {
 namespace {
@@ -54,45 +48,6 @@ std::uint64_t unsigned_integer(const json& value, std::uint64_t maximum, const c
     const auto n = value.get<std::int64_t>();
     require(n >= 0 && static_cast<std::uint64_t>(n) <= maximum, std::string(where) + " is out of range");
     return static_cast<std::uint64_t>(n);
-}
-
-std::filesystem::path temporary_path(const std::filesystem::path& destination) {
-    static std::atomic<unsigned long long> counter{0};
-    if (!destination.parent_path().empty()) std::filesystem::create_directories(destination.parent_path());
-    auto result = destination;
-    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    result += ".tmp-" + std::to_string(stamp) + "-" + std::to_string(counter++);
-    return result;
-}
-
-void publish_file(const std::filesystem::path& temporary, const std::filesystem::path& destination) {
-#ifdef _WIN32
-    if (!MoveFileExW(temporary.c_str(), destination.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        const auto error = GetLastError();
-        throw std::runtime_error("Cannot replace output file (Windows error " + std::to_string(error) + ")");
-    }
-#else
-    std::filesystem::rename(temporary, destination);
-#endif
-}
-
-template<typename Writer> void write_file(const std::filesystem::path& path, Writer writer) {
-    require(!path.empty(), "Output path must not be empty");
-    const auto temporary = temporary_path(path);
-    try {
-        std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-        require(static_cast<bool>(out), "Cannot create output: " + path.u8string());
-        writer(out);
-        out.flush();
-        require(static_cast<bool>(out), "Cannot write output: " + path.u8string());
-        out.close();
-        require(static_cast<bool>(out), "Cannot close output: " + path.u8string());
-        publish_file(temporary, path);
-    } catch (...) {
-        std::error_code ignored;
-        std::filesystem::remove(temporary, ignored);
-        throw;
-    }
 }
 
 json production_value(const ProductionSettings& s) {
@@ -313,7 +268,7 @@ Pattern load_pattern(const std::filesystem::path& path) {
 void save_pattern(const Pattern& p, const std::filesystem::path& path) {
     const auto text = pattern_json(p);
     require(text.size() <= max_document_bytes, "Serialized pattern exceeds the 1 MiB prototype limit");
-    write_file(path, [&](std::ostream& out) { out.write(text.data(), static_cast<std::streamsize>(text.size())); });
+    write_binary_atomic(path, [&](std::ostream& out) { out.write(text.data(), static_cast<std::streamsize>(text.size())); });
 }
 
 std::string render_identity(const Pattern& p, const RenderOptions& options) {
@@ -382,14 +337,33 @@ NativePerformance compile_pattern(const Pattern& p, int sample_rate) {
             std::move(events), std::move(slides)};
 }
 
+ProductionSettings effective_production(const Pattern& pattern, const RenderOptions& options) {
+    auto production = options.production_override.value_or(pattern.production.value_or(ProductionSettings{}));
+    validate_production(production);
+    if (options.bypass_production) production.enabled = false;
+    return production;
+}
+
+NativeRenderer pattern_renderer(const Pattern& p, const RenderOptions& options) {
+    validate_pattern(p);
+    require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
+    require(std::isfinite(options.tail_seconds) && options.tail_seconds >= 0 && options.tail_seconds <= 30, "tail must be in 0..30 seconds");
+    const auto frames = static_cast<std::uint64_t>(std::ceil((p.length_beats * (60.0 / p.bpm) + options.tail_seconds) * options.sample_rate));
+    return NativeRenderer(compile_pattern(p, options.sample_rate), frames, effective_production(p, options));
+}
+
+StreamRenderResult render_pattern_wav(const Pattern& pattern, const std::filesystem::path& path,
+                                     const RenderOptions& options, const StreamOptions& stream) {
+    auto renderer = pattern_renderer(pattern, options);
+    return export_wav(renderer, path, render_identity(pattern, options), stream);
+}
+
 RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     validate_pattern(p);
     require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
     require(std::isfinite(options.tail_seconds) && options.tail_seconds >= 0 && options.tail_seconds <= 30, "tail must be in 0..30 seconds");
     const double seconds_per_beat = 60.0 / p.bpm;
-    auto production = options.production_override.value_or(p.production.value_or(ProductionSettings{}));
-    validate_production(production);
-    if (options.bypass_production) production.enabled = false;
+    const auto production = effective_production(p, options);
     const auto channels = production.enabled ? 2 : 1;
     const double dry_frame_count = std::ceil((p.length_beats * seconds_per_beat + options.tail_seconds) * options.sample_rate);
     const double room_tail = production_tail_seconds(production);
@@ -422,22 +396,11 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
 }
 
 void write_wav(const std::filesystem::path& path, const std::vector<float>& samples, int sample_rate, int channels) {
-    require(sample_rate >= 8000 && sample_rate <= 192000, "WAV sample rate is out of range");
     require(channels == 1 || channels == 2, "WAV requires one or two channels");
     require(samples.size() % static_cast<std::size_t>(channels) == 0, "WAV requires complete interleaved frames");
-    require(samples.size() <= (std::numeric_limits<std::uint32_t>::max() - 36ULL) / 2, "WAV exceeds RIFF size limit");
-    for (float value : samples) require(std::isfinite(value), "Cannot write non-finite WAV samples");
-    write_file(path, [&](std::ostream& out) {
-        const auto u16 = [&](std::uint16_t v) { out.put(static_cast<char>(v & 255)); out.put(static_cast<char>((v >> 8) & 255)); };
-        const auto u32 = [&](std::uint32_t v) { u16(static_cast<std::uint16_t>(v)); u16(static_cast<std::uint16_t>(v >> 16)); };
-        const auto bytes = static_cast<std::uint32_t>(samples.size() * 2);
-        out.write("RIFF", 4); u32(36 + bytes); out.write("WAVEfmt ", 8); u32(16);
-        u16(1); u16(static_cast<std::uint16_t>(channels)); u32(static_cast<std::uint32_t>(sample_rate)); u32(static_cast<std::uint32_t>(sample_rate) * 2 * static_cast<std::uint32_t>(channels));
-        u16(static_cast<std::uint16_t>(2 * channels)); u16(16); out.write("data", 4); u32(bytes);
-        for (float value : samples) {
-            const auto sample = static_cast<std::int16_t>(std::lround(std::clamp(value, -1.0f, 1.0f) * 32767.0f));
-            u16(static_cast<std::uint16_t>(sample));
-        }
+    write_binary_atomic(path, [&](std::ostream& out) {
+        write_pcm16_header(out, samples.size() / static_cast<std::size_t>(channels), sample_rate, channels);
+        write_float_pcm16(out, samples.data(), samples.size());
     });
 }
 
@@ -446,7 +409,7 @@ void write_pcm16_wav(const std::filesystem::path& path, const std::vector<std::i
     require(channels == 1 || channels == 2, "Captured WAV requires one or two channels");
     require(!samples.empty() && samples.size() % static_cast<std::size_t>(channels) == 0, "Captured WAV needs complete nonempty PCM frames");
     require(samples.size() <= (std::numeric_limits<std::uint32_t>::max() - 36ULL) / 2, "WAV exceeds RIFF size limit");
-    write_file(path, [&](std::ostream& out) {
+    write_binary_atomic(path, [&](std::ostream& out) {
         const auto u16 = [&](std::uint16_t value) { out.put(static_cast<char>(value & 255)); out.put(static_cast<char>(value >> 8)); };
         const auto u32 = [&](std::uint32_t value) { u16(static_cast<std::uint16_t>(value)); u16(static_cast<std::uint16_t>(value >> 16)); };
         const auto bytes = static_cast<std::uint32_t>(samples.size() * 2);
@@ -460,6 +423,6 @@ void write_pcm16_wav(const std::filesystem::path& path, const std::vector<std::i
 }
 
 void write_text_atomic(const std::filesystem::path& path, std::string_view text) {
-    write_file(path, [&](std::ostream& out) { out.write(text.data(), static_cast<std::streamsize>(text.size())); });
+    write_binary_atomic(path, [&](std::ostream& out) { out.write(text.data(), static_cast<std::streamsize>(text.size())); });
 }
 } // namespace gtracker

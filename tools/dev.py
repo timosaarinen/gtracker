@@ -230,7 +230,8 @@ def ci_lock(root: Path):
             pass
 
 
-def run_command(root: Path, argv: list[str], log_path: Path | None = None, echo: bool = True) -> dict:
+def run_command(root: Path, argv: list[str], log_path: Path | None = None, echo: bool = True, separate_stderr: bool = False,
+                cancel_file: Path | None = None) -> dict:
     started = utc_now()
     clock = time.monotonic()
     if echo:
@@ -238,7 +239,8 @@ def run_command(root: Path, argv: list[str], log_path: Path | None = None, echo:
     log = log_path.open("w", encoding="utf-8") if log_path else None
     code = 127
     try:
-        process = subprocess.Popen(argv, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+        process = subprocess.Popen(argv, cwd=root, stdout=subprocess.PIPE, stderr=None if separate_stderr else subprocess.STDOUT,
+                                   text=True, encoding="utf-8", errors="replace")
         try:
             assert process.stdout is not None
             for line in process.stdout:
@@ -246,6 +248,27 @@ def run_command(root: Path, argv: list[str], log_path: Path | None = None, echo:
                 if log:
                     log.write(line)
             code = process.wait()
+        except KeyboardInterrupt:
+            if cancel_file is None:
+                process.terminate()
+                try: process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill(); process.wait()
+                raise
+            try:
+                cancel_file.parent.mkdir(parents=True, exist_ok=True)
+                cancel_file.touch()
+                remaining, _ = process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill(); process.wait()
+                raise RuntimeError("Render did not acknowledge cancellation within 10 seconds; its process was stopped.") from None
+            except BaseException:
+                if process.poll() is None: process.kill(); process.wait()
+                raise
+            if remaining:
+                print(remaining, end="", flush=True)
+                if log: log.write(remaining)
+            code = process.returncode
         except BaseException:
             process.terminate()
             try:
@@ -404,6 +427,12 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--script")
     render.add_argument("--production")
     render.add_argument("--bypass-production", action="store_true")
+    render.add_argument("--stream", action="store_true")
+    render.add_argument("--progress-json", action="store_true")
+    render.add_argument("--cancel-file")
+    render.add_argument("--start-frame", type=int)
+    render.add_argument("--end-frame", type=int)
+    render.add_argument("--block-frames", type=int)
     render.add_argument("--json", action="store_true")
     editor = commands.add_parser("editor")
     editor.add_argument("file", nargs="?")
@@ -460,6 +489,8 @@ def main(argv: list[str] | None = None) -> int:
     ci = commands.add_parser("ci")
     ci.add_argument("--if-due", action="store_true")
     args = parser.parse_args(argv)
+    owned_cancel = None
+    render_cancel = None
     try:
         if args.command == "doctor":
             return doctor(ROOT)
@@ -486,10 +517,19 @@ def main(argv: list[str] | None = None) -> int:
             command = ["ctest", "--preset", args.profile, "--build-config", "Release", "--output-on-failure"]
         elif args.command == "render":
             command = [str(executable(ROOT, args.profile, "gtracker_cli")), "render", args.file, "--output", args.output]
-            for option in ("sample_rate", "tail", "script", "production"):
+            for option in ("sample_rate", "tail", "script", "production", "cancel_file", "start_frame", "end_frame", "block_frames"):
                 if getattr(args, option) is not None:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.bypass_production: command.append("--bypass-production")
+            if args.stream: command.append("--stream")
+            if args.progress_json: command.append("--progress-json")
+            if args.stream or args.progress_json or any(getattr(args, name) is not None for name in ("cancel_file", "start_frame", "end_frame", "block_frames")):
+                if args.cancel_file:
+                    render_cancel = ROOT / args.cancel_file
+                else:
+                    owned_cancel = ROOT / ".local" / ("render-cancel-" + uuid.uuid4().hex)
+                    render_cancel = owned_cancel
+                    command += ["--cancel-file", str(render_cancel)]
             if args.json:
                 command.append("--json")
         elif args.command == "package":
@@ -527,10 +567,15 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
-        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info", "input-devices", "calibration-probe", "align-audio") and args.json))["returncode"]
+        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info", "input-devices", "calibration-probe", "align-audio") and args.json),
+                           separate_stderr=args.command == "render" and args.progress_json, cancel_file=render_cancel)["returncode"]
     except (RuntimeError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    finally:
+        if owned_cancel is not None:
+            try: owned_cancel.unlink(missing_ok=True)
+            except OSError as error: print(f"Could not remove owned render cancellation marker: {error}", file=sys.stderr)
 
 
 if __name__ == "__main__":

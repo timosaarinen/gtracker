@@ -167,3 +167,17 @@ bytes remain identical. `examples/runtime_render.cpp` builds with the core-only
 profile and no authoring/desktop dependencies. Six core-only/example tests and
 focused pattern/production integration tests pass. See docs/runtime.md. Song
 arrangement, streamed WAV writing and persistent caching are the next increments.
+
+Streamed pattern WAV export is now usable through `render --stream`, with exact
+frame previews, bounded blocks, JSON stderr progress, cancel-file/SIGINT handling
+and atomic publication. Native and wrapper cancellation retain old output;
+handled failures remove their temporary WAVs. Shared file writing also retains
+UTF-8 and existing save/capture semantics. The source renderer's original dry
+and wet PCM is unchanged. See docs/rendering.md.
+
+Windows full CI at `.local/ci/runs/20261018T051632Z-e331f280/report.json` passed16
+native and64 Python checks (one POSIX-only interrupt skip). After the final
+interrupt initialization and injected-write test adjustments, focused native
+export, refreshed capture/UI executables, eight desktop checks and all streaming
+Python cases passed; `.local/nightshift/stream-checks.json` binds those bytes.
+Windows console Ctrl+C remains unqualified; POSIX interrupt verification is next.

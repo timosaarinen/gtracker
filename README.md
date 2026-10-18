@@ -40,6 +40,8 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - Native [stereo room production](docs/production.md) with saved settings,
   wet/dry balance, decay/damping, pre-delay, width, gain and an exact dry bypass.
   CLI/editor rendering shares the same chain and reports signal/export metrics.
+- [Bounded streamed WAV export](docs/rendering.md), exact previews with native
+  state warm-up, progress and handled cancellation that preserves old output.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 

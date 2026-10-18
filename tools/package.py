@@ -27,7 +27,7 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
         result.append((dev.executable(root, profile, "gtracker_capture"), "gtracker_capture" + (".exe" if os.name == "nt" else "")))
     for name in ("examples/campfire.gtrk.json", "examples/slide-study.gtrk.json", "examples/room.json", "scripts/soften.lua", "scripts/slide.lua",
                  "schema/pattern.schema.json", "schema/pattern-v2.schema.json", "schema/take.schema.json", "schema/capture-result.schema.json",
-                 "schema/alignment-result.schema.json", "schema/production.schema.json", "docs/production.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
+                 "schema/alignment-result.schema.json", "schema/production.schema.json", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
     dependencies = root / ".local/build" / profile / "_deps"
