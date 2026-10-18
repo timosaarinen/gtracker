@@ -1,5 +1,23 @@
 # Current handoff
 
+## Editor safeguards — 2026-10-18
+
+Issue #1 now has Save/Discard/Cancel protection for loading/closing, grouped
+control edits and content-based savepoints (undoing to saved content clears the
+dirty marker). The UI-independent `EditorDocument` owns the same state exercised
+by headless tests. A separate desktop regression test injects synthetic input
+into native ImGui frames and checks the modal, shortcuts, drag grouping, stale
+renders and dummy audio queuing. This does not qualify physical interaction,
+listening or microphone capture; #1 remains open for those and other platforms.
+
+Windows 11 AMD64 / Clang 18.1.8: `cmake --build --preset headless --config Release`
+and the desktop equivalent passed; `ctest --preset desktop --build-config Release
+--output-on-failure` passed all nine tests. A UTF-8 filename test first failed on
+Windows locale conversions in path diagnostics; those now use UTF-8, and the
+regression passes. The UI checks include dummy playback and preserve an actual
+modal framebuffer. Logs/source fingerprints are under `.local/nightshift/`.
+No DSP change was made; the original 48 kHz demo remains in `.local/demo.wav`.
+
 ## Initial bootstrap — 2026-10-18
 
 The starting architecture is implemented: independent C++ instrument/C ABI,

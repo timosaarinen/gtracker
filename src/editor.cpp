@@ -1,4 +1,5 @@
 #include "gtracker/project.hpp"
+#include "gtracker/editor_document.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -53,9 +54,9 @@ Arguments arguments(int argc, char* argv[]) {
             return argv[i];
         };
         if (argument == "--script") {
-            result.script = value();
+            result.script = std::filesystem::u8path(value());
         } else if (argument == "--screenshot") {
-            result.screenshot = value();
+            result.screenshot = std::filesystem::u8path(value());
         } else if (argument == "--frames") {
             const std::string frame_count = value();
             std::size_t consumed = 0;
@@ -71,7 +72,7 @@ Arguments arguments(int argc, char* argv[]) {
         } else if (!argument.empty() && argument[0] == '-') {
             throw std::invalid_argument("unknown option: " + argument);
         } else if (result.document.empty()) {
-            result.document = argument;
+            result.document = std::filesystem::u8path(argument);
         } else {
             throw std::invalid_argument("only one pattern path may be supplied");
         }
@@ -138,10 +139,7 @@ CompletedRender render_snapshot(const Pattern& pattern) {
 }
 
 struct Editor {
-    Pattern pattern;
-    std::vector<Pattern> undo_stack;
-    std::vector<Pattern> redo_stack;
-    std::uint64_t generation = 1;
+    gtracker::EditorDocument document{initial_pattern()};
     std::uint64_t pending_generation = 0;
     std::uint64_t rendered_generation = 0;
     std::uint64_t rendered_revision = 0;
@@ -153,7 +151,6 @@ struct Editor {
     int cursor_lane = 0;
     double cursor_beat = 0.0;
     float snap = 0.5f;
-    bool dirty = false;
     bool status_error = false;
     bool render_failed = false;
     bool play_after_render = false;
@@ -161,23 +158,25 @@ struct Editor {
     std::string status = "Select a fret number, edit the inspector, then Render and Play.";
     std::array<char, 1024> path{};
     std::array<char, 1024> script_path{};
+    std::array<char, 1024> confirmation_save_path{};
 
     explicit Editor(const Arguments& args) {
-        const std::string document_text = args.document.empty() ? ".local/sketch.gtrk.json" : args.document.string();
-        const std::string script_text = args.script.empty() ? "scripts/soften.lua" : args.script.string();
+        const std::string document_text = args.document.empty() ? ".local/sketch.gtrk.json" : args.document.u8string();
+        const std::string script_text = args.script.empty() ? "scripts/soften.lua" : args.script.u8string();
         if (document_text.size() >= path.size() || script_text.size() >= script_path.size()) {
             throw std::invalid_argument("Editor paths must fit within 1023 bytes; launch path was not loaded or applied.");
         }
         std::copy(document_text.begin(), document_text.end(), path.begin());
         std::copy(script_text.begin(), script_text.end(), script_path.begin());
-        pattern = args.document.empty() ? initial_pattern() : gtracker::load_pattern(args.document);
-        gtracker::validate_pattern(pattern);
+        if (!args.document.empty()) {
+            document = gtracker::EditorDocument(gtracker::load_pattern(args.document), args.document);
+        }
         if (!args.script.empty()) {
-            Pattern edited = pattern;
+            Pattern edited = document.pattern();
             gtracker::apply_lua(edited, args.script);
             commit(std::move(edited), "Applied Lua script");
         }
-        if (pattern.events.empty()) {
+        if (document.pattern().events.empty()) {
             selected = -1;
         }
     }
@@ -200,7 +199,7 @@ struct Editor {
 
     bool rendering() const { return pending.valid(); }
     bool current_audio() const {
-        return rendered_generation == generation && !rendered.audio.mono.empty();
+        return rendered_generation == document.generation() && !rendered.audio.mono.empty();
     }
 
     void stop() {
@@ -213,28 +212,17 @@ struct Editor {
     }
 
     void changed() {
-        ++generation;
-        dirty = true;
         stop();
-        if (selected >= static_cast<int>(pattern.events.size())) {
-            selected = static_cast<int>(pattern.events.size()) - 1;
+        if (selected >= static_cast<int>(document.pattern().events.size())) {
+            selected = static_cast<int>(document.pattern().events.size()) - 1;
         }
     }
 
-    void commit(Pattern next, const char* action) {
-        if (pattern.revision >= 9007199254740991ULL) {
-            throw std::overflow_error("pattern revision exhausted its JSON-safe range");
+    void commit(Pattern next, const char* action, const std::string& edit_key = {}) {
+        if (document.commit(std::move(next), edit_key)) {
+            changed();
+            message(std::string(action) + ". Render to hear this edit.");
         }
-        next.revision = pattern.revision + 1;
-        gtracker::validate_pattern(next);
-        undo_stack.push_back(pattern);
-        if (undo_stack.size() > 128) {
-            undo_stack.erase(undo_stack.begin());
-        }
-        redo_stack.clear();
-        pattern = std::move(next);
-        changed();
-        message(std::string(action) + ". Render to hear this edit.");
     }
 
     template <typename Action>
@@ -247,54 +235,51 @@ struct Editor {
     }
 
     void undo(bool redo = false) {
-        auto& source = redo ? redo_stack : undo_stack;
-        auto& destination = redo ? undo_stack : redo_stack;
-        if (source.empty()) {
-            return;
+        if (document.undo(redo)) {
+            changed();
+            message(redo ? "Redid document edit." : "Undid document edit.");
         }
-        if (pattern.revision >= 9007199254740991ULL) {
-            throw std::overflow_error("pattern revision exhausted its JSON-safe range");
-        }
-        const auto revision = pattern.revision + 1;
-        Pattern restored = source.back();
-        restored.revision = revision;
-        gtracker::validate_pattern(restored);
-        destination.push_back(pattern);
-        pattern = std::move(restored);
-        source.pop_back();
-        changed();
-        message(redo ? "Redid document edit." : "Undid document edit.");
     }
 
-    void load() {
-        Pattern loaded = gtracker::load_pattern(path.data());
-        pattern = std::move(loaded);
-        undo_stack.clear();
-        redo_stack.clear();
-        selected = pattern.events.empty() ? -1 : 0;
+    void loaded() {
+        selected = document.pattern().events.empty() ? -1 : 0;
         cursor_beat = 0.0;
         cursor_lane = 0;
         changed();
-        dirty = false;
-        message("Loaded " + pattern.name + ".");
+        message("Loaded " + document.pattern().name + ".");
+    }
+
+    void load() {
+        const auto before = document.generation();
+        document.request_load(std::filesystem::u8path(path.data()));
+        if (document.generation() != before) loaded();
+    }
+
+    void resolve(gtracker::EditorDocument::Decision decision) {
+        if (decision == gtracker::EditorDocument::Decision::save && confirmation_save_path[0] == '\0') {
+            throw std::invalid_argument("Enter a path for the current pattern before saving.");
+        }
+        const auto before = document.generation();
+        document.resolve(decision, std::filesystem::u8path(confirmation_save_path.data()));
+        if (document.generation() != before) loaded();
     }
 
     void save() {
         if (path[0] == '\0') {
             throw std::invalid_argument("Enter a pattern path before saving.");
         }
-        gtracker::save_pattern(pattern, path.data());
-        dirty = false;
+        document.save(std::filesystem::u8path(path.data()));
         message("Saved " + std::string(path.data()) + ".");
     }
 
     void run_script() {
-        Pattern next = pattern;
-        gtracker::apply_lua(next, script_path.data());
+        Pattern next = document.pattern();
+        gtracker::apply_lua(next, std::filesystem::u8path(script_path.data()));
         commit(std::move(next), "Applied Lua script");
     }
 
     std::string new_id() const {
+        const auto& pattern = document.pattern();
         std::size_t suffix = pattern.events.size() + 1;
         for (;;) {
             const std::string id = "event-" + std::to_string(suffix++);
@@ -306,6 +291,7 @@ struct Editor {
     }
 
     void add(const char* type) {
+        const auto& pattern = document.pattern();
         Pattern next = pattern;
         Event event;
         event.id = new_id();
@@ -315,10 +301,11 @@ struct Editor {
         event.strength = event.type == "damp" ? 1.0f : 0.65f;
         next.events.push_back(std::move(event));
         commit(std::move(next), "Added event");
-        selected = static_cast<int>(pattern.events.size()) - 1;
+        selected = static_cast<int>(document.pattern().events.size()) - 1;
     }
 
     void erase() {
+        const auto& pattern = document.pattern();
         if (selected < 0 || selected >= static_cast<int>(pattern.events.size())) {
             return;
         }
@@ -331,13 +318,14 @@ struct Editor {
         if (rendering()) {
             return;
         }
-        gtracker::validate_pattern(pattern);
-        const Pattern snapshot = pattern;
-        pending_generation = generation;
+        document.end_edit();
+        const Pattern snapshot = document.pattern();
+        gtracker::validate_pattern(snapshot);
+        pending_generation = document.generation();
         play_after_render = then_play;
         render_failed = false;
         pending = std::async(std::launch::async, [snapshot]() { return render_snapshot(snapshot); });
-        message("Rendering revision " + std::to_string(pattern.revision) + "...");
+        message("Rendering revision " + std::to_string(snapshot.revision) + "...");
     }
 
     void poll_render() {
@@ -346,14 +334,14 @@ struct Editor {
         }
         try {
             CompletedRender completed = pending.get();
-            if (pending_generation != generation) {
+            if (pending_generation != document.generation()) {
                 play_after_render = false;
                 message("Render finished for an older edit and was discarded. Render the current pattern.");
                 return;
             }
             rendered = std::move(completed);
-            rendered_generation = generation;
-            rendered_revision = pattern.revision;
+            rendered_generation = document.generation();
+            rendered_revision = document.pattern().revision;
             char text[256];
             std::snprintf(text, sizeof(text), "Rendered revision %llu in %.1f ms. Peak %.3f; RMS %.3f.",
                           static_cast<unsigned long long>(rendered_revision), rendered.audio.elapsed_ms,
@@ -407,6 +395,59 @@ struct Editor {
     }
 };
 
+// Capture the actual changed widget's ID before another widget is drawn. One
+// activation (including Ctrl-click numeric entry) becomes one history operation.
+template<typename Action>
+void edit_control(Editor& editor, bool changed, Action action) {
+    if (ImGui::IsItemActivated()) editor.document.end_edit();
+    if (changed) {
+        const auto key = std::to_string(ImGui::GetItemID());
+        editor.attempt([&]() { action(key); });
+    }
+    if (ImGui::IsItemDeactivated()) editor.document.end_edit();
+}
+
+void unsaved_dialog(Editor& editor) {
+    using Pending = gtracker::EditorDocument::Pending;
+    using Decision = gtracker::EditorDocument::Decision;
+    if (editor.document.pending() == Pending::none) return;
+    if (!ImGui::IsPopupOpen("Unsaved changes")) {
+        const auto destination = editor.document.filename().empty()
+            ? std::string(".local/sketch.gtrk.json") : editor.document.filename().u8string();
+        std::fill(editor.confirmation_save_path.begin(), editor.confirmation_save_path.end(), '\0');
+        std::copy(destination.begin(), destination.end(), editor.confirmation_save_path.begin());
+        editor.message("Choose whether to save the current pattern before continuing.");
+        ImGui::OpenPopup("Unsaved changes");
+    }
+    const auto* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(550.0f, 0.0f), ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Unsaved changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        const bool loading = editor.document.pending() == Pending::load;
+        ImGui::TextWrapped("Save changes to \"%s\" before %s?", editor.document.pattern().name.c_str(),
+                           loading ? "loading another pattern" : "closing");
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Save current pattern to");
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputText("##save_before_leave", editor.confirmation_save_path.data(), editor.confirmation_save_path.size());
+        if (editor.status_error) {
+            ImGui::TextWrapped("%s", editor.status.c_str());
+        }
+        auto resolve = [&](Decision decision) {
+            editor.attempt([&]() { editor.resolve(decision); });
+            if (editor.document.pending() == Pending::none) ImGui::CloseCurrentPopup();
+        };
+        if (ImGui::Button(loading ? "Save and Load" : "Save and Close")) resolve(Decision::save);
+        ImGui::SameLine();
+        if (ImGui::Button("Discard")) resolve(Decision::discard);
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) resolve(Decision::cancel);
+        ImGui::SetItemDefaultFocus();
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) resolve(Decision::cancel);
+        ImGui::EndPopup();
+    }
+}
+
 void theme() {
     ImGui::StyleColorsDark();
     auto& style = ImGui::GetStyle();
@@ -456,16 +497,16 @@ void canvas(Editor& editor, ImVec2 size) {
     draw->PushClipRect(origin, ImVec2(origin.x + size.x, origin.y + size.y), true);
     draw->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(14, 22, 30, 255));
 
-    const int strings = static_cast<int>(editor.pattern.tuning_midi.size());
+    const int strings = static_cast<int>(editor.document.pattern().tuning_midi.size());
     const int lanes = strings + 1;
     const float left = origin.x + 64.0f;
     const float right = origin.x + size.x - 20.0f;
     const float top = origin.y + 32.0f;
     const float lane_height = (size.y - 42.0f) / static_cast<float>(lanes);
-    const double pixels_per_beat = static_cast<double>(right - left) / editor.pattern.length_beats;
+    const double pixels_per_beat = static_cast<double>(right - left) / editor.document.pattern().length_beats;
     auto lane_y = [&](int lane) { return top + (static_cast<float>(lane) + 0.5f) * lane_height; };
     auto beat_x = [&](double beat) {
-        return left + static_cast<float>(beat / editor.pattern.length_beats) * (right - left);
+        return left + static_cast<float>(beat / editor.document.pattern().length_beats) * (right - left);
     };
 
     for (int lane = 0; lane < lanes; ++lane) {
@@ -479,7 +520,7 @@ void canvas(Editor& editor, ImVec2 size) {
         if (lane == strings) {
             draw->AddText(ImVec2(origin.x + 9.0f, lane_y(lane) - 8.0f), amber, "BODY");
         } else {
-            const std::string name = tuning_label(editor.pattern.tuning_midi[static_cast<std::size_t>(lane)]);
+            const std::string name = tuning_label(editor.document.pattern().tuning_midi[static_cast<std::size_t>(lane)]);
             draw->AddText(ImVec2(origin.x + 10.0f, lane_y(lane) - 8.0f), quiet_color, name.c_str());
         }
     }
@@ -488,7 +529,7 @@ void canvas(Editor& editor, ImVec2 size) {
     while (grid * pixels_per_beat < 34.0) {
         grid *= 2.0;
     }
-    for (double beat = 0.0; beat <= editor.pattern.length_beats + 0.0001; beat += grid) {
+    for (double beat = 0.0; beat <= editor.document.pattern().length_beats + 0.0001; beat += grid) {
         const float x = beat_x(beat);
         const bool bar = std::fmod(beat, 4.0) < 0.001;
         draw->AddLine(ImVec2(x, top - 3.0f), ImVec2(x, origin.y + size.y - 6.0f),
@@ -503,8 +544,8 @@ void canvas(Editor& editor, ImVec2 size) {
                    IM_COL32(246, 188, 94, 75));
     int hit = -1;
     const ImVec2 mouse = ImGui::GetIO().MousePos;
-    for (std::size_t i = 0; i < editor.pattern.events.size(); ++i) {
-        const auto& event = editor.pattern.events[i];
+    for (std::size_t i = 0; i < editor.document.pattern().events.size(); ++i) {
+        const auto& event = editor.document.pattern().events[i];
         const bool body = event.type == "body_hit";
         const bool damp = event.type == "damp";
         const float x = beat_x(event.beat);
@@ -534,21 +575,22 @@ void canvas(Editor& editor, ImVec2 size) {
     draw->PopClipRect();
 
     if (hovered && hit >= 0) {
-        const auto& event = editor.pattern.events[static_cast<std::size_t>(hit)];
+        const auto& event = editor.document.pattern().events[static_cast<std::size_t>(hit)];
         ImGui::BeginTooltip();
         ImGui::Text("%s | beat %.3f | strength %.2f", event.type.c_str(), event.beat, event.strength);
         ImGui::EndTooltip();
     }
     if (clicked) {
+        editor.document.end_edit();
         if (hit >= 0) {
             editor.selected = hit;
-            const auto& event = editor.pattern.events[static_cast<std::size_t>(hit)];
+            const auto& event = editor.document.pattern().events[static_cast<std::size_t>(hit)];
             editor.cursor_beat = event.beat;
             editor.cursor_lane = event.type == "body_hit" ? strings : event.string_index;
         } else if (mouse.y >= top && mouse.x >= left && mouse.x <= right) {
-            const double beat = static_cast<double>((mouse.x - left) / (right - left)) * editor.pattern.length_beats;
+            const double beat = static_cast<double>((mouse.x - left) / (right - left)) * editor.document.pattern().length_beats;
             editor.cursor_beat = std::clamp(std::round(beat / editor.snap) * editor.snap,
-                                            0.0, std::nextafter(editor.pattern.length_beats, 0.0));
+                                            0.0, std::nextafter(editor.document.pattern().length_beats, 0.0));
             editor.cursor_lane = std::clamp(static_cast<int>((mouse.y - top) / lane_height), 0, strings);
             editor.selected = -1;
             if (double_clicked) {
@@ -561,85 +603,89 @@ void canvas(Editor& editor, ImVec2 size) {
 void inspector(Editor& editor) {
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "EVENT");
     ImGui::Separator();
-    if (editor.selected < 0 || editor.selected >= static_cast<int>(editor.pattern.events.size())) {
+    if (editor.selected < 0 || editor.selected >= static_cast<int>(editor.document.pattern().events.size())) {
         ImGui::TextWrapped("Select a fret number or body hit. Double-click an empty lane to add an event.");
     } else {
-        Event event = editor.pattern.events[static_cast<std::size_t>(editor.selected)];
+        Event event = editor.document.pattern().events[static_cast<std::size_t>(editor.selected)];
+        ImGui::PushID(event.id.c_str());
         ImGui::TextDisabled("%s", event.id.c_str());
-        bool changed = false;
+        auto edit = [&](bool changed) {
+            edit_control(editor, changed, [&](const std::string& key) {
+                Pattern next = editor.document.pattern();
+                next.events[static_cast<std::size_t>(editor.selected)] = event;
+                editor.commit(std::move(next), "Edited event", key);
+                editor.cursor_beat = event.beat;
+                editor.cursor_lane = event.type == "body_hit" ? static_cast<int>(editor.document.pattern().tuning_midi.size())
+                                                              : event.string_index;
+            });
+        };
         const char* types[] = {"Pluck", "Damp", "Body hit"};
         int type = event.type == "body_hit" ? 2 : (event.type == "damp" ? 1 : 0);
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::Combo("##type", &type, types, 3)) {
+        const bool type_changed = ImGui::Combo("##type", &type, types, 3);
+        if (type_changed) {
             event.type = type == 2 ? "body_hit" : (type == 1 ? "damp" : "pluck");
-            changed = true;
         }
+        edit(type_changed);
         ImGui::TextUnformatted("Beat");
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::InputDouble("##beat", &event.beat, editor.snap, 1.0, "%.3f")) {
-            event.beat = std::clamp(event.beat, 0.0, std::nextafter(editor.pattern.length_beats, 0.0));
-            changed = true;
+        const bool beat_changed = ImGui::InputDouble("##beat", &event.beat, editor.snap, 1.0, "%.3f");
+        if (beat_changed) {
+            event.beat = std::clamp(event.beat, 0.0, std::nextafter(editor.document.pattern().length_beats, 0.0));
         }
+        edit(beat_changed);
         if (type != 2) {
             int string = event.string_index + 1;
             ImGui::TextUnformatted("String (1 = highest lane)");
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::InputInt("##string", &string)) {
-                event.string_index = std::clamp(string, 1, static_cast<int>(editor.pattern.tuning_midi.size())) - 1;
-                changed = true;
+            const bool string_changed = ImGui::InputInt("##string", &string);
+            if (string_changed) {
+                event.string_index = std::clamp(string, 1, static_cast<int>(editor.document.pattern().tuning_midi.size())) - 1;
             }
+            edit(string_changed);
             if (type == 0) {
                 ImGui::TextUnformatted("Fret");
                 ImGui::SetNextItemWidth(-1.0f);
-                if (ImGui::InputFloat("##fret", &event.fret, 1.0f, 5.0f, "%.2f")) {
+                const bool fret_changed = ImGui::InputFloat("##fret", &event.fret, 1.0f, 5.0f, "%.2f");
+                if (fret_changed) {
                     event.fret = std::clamp(event.fret, 0.0f, 36.0f);
-                    changed = true;
                 }
+                edit(fret_changed);
             }
         }
         ImGui::TextUnformatted(type == 1 ? "Damping amount" : "Strength");
         ImGui::SetNextItemWidth(-1.0f);
-        changed |= ImGui::SliderFloat("##strength", &event.strength, 0.0f, 1.0f, "%.2f");
-        if (changed) {
-            editor.attempt([&]() {
-                Pattern next = editor.pattern;
-                next.events[static_cast<std::size_t>(editor.selected)] = event;
-                editor.commit(std::move(next), "Edited event");
-                editor.cursor_beat = event.beat;
-                editor.cursor_lane = event.type == "body_hit" ? static_cast<int>(editor.pattern.tuning_midi.size())
-                                                              : event.string_index;
-            });
-        }
+        edit(ImGui::SliderFloat("##strength", &event.strength, 0.0f, 1.0f, "%.2f"));
         if (ImGui::Button("Delete event", ImVec2(-1.0f, 0.0f))) {
             editor.attempt([&]() { editor.erase(); });
         }
+        ImGui::PopID();
     }
 
     ImGui::Spacing();
     ImGui::Separator();
     if (ImGui::TreeNode("Instrument controls")) {
-        float decay = editor.pattern.decay_seconds;
-        float brightness = editor.pattern.brightness;
-        float body_mix = editor.pattern.body_mix;
-        bool changed = false;
-        ImGui::TextUnformatted("Decay (seconds)");
-        ImGui::SetNextItemWidth(-1.0f);
-        changed |= ImGui::SliderFloat("##decay", &decay, 0.1f, 12.0f, "%.2f");
-        ImGui::TextUnformatted("Brightness");
-        ImGui::SetNextItemWidth(-1.0f);
-        changed |= ImGui::SliderFloat("##brightness", &brightness, 0.0f, 1.0f, "%.2f");
-        ImGui::TextUnformatted("Body mix");
-        ImGui::SetNextItemWidth(-1.0f);
-        changed |= ImGui::SliderFloat("##body", &body_mix, 0.0f, 1.0f, "%.2f");
-        if (changed) {
-            editor.attempt([&]() {
-                Pattern next = editor.pattern;
+        float decay = editor.document.pattern().decay_seconds;
+        float brightness = editor.document.pattern().brightness;
+        float body_mix = editor.document.pattern().body_mix;
+        auto edit = [&](bool changed) {
+            edit_control(editor, changed, [&](const std::string& key) {
+                Pattern next = editor.document.pattern();
                 next.decay_seconds = decay;
                 next.brightness = brightness;
                 next.body_mix = body_mix;
-                editor.commit(std::move(next), "Edited instrument");
+                editor.commit(std::move(next), "Edited instrument", key);
             });
-        }
+        };
+        ImGui::TextUnformatted("Decay (seconds)");
+        ImGui::SetNextItemWidth(-1.0f);
+        edit(ImGui::SliderFloat("##decay", &decay, 0.1f, 12.0f, "%.2f"));
+        ImGui::TextUnformatted("Brightness");
+        ImGui::SetNextItemWidth(-1.0f);
+        edit(ImGui::SliderFloat("##brightness", &brightness, 0.0f, 1.0f, "%.2f"));
+        ImGui::TextUnformatted("Body mix");
+        ImGui::SetNextItemWidth(-1.0f);
+        edit(ImGui::SliderFloat("##body", &body_mix, 0.0f, 1.0f, "%.2f"));
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Lua command")) {
@@ -714,16 +760,16 @@ void interface(Editor& editor) {
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::Begin("gtracker", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
-    keyboard(editor);
+    if (editor.document.pending() == gtracker::EditorDocument::Pending::none) keyboard(editor);
 
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "gtracker");
     ImGui::SameLine();
     ImGui::TextDisabled(" /  ACOUSTIC PATTERN EDITOR");
     ImGui::SameLine();
-    const float title_width = ImGui::CalcTextSize(editor.pattern.name.c_str()).x + 180.0f;
+    const float title_width = ImGui::CalcTextSize(editor.document.pattern().name.c_str()).x + 180.0f;
     ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - title_width));
-    ImGui::Text("%s%s  |  r%llu", editor.pattern.name.c_str(), editor.dirty ? " *" : "",
-                static_cast<unsigned long long>(editor.pattern.revision));
+    ImGui::Text("%s%s  |  r%llu", editor.document.pattern().name.c_str(), editor.document.dirty() ? " *" : "",
+                static_cast<unsigned long long>(editor.document.pattern().revision));
     ImGui::Separator();
 
     ImGui::SetNextItemWidth(std::max(200.0f, ImGui::GetContentRegionAvail().x - 146.0f));
@@ -737,13 +783,13 @@ void interface(Editor& editor) {
         editor.attempt([&]() { editor.save(); });
     }
 
-    ImGui::BeginDisabled(editor.undo_stack.empty());
+    ImGui::BeginDisabled(!editor.document.can_undo());
     if (ImGui::Button("Undo")) {
         editor.attempt([&]() { editor.undo(); });
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
-    ImGui::BeginDisabled(editor.redo_stack.empty());
+    ImGui::BeginDisabled(!editor.document.can_redo());
     if (ImGui::Button("Redo")) {
         editor.attempt([&]() { editor.undo(true); });
     }
@@ -778,18 +824,26 @@ void interface(Editor& editor) {
         editor.message("Stopped playback.");
     }
 
-    double bpm = editor.pattern.bpm;
-    double length = editor.pattern.length_beats;
-    bool changed = false;
+    double bpm = editor.document.pattern().bpm;
+    double length = editor.document.pattern().length_beats;
+    auto edit_settings = [&](bool changed) {
+        edit_control(editor, changed, [&](const std::string& key) {
+            Pattern next = editor.document.pattern();
+            next.bpm = bpm;
+            next.length_beats = length;
+            editor.commit(std::move(next), "Edited pattern", key);
+            editor.cursor_beat = std::min(editor.cursor_beat, std::nextafter(editor.document.pattern().length_beats, 0.0));
+        });
+    };
     ImGui::TextUnformatted("BPM");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(100.0f);
-    changed |= ImGui::InputDouble("##bpm", &bpm, 0.0, 0.0, "%.1f");
+    edit_settings(ImGui::InputDouble("##bpm", &bpm, 0.0, 0.0, "%.1f"));
     ImGui::SameLine();
     ImGui::TextUnformatted("Beats");
     ImGui::SameLine();
     ImGui::SetNextItemWidth(85.0f);
-    changed |= ImGui::InputDouble("##length", &length, 0.0, 0.0, "%.2f");
+    edit_settings(ImGui::InputDouble("##length", &length, 0.0, 0.0, "%.2f"));
     ImGui::SameLine(0.0f, 18.0f);
     ImGui::TextUnformatted("Snap");
     ImGui::SameLine();
@@ -800,17 +854,8 @@ void interface(Editor& editor) {
         editor.snap = snap == 0 ? 0.25f : (snap == 1 ? 0.5f : 1.0f);
     }
     ImGui::SameLine();
-    ImGui::TextDisabled("%zu strings  |  %zu events  |  cursor %.2f", editor.pattern.tuning_midi.size(),
-                        editor.pattern.events.size(), editor.cursor_beat);
-    if (changed) {
-        editor.attempt([&]() {
-            Pattern next = editor.pattern;
-            next.bpm = bpm;
-            next.length_beats = length;
-            editor.commit(std::move(next), "Edited pattern");
-            editor.cursor_beat = std::min(editor.cursor_beat, std::nextafter(editor.pattern.length_beats, 0.0));
-        });
-    }
+    ImGui::TextDisabled("%zu strings  |  %zu events  |  cursor %.2f", editor.document.pattern().tuning_midi.size(),
+                        editor.document.pattern().events.size(), editor.cursor_beat);
 
     const float waveform_height = 136.0f;
     const float main_height = std::max(255.0f, ImGui::GetContentRegionAvail().y - waveform_height - 65.0f);
@@ -839,6 +884,7 @@ void interface(Editor& editor) {
     } else {
         ImGui::TextDisabled("Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo | Delete event");
     }
+    unsaved_dialog(editor);
     ImGui::End();
 }
 
@@ -882,7 +928,7 @@ struct Host {
             throw std::runtime_error(std::string("Window: ") + SDL_GetError());
         }
         SDL_SetWindowMinimumSize(window, 980, 680);
-        const char* render_driver = std::getenv("SDL_RENDER_DRIVER");
+        const char* render_driver = SDL_getenv("SDL_RENDER_DRIVER");
         const char* video_driver = SDL_GetCurrentVideoDriver();
         if (!render_driver && video_driver && std::string(video_driver) == "dummy") {
             render_driver = "software";
@@ -923,7 +969,7 @@ struct Host {
         if (!surface) {
             throw std::runtime_error(std::string("Screenshot readback: ") + SDL_GetError());
         }
-        const bool saved = SDL_SaveBMP(surface, path.string().c_str());
+        const bool saved = SDL_SaveBMP(surface, path.u8string().c_str());
         SDL_DestroySurface(surface);
         if (!saved) {
             throw std::runtime_error(std::string("Screenshot save: ") + SDL_GetError());
@@ -948,7 +994,7 @@ int run(const Arguments& args) {
             ImGui_ImplSDL3_ProcessEvent(&event);
             if (event.type == SDL_EVENT_QUIT ||
                 (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(host.window))) {
-                running = false;
+                editor.document.request_close();
             }
         }
         editor.poll_render();
@@ -963,6 +1009,7 @@ int run(const Arguments& args) {
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         interface(editor);
+        if (editor.document.close_requested()) running = false;
         ImGui::Render();
         const auto& io = ImGui::GetIO();
         SDL_SetRenderScale(host.renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
@@ -994,13 +1041,14 @@ int run(const Arguments& args) {
         }
         std::cout << "gtracker_editor: smoke passed; frames=" << frames
                   << "; rendered_samples=" << editor.rendered.audio.mono.size()
-                  << "; revision=" << editor.pattern.revision << '\n';
+                  << "; revision=" << editor.document.pattern().revision << '\n';
     }
     return 0;
 }
 
 } // namespace
 
+#ifndef GT_EDITOR_TEST
 int main(int argc, char* argv[]) {
     try {
         const Arguments args = arguments(argc, argv);
@@ -1019,3 +1067,4 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 }
+#endif

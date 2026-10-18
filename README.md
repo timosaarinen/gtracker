@@ -16,7 +16,8 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   explicit tuning and seed, and mono 16-bit PCM WAV export.
 - Native SDL3 + Dear ImGui/ImPlot editor: horizontal string/body lanes, event
   selection and editing, add/delete, undo/redo, load/save, asynchronous rendering,
-  queued playback, waveform preview and keyboard shortcuts.
+  queued playback, waveform preview, keyboard shortcuts, grouped control undo
+  and an unsaved-changes dialog for loading/closing.
 - Embedded Lua 5.5.1 commands for tempo, transposition, attack strength and note
   creation, shared by the CLI and editor. A failed command leaves the score intact.
 - Python analysis worker that accepts a recorded WAV and returns a versioned

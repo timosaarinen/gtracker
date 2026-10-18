@@ -81,12 +81,12 @@ template<typename Writer> void write_file(const std::filesystem::path& path, Wri
     const auto temporary = temporary_path(path);
     try {
         std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-        require(static_cast<bool>(out), "Cannot create output: " + path.string());
+        require(static_cast<bool>(out), "Cannot create output: " + path.u8string());
         writer(out);
         out.flush();
-        require(static_cast<bool>(out), "Cannot write output: " + path.string());
+        require(static_cast<bool>(out), "Cannot write output: " + path.u8string());
         out.close();
-        require(static_cast<bool>(out), "Cannot close output: " + path.string());
+        require(static_cast<bool>(out), "Cannot close output: " + path.u8string());
         publish_file(temporary, path);
     } catch (...) {
         std::error_code ignored;
@@ -189,7 +189,7 @@ Pattern load_pattern(const std::filesystem::path& path) {
     const auto size = std::filesystem::file_size(path);
     require(size <= max_document_bytes, "Pattern JSON exceeds the 1 MiB prototype limit");
     std::ifstream in(path, std::ios::binary);
-    require(static_cast<bool>(in), "Cannot open pattern: " + path.string());
+    require(static_cast<bool>(in), "Cannot open pattern: " + path.u8string());
     std::string source(static_cast<std::size_t>(size), '\0');
     in.read(source.data(), static_cast<std::streamsize>(source.size()));
     require(in.gcount() == static_cast<std::streamsize>(source.size()), "Could not read complete pattern");

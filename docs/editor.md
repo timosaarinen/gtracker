@@ -42,14 +42,23 @@ applying anything, so the displayed save/script path is never silently truncated
   brightness, and body mix. Tuning is currently edited in the JSON document.
 - **Undo/redo:** the buttons and Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, or Ctrl/Cmd+Y restore
   document edits. Up to 128 prior document states are kept in memory. A Lua script
-  is one document edit. Individual control updates are separate edits in this
-  initial version; grouping a drag into one history operation is future work.
+  is one document edit. One slider drag or numeric-field activation is one undo
+  operation; a later drag starts a separate operation. A control that returns to
+  its starting value leaves no extra undo step.
 
 The path field at the top is explicit: enter a filename, then select `Load` or
 `Save`. Ctrl/Cmd+S saves to that path. A `*` by the title marks a changed document.
-Loading clears the current undo/redo history. Save before loading another file
-or closing the window; this first version does not have an unsaved-changes dialog
-or an autosave system.
+The marker compares musical content with the last successful save, so undoing
+back to that content makes the document clean even though its revision advances.
+Loading clears the current undo/redo history.
+
+Loading another pattern or closing the window with unsaved edits opens a
+**Save / Discard / Cancel** dialog. Escape cancels. The dialog has a separate
+save path, initially the current document's last saved filename: choosing Save
+before a pending Load does not overwrite the pattern being loaded. Failed saves
+or loads keep the current document and dialog available. No autosave is provided;
+an operating-system kill cannot show this dialog. Explicit bounded `--frames`
+runs still exit at the requested limit for unattended checks.
 
 ## Render and listen
 
@@ -147,6 +156,14 @@ display interaction, keyboard/mouse usability on a particular OS, audio-device
 playback, listening quality, or microphone capture. Record those checks
 separately in a handoff.
 
+`python tools/dev.py test --profile desktop` also runs `editor_ui` using SDL's
+dummy video/audio drivers. It injects synthetic mouse/key input into native
+ImGui frames to check drag grouping, undo/redo, the unsaved modal and shortcut
+focus, and exercises stale-render rejection and queued dummy playback. These
+are automated regression checks, not physical device or listening evidence.
+The headless `editor_document` test covers guarded save/load/close, failed writes,
+savepoints, revision bounds and history without SDL.
+
 ## Current scope
 
 Implemented: pluck/damp/body-hit pattern editing, basic instrument parameters,
@@ -156,7 +173,7 @@ queued playback, waveform inspection, and unattended UI capture.
 Future work includes recording, transcription integration, standard slide/hammer/
 pull-off markers and their physical gestures, continuous expression curves,
 multiple patterns and arrangement, course-aware twelve-string instruments,
-timeline zoom/scroll, richer keyboard tab entry, grouped drag undo, unsaved-work
-protection, render cancellation, output-device selection, and reverb controls.
+timeline zoom/scroll, richer keyboard tab entry, autosave/recovery, render
+cancellation, output-device selection, and reverb controls.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.
