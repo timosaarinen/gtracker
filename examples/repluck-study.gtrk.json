@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "name": "Original repeated-pluck comparison",
+  "revision": 1,
+  "tempo_bpm": 96,
+  "length_beats": 8,
+  "seed": 42,
+  "instrument": {
+    "model": "contact_0_2",
+    "tuning_midi": [64, 59, 55, 50, 45, 40],
+    "decay_seconds": 4,
+    "brightness": 0.78,
+    "body_mix": 0.15
+  },
+  "events": [
+    {"id":"r01", "type":"pluck", "beat":0, "string":6, "fret":0, "strength":0.62},
+    {"id":"r02", "type":"pluck", "beat":0.5, "string":6, "fret":0, "strength":0.5},
+    {"id":"r03", "type":"pluck", "beat":1, "string":6, "fret":0, "strength":0.6},
+    {"id":"r04", "type":"pluck", "beat":1.5, "string":6, "fret":0, "strength":0.45},
+    {"id":"r05", "type":"pluck", "beat":2, "string":5, "fret":2, "strength":0.55},
+    {"id":"r06", "type":"pluck", "beat":2.5, "string":5, "fret":2, "strength":0.45},
+    {"id":"r07", "type":"pluck", "beat":3, "string":5, "fret":2, "strength":0.6},
+    {"id":"r08", "type":"body_hit", "beat":3.5, "strength":0.18},
+    {"id":"r09", "type":"pluck", "beat":4, "string":3, "fret":0, "strength":0.55},
+    {"id":"r10", "type":"pluck", "beat":4.5, "string":3, "fret":0, "strength":0.4},
+    {"id":"r11", "type":"pluck", "beat":5, "string":2, "fret":3, "strength":0.55},
+    {"id":"r12", "type":"pluck", "beat":5.5, "string":2, "fret":3, "strength":0.4},
+    {"id":"r13", "type":"pluck", "beat":6, "string":1, "fret":3, "strength":0.6},
+    {"id":"r14", "type":"pluck", "beat":6.5, "string":1, "fret":3, "strength":0.45},
+    {"id":"r15", "type":"damp", "beat":7.5, "string":6, "strength":0.8}
+  ],
+  "gestures": []
+}

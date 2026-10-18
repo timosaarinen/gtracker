@@ -41,7 +41,8 @@ later pluck/curve changes it. Same-string slides can touch but cannot overlap.
   plucks/damps/body hits and original render samples. Loading/saving v1 does not
   silently migrate it. The original campfire WAV remains byte-identical.
 - **v2** requires `instrument.model` and `gestures`, even when that array is
-  empty. Models are `baseline_0_1` (no gestures) or `contact_0_2`. A v2 contact
+  empty. Models are `baseline_0_1` (no gestures), `contact_0_2`, or the explicit
+  [retained_0_5 experiment](retained.md). A v2 contact
   pattern with no curves currently produces the same samples as baseline.
 - Only `slide` with piecewise-linear fret points is implemented. Future schema
   versions, models, gesture types, interpolation fields or unknown properties
@@ -82,7 +83,7 @@ twelve-string instruments still use independent slots, without course mapping.
   --script scripts/slide.lua --output .local/campfire-slide.gtrk.json --json
 ```
 
-`gtracker.set_model("contact_0_2")` explicitly selects v2 before
+`gtracker.set_model("contact_0_2")` (or `"retained_0_5"`) explicitly selects v2 before
 `gtracker.add_slide(beat, one_based_string, {{beat=0,fret=0}, ...})`.
 Transposition edits plucks and every curve fret together while retaining IDs and
 point timing. A failed model/curve/script transaction leaves the original

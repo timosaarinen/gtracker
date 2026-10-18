@@ -82,11 +82,18 @@ ProductionSettings parse_production_json(std::string_view source) {
 }
 std::string production_json(const ProductionSettings& settings) { return production_value(settings).dump(2) + "\n"; }
 
+gt_model instrument_model(std::string_view name) {
+    for (auto model : {GT_MODEL_BASELINE_0_1, GT_MODEL_CONTACT_0_2, GT_MODEL_RETAINED_0_5})
+        if (name == gt_model_name(model)) return model;
+    throw std::runtime_error("Unsupported instrument model: " + std::string(name));
+}
+bool supports_slides(const Pattern& pattern) { return instrument_model(pattern.model) != GT_MODEL_BASELINE_0_1; }
+
 void validate_pattern(const Pattern& p) {
     require(p.schema_version == 1 || p.schema_version == 2, "Unsupported schema_version; expected 1 or 2");
-    require(p.model == "baseline_0_1" || p.model == "contact_0_2", "Unsupported instrument model: " + p.model);
+    const auto model = instrument_model(p.model);
     require(p.schema_version == 2 || (p.model == "baseline_0_1" && p.gestures.empty()), "Schema v1 supports only baseline_0_1 with no gestures; explicitly select v2/contact_0_2");
-    require(p.gestures.empty() || p.model == "contact_0_2", "Slide gestures require the explicit contact_0_2 model");
+    require(p.gestures.empty() || model != GT_MODEL_BASELINE_0_1, "Slide gestures require an explicit contact or retained model");
     require(p.schema_version == 2 || !p.production, "Production settings require explicit pattern v2");
     if (p.production) validate_production(*p.production);
     require(!p.name.empty() && p.name.size() <= 256, "name must contain 1..256 UTF-8 bytes");
@@ -335,7 +342,7 @@ NativePerformance compile_pattern(const Pattern& p, int sample_rate) {
         }
         slides.push_back(std::move(slide));
     }
-    return {config, p.model == "contact_0_2" ? GT_MODEL_CONTACT_0_2 : GT_MODEL_BASELINE_0_1,
+    return {config, instrument_model(p.model),
             std::move(events), std::move(slides)};
 }
 

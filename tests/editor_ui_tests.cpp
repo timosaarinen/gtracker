@@ -357,6 +357,21 @@ void slide_authoring(Host& host, const Arguments& original) {
     frame(host, [&] { interface(reopened); });
     frame(host, [&] { interface(reopened); });
     host.screenshot(std::filesystem::current_path() / "editor-slide-controls.bmp");
+    reopened.set_model("retained_0_5");
+    check_ui(gtracker::supports_slides(reopened.document.pattern()) && reopened.document.pattern().gestures.front().id == id,
+             "retained model selection dropped slide support/identity");
+    reopened.undo();
+    check_ui(reopened.document.pattern().model == "contact_0_2", "undo did not restore the contact model");
+    reopened.undo(true);
+    reopened.save();
+    Editor retained(args);
+    check_ui(retained.document.pattern().model == "retained_0_5", "retained model did not reopen");
+    retained.request_render(); retained.pending.wait(); retained.poll_render();
+    check_ui(retained.rendered.audio.samples == gtracker::render_pattern(retained.document.pattern()).samples,
+             "editor silently fell back from the retained model");
+    frame(host, [&] { interface(retained); });
+    frame(host, [&] { interface(retained); });
+    host.screenshot(std::filesystem::current_path() / "editor-retained-controls.bmp");
 }
 
 void production_authoring(Host& host, const Arguments& original) {

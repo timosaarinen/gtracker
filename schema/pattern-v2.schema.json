@@ -17,7 +17,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["model", "tuning_midi", "decay_seconds", "brightness", "body_mix"],
       "properties": {
-        "model": {"enum": ["baseline_0_1", "contact_0_2"]},
+        "model": {"enum": ["baseline_0_1", "contact_0_2", "retained_0_5"]},
         "tuning_midi": {"$ref": "pattern.schema.json#/properties/instrument/properties/tuning_midi"},
         "decay_seconds": {"$ref": "pattern.schema.json#/properties/instrument/properties/decay_seconds"},
         "brightness": {"$ref": "pattern.schema.json#/properties/instrument/properties/brightness"},

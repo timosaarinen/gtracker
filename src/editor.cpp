@@ -539,7 +539,7 @@ struct Editor {
 
     void add_slide() {
         const auto& pattern = document.pattern();
-        if (pattern.model != "contact_0_2") throw std::runtime_error("Enable slides before adding a contact curve.");
+        if (!gtracker::supports_slides(pattern)) throw std::runtime_error("Enable slides before adding a contact curve.");
         if (cursor_lane < 0 || cursor_lane >= static_cast<int>(pattern.tuning_midi.size())) throw std::runtime_error("Choose a string lane for the slide.");
         Pattern next = pattern;
         gtracker::Gesture gesture;
@@ -1111,13 +1111,14 @@ void inspector(Editor& editor) {
     ImGui::Spacing();
     ImGui::Separator();
     if (ImGui::TreeNode("Instrument controls")) {
-        const char* models[]{"Baseline 0.1", "Contact 0.2 (experimental)"};
-        int model = editor.document.pattern().model == "contact_0_2" ? 1 : 0;
+        const char* models[]{"Baseline 0.1", "Contact 0.2 (experimental)", "Retained plucks 0.5 (experimental)"};
+        const char* model_ids[]{"baseline_0_1", "contact_0_2", "retained_0_5"};
+        int model = static_cast<int>(gtracker::instrument_model(editor.document.pattern().model));
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##instrument_model", &model, models, 2))
-            editor.attempt([&] { editor.set_model(model == 1 ? "contact_0_2" : "baseline_0_1"); });
+        if (ImGui::Combo("##instrument_model", &model, models, 3))
+            editor.attempt([&] { editor.set_model(model_ids[model]); });
         ImGui::TextDisabled("Pattern format v%d", editor.document.pattern().schema_version);
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Existing v1 files keep the original baseline. Selecting a model explicitly uses v2; curves are preserved and cannot be flattened by choosing baseline.");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Existing v1 files keep the original baseline. Retained 0.5 keeps weighted vibration on replucks; zero strength does not mute it. Select a model explicitly to use v2. Existing curves cannot be flattened by choosing baseline.");
         float decay = editor.document.pattern().decay_seconds;
         float brightness = editor.document.pattern().brightness;
         float body_mix = editor.document.pattern().body_mix;
@@ -1313,7 +1314,7 @@ void interface(Editor& editor) {
         editor.attempt([&]() { editor.add("body_hit"); });
     }
     ImGui::SameLine();
-    const bool slides_enabled = editor.document.pattern().model == "contact_0_2";
+    const bool slides_enabled = gtracker::supports_slides(editor.document.pattern());
     if (ImGui::Button(slides_enabled ? "+ Slide" : "Enable slides")) {
         editor.attempt([&] { if (slides_enabled) editor.add_slide(); else editor.set_model("contact_0_2"); });
     }

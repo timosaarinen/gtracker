@@ -76,6 +76,8 @@ struct RenderResult {
 };
 
 void validate_pattern(const Pattern& pattern);
+gt_model instrument_model(std::string_view name);
+bool supports_slides(const Pattern& pattern);
 ProductionSettings parse_production_json(std::string_view source);
 std::string production_json(const ProductionSettings& settings);
 Pattern parse_pattern_json(std::string_view json);

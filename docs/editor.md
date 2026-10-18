@@ -139,7 +139,7 @@ The first Lua API is deliberately coarse:
 | `gtracker.set_tempo(bpm)` | Set pattern tempo. |
 | `gtracker.scale_strength(factor)` | Multiply pluck/body-hit strengths; damping amounts stay fixed. |
 | `gtracker.add_note(beat, string, fret, strength)` | Append a pluck with a generated unique ID; string is one-based and strength defaults to `0.7`. |
-| `gtracker.set_model(model)` | Explicitly select v2 `baseline_0_1` or experimental `contact_0_2`; existing slides prevent switching to baseline. |
+| `gtracker.set_model(model)` | Explicitly select v2 `baseline_0_1`, experimental `contact_0_2` or `retained_0_5`; existing slides prevent switching to baseline. |
 | `gtracker.add_slide(beat, string, points)` | Append a v2 contact curve; points contain local `beat`/`fret` values, starting at offset zero. |
 
 See [continuous slides](gestures.md) for the tab controls, model opt-in, shared

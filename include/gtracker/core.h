@@ -4,9 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define GT_VERSION "0.4.0"
+#define GT_VERSION "0.5.0"
 #define GT_VERSION_MAJOR 0
-#define GT_VERSION_MINOR 4
+#define GT_VERSION_MINOR 5
 #define GT_VERSION_PATCH 0
 #define GT_MAX_STRINGS 12
 
@@ -49,7 +49,8 @@ typedef struct gt_synth gt_synth;
 
 typedef enum gt_model {
     GT_MODEL_BASELINE_0_1 = 0,
-    GT_MODEL_CONTACT_0_2 = 1 /* Experimental moving-delay contact; not calibrated physics. */
+    GT_MODEL_CONTACT_0_2 = 1, /* Experimental moving-delay contact; not calibrated physics. */
+    GT_MODEL_RETAINED_0_5 = 2 /* Retained repluck vibration + contact; explicit experimental choice. */
 } gt_model;
 
 typedef struct gt_fret_point {
@@ -83,7 +84,9 @@ void gt_destroy(gt_synth* synth); /* NULL is allowed. */
  * Copy up to 1,000,000 events, sorted by nondecreasing frame, then reset.
  * Equal-frame events execute in their supplied order. A zero count clears the
  * performance; events may then be NULL. Failure leaves the existing state intact.
- * PLUCK replaces this string's vibration and sets its fret. DAMP ignores fret.
+ * PLUCK replaces vibration in baseline/contact. retained_0_5 preserves a
+ * weighted old displacement and adds new excitation; zero strength preserves
+ * vibration there. DAMP ignores fret and is the explicit way to silence it.
  * BODY_HIT ignores string_index and fret. All supplied floats must still be finite,
  * fret must be 0..36, and strength must be 0..1. A plucked pitch must be <= rate/4.
  */
@@ -91,7 +94,7 @@ gt_result gt_set_events(gt_synth* synth, const gt_event* events, size_t count);
 
 /*
  * Copy events plus <=16,384 slides / <=65,536 total points, sorted by slide start.
- * Slides require CONTACT_0_2, retain vibration and do not excite a silent string.
+ * Slides require CONTACT_0_2 or RETAINED_0_5, retain vibration and do not excite a silent string.
  * Same-string slides may touch but cannot overlap. A pluck at a slide start must
  * have its first fret; plucks strictly inside a slide are rejected. At its end,
  * a same-frame pluck takes precedence. Damping remains effective during slides.

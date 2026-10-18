@@ -233,3 +233,35 @@ native and80 Python tests with one POSIX-only interrupt skip. Cache-source
 corruption/recovery and the first miss/reused hit passed separately. Fresh
 desktop/core-only, package and Linux checks continue below in local receipts;
 do not infer physical playback, microphone, Mac or listening qualification.
+
+The clean cache checkpoint `1f19e17` also passed Ubuntu GCC9 headless/Python80,
+desktop25 and Clang10 ASan/UBSan18, with no Python skips after rebuilding the
+desktop tools. A private-clone audit changed production code without bumping the
+renderer version: an ordinary build regenerated its identity and missed cache;
+restoring the source restored the original identity/hit/PCM. Debug versus Release
+also selected different keys. The clone was restored byte-for-byte. Evidence:
+`.local/qualification/ubuntu/.local/nightshift/build-identity-b46e89af/report.json`.
+
+Named Windows streaming measurements retained about 5.5 MB peak child working
+set for sparse 26/98/770-second exports. The 770-second baseline took 32.34 seconds
+including process/export overhead; one-second previews stayed around 16–20 ms.
+Three full 46.47-second stereo song exports took 379.74–382.99 ms with cache
+refresh versus 112.15–114.01 ms for checked hits. These are actual workloads on
+the i7-10700K/Clang18 Release machine, not an inferred general speedup. Source,
+commands and measurements are in `.local/nightshift/stream-measurements/report.json`.
+
+Issue #4 increment: renderer0.5 adds explicit `retained_0_5` excitation memory,
+the existing slide API, an editor/Lua selector, an original dry repluck study and
+optional generated known-score probes. Original baseline/contact factories,
+numeric paths and campfire/slide PCM16 hashes remain intact. Numeric cleanup in
+the new model makes an isolated 98-second body tail much cheaper with identical
+PCM16; full parameters and limits are in docs/retained.md. This is an experimental
+excitation heuristic, not physical pick/fret geometry or a listening verdict.
+
+Windows full CI `.local/ci/runs/20261018T063743Z-67bbff05/report.json` passed19
+native and84 Python checks (one POSIX-only interrupt skip) against the recorded
+dirty source fingerprint. Fresh desktop26, core-only7 and44-file package builds
+passed separately. The final extra framebuffer capture is checked separately.
+`.local/nightshift/retained-checks.json` binds the generated A/B, 18 known-score
+probes and playable `.local/night-shift-retained.wav` to their actual source/build.
+Linux qualification of this new model follows its committed checkpoint.

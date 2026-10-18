@@ -78,6 +78,7 @@ bool valid_event(const gt_config& config, const gt_event& event) noexcept {
 
 struct StringState {
     std::vector<double> delay_line;
+    std::vector<double> excitation; // Preallocated only by retained_0_5.
     std::size_t write_index = 0;
     double delay_samples = 4.0;
     double previous_delayed = 0.0;
@@ -154,27 +155,37 @@ double noise(gt_synth& synth) noexcept {
 
 void pluck(gt_synth& synth, const gt_event& event) noexcept {
     auto& string = synth.strings[event.string_index];
+    const bool retained = synth.model == GT_MODEL_RETAINED_0_5;
+    const bool was_active = string.active;
     const double frequency = event_frequency(synth.config, event);
     const double lowpass_delay = (1.0 - static_cast<double>(synth.config.brightness)) * 0.5;
     string.delay_samples = static_cast<double>(synth.config.sample_rate) / frequency - lowpass_delay;
     string.feedback = std::exp(kLogSilence / (frequency * synth.config.decay_seconds));
-    string.write_index = 0;
-    string.previous_delayed = 0.0;
-    string.active = event.strength > 0.0f;
+    if (!retained || !was_active) {
+        string.write_index = 0;
+        string.previous_delayed = 0.0;
+    }
+    string.active = (retained && was_active) || event.strength > 0.0f;
     string.contact_fret = event.fret;
     string.damping_factor = 1.0;
 
-    // A seeded, zero-mean initial displacement. This baseline reinitializes the
-    // addressed string on a pluck; independent ringing strings are untouched.
+    // Preserve the original factories exactly. The explicit retained model
+    // superposes a new displacement and scales old vibration by (1 - .5*s).
+    // This is a bounded excitation-memory heuristic, not measured finger loss.
+    auto& excitation = retained ? string.excitation : string.delay_line;
     double mean = 0.0;
-    for (double& sample : string.delay_line) {
+    for (double& sample : excitation) {
         sample = noise(synth);
         mean += sample;
     }
-    mean /= static_cast<double>(string.delay_line.size());
+    mean /= static_cast<double>(excitation.size());
     const double amplitude = static_cast<double>(event.strength) * 0.45;
-    for (double& sample : string.delay_line) {
-        sample = (sample - mean) * amplitude;
+    const double memory = retained && was_active ? 1.0 - 0.5 * event.strength : 0.0;
+    if (retained) string.previous_delayed *= memory;
+    for (std::size_t i = 0; i < string.delay_line.size(); ++i) {
+        const double displacement = (excitation[i] - mean) * amplitude;
+        if (retained && was_active) string.delay_line[i] = string.delay_line[i] * memory + displacement;
+        else string.delay_line[i] = displacement;
     }
 }
 
@@ -241,7 +252,11 @@ void update_contacts(gt_synth& synth) noexcept {
     }
 }
 
-double render_string(StringState& string, double brightness) noexcept {
+double normal_or_zero(double value) noexcept {
+    return std::abs(value) < std::numeric_limits<double>::min() ? 0.0 : value;
+}
+
+double render_string(StringState& string, double brightness, bool numeric_hygiene) noexcept {
     if (!string.active) {
         return 0.0;
     }
@@ -258,23 +273,24 @@ double render_string(StringState& string, double brightness) noexcept {
     const double previous_weight = (1.0 - brightness) * 0.5;
     const double filtered = delayed * (1.0 - previous_weight) +
                             string.previous_delayed * previous_weight;
-    string.previous_delayed = delayed;
-    string.delay_line[string.write_index] = filtered * string.feedback;
+    string.previous_delayed = numeric_hygiene ? normal_or_zero(delayed) : delayed;
+    const double next = filtered * string.feedback;
+    string.delay_line[string.write_index] = numeric_hygiene ? normal_or_zero(next) : next;
     if (++string.write_index == capacity) {
         string.write_index = 0;
     }
-    return delayed;
+    return numeric_hygiene ? normal_or_zero(delayed) : delayed;
 }
 
-double render_body(gt_synth& synth, double strings) noexcept {
+double render_body(gt_synth& synth, double strings, bool numeric_hygiene) noexcept {
     double sum = 0.0;
     for (auto& mode : synth.body) {
         const double x = mode.rotation_x * mode.x - mode.rotation_y * mode.y +
                          strings * mode.input_gain;
         const double y = mode.rotation_y * mode.x + mode.rotation_x * mode.y;
-        mode.x = x;
-        mode.y = y;
-        sum += x;
+        mode.x = numeric_hygiene ? normal_or_zero(x) : x;
+        mode.y = numeric_hygiene ? normal_or_zero(y) : y;
+        sum += mode.x;
     }
     return sum;
 }
@@ -320,6 +336,7 @@ const char* gt_model_name(gt_model model) {
     switch (enum_value(model)) {
     case GT_MODEL_BASELINE_0_1: return "baseline_0_1";
     case GT_MODEL_CONTACT_0_2: return "contact_0_2";
+    case GT_MODEL_RETAINED_0_5: return "retained_0_5";
     default: return "unknown_model";
     }
 }
@@ -330,7 +347,7 @@ gt_result gt_create_model(const gt_config* config, gt_model model, gt_synth** ou
     }
     *out_synth = nullptr;
     const auto model_value = enum_value(model);
-    if (config == nullptr || !valid_config(*config) || (model_value != GT_MODEL_BASELINE_0_1 && model_value != GT_MODEL_CONTACT_0_2)) {
+    if (config == nullptr || !valid_config(*config) || (model_value != GT_MODEL_BASELINE_0_1 && model_value != GT_MODEL_CONTACT_0_2 && model_value != GT_MODEL_RETAINED_0_5)) {
         return GT_INVALID_ARGUMENT;
     }
     try {
@@ -341,6 +358,7 @@ gt_result gt_create_model(const gt_config* config, gt_model model, gt_synth** ou
             const auto capacity = static_cast<std::size_t>(
                 std::ceil(static_cast<double>(config->sample_rate) / config->tuning_hz[i])) + 4;
             synth->strings[i].delay_line.resize(capacity, 0.0);
+            if (model_value == GT_MODEL_RETAINED_0_5) synth->strings[i].excitation.resize(capacity, 0.0);
         }
         // Illustrative synthetic modes, not measurements of a particular guitar.
         constexpr std::array<double, 6> frequencies{97.0, 191.0, 287.0, 433.0, 683.0, 1049.0};
@@ -378,7 +396,7 @@ gt_result gt_set_performance(gt_synth* synth, const gt_event* events, size_t cou
     if (synth == nullptr || (count != 0 && events == nullptr) || count > kMaxEvents) {
         return GT_INVALID_ARGUMENT;
     }
-    if ((slide_count && (!slides || synth->model != GT_MODEL_CONTACT_0_2)) || slide_count > kMaxSlides) return GT_INVALID_ARGUMENT;
+    if ((slide_count && (!slides || synth->model == GT_MODEL_BASELINE_0_1)) || slide_count > kMaxSlides) return GT_INVALID_ARGUMENT;
     for (std::size_t i = 0; i < count; ++i) {
         if (!valid_event(synth->config, events[i]) ||
             (i != 0 && events[i].frame < events[i - 1].frame)) {
@@ -451,17 +469,18 @@ gt_result gt_render(gt_synth* synth, float* mono, size_t frames) {
         frames > std::numeric_limits<std::uint64_t>::max() - synth->frame) {
         return GT_INVALID_ARGUMENT;
     }
+    const bool numeric_hygiene = synth->model == GT_MODEL_RETAINED_0_5;
     for (std::size_t i = 0; i < frames; ++i) {
-        if (synth->model == GT_MODEL_CONTACT_0_2) update_contacts(*synth);
+        if (synth->model != GT_MODEL_BASELINE_0_1) update_contacts(*synth);
         while (synth->event_cursor < synth->events.size() &&
                synth->events[synth->event_cursor].frame == synth->frame) {
             apply_event(*synth, synth->events[synth->event_cursor++]);
         }
         double strings = 0.0;
         for (std::uint32_t index = 0; index < synth->config.string_count; ++index) {
-            strings += render_string(synth->strings[index], synth->config.brightness);
+            strings += render_string(synth->strings[index], synth->config.brightness, numeric_hygiene);
         }
-        const double body = render_body(*synth, strings);
+        const double body = render_body(*synth, strings, numeric_hygiene);
         const double mixed = strings * 0.7 + body * synth->config.body_mix;
         // Gentle output protection for dense chords/hits. This is a production
         // safeguard, not part of the physical model or a room-reverb simulation.

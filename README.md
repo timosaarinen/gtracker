@@ -5,7 +5,7 @@ tool for **Lust of War**. Compose in horizontal tabs, use Lua for musical editin
 and develop audio-to-pattern analysis against the same native instrument that
 will render music in the game.
 
-**Status: working 0.4 prototype.** This is an audible development foundation,
+**Status: working 0.5 prototype.** This is an audible development foundation,
 not yet a realistic guitar instrument or an automatic guitar transcriber.
 
 ## What works now
@@ -17,6 +17,9 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 - Explicit v2 [continuous slide curves](docs/gestures.md) through save/reopen,
   Lua, native rendering and tab editing/undo. The experimental contact model
   retains vibration; the original v1 baseline remains selectable and unchanged.
+- An explicit [retained-excitation model](docs/retained.md) preserves part of a
+  string's vibration when replucked, with a dry A/B study and repeatable generated
+  pitch/decay probes. It remains experimental and separately selectable.
 - Native SDL3 + Dear ImGui/ImPlot editor: horizontal string/body lanes, event
   selection and editing, add/delete, undo/redo, load/save, asynchronous rendering,
   queued playback, waveform preview, keyboard shortcuts, grouped control undo

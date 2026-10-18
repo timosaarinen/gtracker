@@ -1,6 +1,6 @@
 # Synthesis baseline
 
-Renderer version: **0.4.0**, preserving the explicit **baseline_0_1** sound.
+Renderer version: **0.5.0**, preserving the explicit **baseline_0_1** sound.
 The dependency-free instrument library exposes the C interface
 in `include/gtracker/core.h`. It is shared by the editor and command-line renderer;
 it has no dependency on SDL, Lua, JSON, Python, an audio device, or sampled audio.
@@ -104,6 +104,11 @@ Same-string curves cannot overlap; conflicting plucks inside a curve are rejecte
 At a curve's end, a same-frame pluck takes precedence. Reset/copy/partition
 behavior remains deterministic within a build, with no render-time allocations.
 With no curves the explicit contact model renders the same samples as baseline.
+
+The explicit [retained_0_5 experiment](retained.md) adds new excitation to a
+weighted portion of the string's previous vibration rather than replacing it.
+It supports the same slides and clears inaudible double-subnormal state without
+changing the caller's floating-point controls. Older model paths stay intact.
 
 This moving-delay experiment is not a physical fret/finger collision model. It
 can introduce modulation artifacts and energy loss while delay length changes.

@@ -83,7 +83,7 @@ void help() {
         "      [--output JSON] [--json]\n"
         "  gtracker_cli --version\n\n"
         "Patterns use v1 baseline or explicit v2 models/slide curves, beat times,\n"
-        "and one-based string numbers (highest first). Contact_0_2 is experimental.\n";
+        "and one-based string numbers (highest first). Contact_0_2 and retained_0_5 are experimental.\n";
 }
 double number(const std::string& text, const char* flag) {
     std::size_t used = 0;

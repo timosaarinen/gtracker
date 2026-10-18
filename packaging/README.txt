@@ -10,6 +10,8 @@ run ./gtracker_editor. The editor opens an original built-in
 sketch. Render + Play generates its audio. See docs/editor.md for controls.
 The original slide-study example opts into the experimental contact model and
 v2 continuous curves; see docs/gestures.md. V1 keeps the unchanged baseline.
+The repluck-study and scripts/retain.lua compare explicit retained excitation;
+see docs/retained.md for the experimental model and repeatable measurements.
 
 Scripts are found beside the executable, regardless of the working directory.
 With no explicit document, the suggested save location is the per-user gtracker

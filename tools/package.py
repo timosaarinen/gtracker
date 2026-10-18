@@ -26,9 +26,9 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
     if profile == "desktop":
         result.append((dev.executable(root, profile, "gtracker_editor"), "gtracker_editor" + (".exe" if os.name == "nt" else "")))
         result.append((dev.executable(root, profile, "gtracker_capture"), "gtracker_capture" + (".exe" if os.name == "nt" else "")))
-    for name in ("examples/campfire.gtrk.json", "examples/slide-study.gtrk.json", "examples/night-bridge.gtrk.json", "examples/night-shift.gsong.json", "examples/room.json", "scripts/soften.lua", "scripts/slide.lua",
+    for name in ("examples/campfire.gtrk.json", "examples/slide-study.gtrk.json", "examples/repluck-study.gtrk.json", "examples/night-bridge.gtrk.json", "examples/night-shift.gsong.json", "examples/room.json", "scripts/soften.lua", "scripts/slide.lua", "scripts/retain.lua",
                  "schema/pattern.schema.json", "schema/pattern-v2.schema.json", "schema/take.schema.json", "schema/capture-result.schema.json",
-                 "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "schema/render-cache.schema.json", "docs/cache.md", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
+                 "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "schema/render-cache.schema.json", "docs/cache.md", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/retained.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
     dependencies = root / ".local/build" / profile / "_deps"

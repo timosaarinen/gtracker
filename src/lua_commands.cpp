@@ -134,8 +134,8 @@ int add_slide(lua_State* state) {
         lua_pop(state, 2);
     }
     return edit(state, [beat, string_number, points, count](Pattern& pattern) {
-        if (pattern.schema_version != 2 || pattern.model != "contact_0_2")
-            throw std::invalid_argument("add_slide requires explicit gtracker.set_model('contact_0_2') first");
+        if (pattern.schema_version != 2 || !supports_slides(pattern))
+            throw std::invalid_argument("add_slide requires an explicit contact or retained model first");
         if (string_number < 1 || string_number > static_cast<lua_Integer>(pattern.tuning_midi.size()))
             throw std::invalid_argument("add_slide string is outside the instrument");
         Gesture gesture;

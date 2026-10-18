@@ -41,5 +41,5 @@ int main(void) {
         for (i = 0; i < 8; ++i) if (silence[i] != 0.0f) { gt_destroy(synth); return 7; }
         gt_destroy(synth);
     }
-    return GT_VERSION_MAJOR != 0 || GT_VERSION_MINOR != 4 || GT_VERSION_PATCH != 0;
+    return GT_VERSION_MAJOR != 0 || GT_VERSION_MINOR != 5 || GT_VERSION_PATCH != 0;
 }
