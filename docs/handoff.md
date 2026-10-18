@@ -50,8 +50,13 @@ pattern copies, versioned relative-path manifests, explicit source-frame mapping
 manual/uncalibrated input offsets and metadata-only job identity. Eight focused
 tests pass for 44.1/48 kHz mono/stereo PCM widths, timing, moved bundles, stale
 pattern revisions, changed source/jobs, refused overwrites and cancellation.
-See docs/takes.md. Native source waveform/playback integration is next; no
-microphone capture or musical transcription has been added.
+See docs/takes.md. Native source comparison now opens with `editor --take PATH`
+or the Source take inspector. It overlays source/synth on a beat axis, retains
+pre-roll, switches original stereo/rate to the mono synth and back, and preserves
+the take's pattern association on save/reopen. The generated stereo UI fixture
+passes guarded-load cancellation, A/B transport, save/reopen and source-byte
+preservation checks; actual comparison frames were inspected. No microphone
+capture or musical transcription has been added.
 The native CLI now also exposes `take-info` using the shared bounded PCM reader,
 SHA-256 source verification and checked job/timing/metrics. Focused PCM tests
 cover channel/width/rate variants, unknown chunks, truncation and buffer bounds;
@@ -70,6 +75,6 @@ ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
 LeakSanitizer was blocked there. Intel Mac and current cross-platform
 qualification remain outstanding. Keep issue #1 open for those real checks.
 
-Next: advance issue #2 with a small source-preserving take/import and explicit
-sample-to-beat workflow, then a bounded end-to-end musical feature or polish.
+Next: extend issue #2 with explicit capture/device selection and a synthetic
+capture path, then a bounded end-to-end musical feature or polish.
 Real takes, clock/latency calibration and transcription need separate evidence.

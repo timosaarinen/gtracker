@@ -1,5 +1,6 @@
 #include "gtracker/project.hpp"
 #include "gtracker/editor_document.hpp"
+#include "gtracker/take.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -18,6 +19,7 @@
 #include <future>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -36,6 +38,7 @@ constexpr ImU32 quiet_color = IM_COL32(122, 144, 162, 255);
 
 struct Arguments {
     std::filesystem::path document;
+    std::filesystem::path take;
     std::filesystem::path script;
     std::filesystem::path screenshot;
     std::filesystem::path data_dir;
@@ -53,10 +56,13 @@ Arguments arguments(int argc, char* argv[]) {
             if (++i >= argc) {
                 throw std::invalid_argument("missing value after " + argument);
             }
+            if (argv[i][0] == '\0') throw std::invalid_argument("empty value after " + argument);
             return argv[i];
         };
         if (argument == "--script") {
             result.script = std::filesystem::u8path(value());
+        } else if (argument == "--take") {
+            result.take = std::filesystem::u8path(value());
         } else if (argument == "--screenshot") {
             result.screenshot = std::filesystem::u8path(value());
         } else if (argument == "--data-dir") {
@@ -85,6 +91,9 @@ Arguments arguments(int argc, char* argv[]) {
     }
     if (result.frames == 0 && (result.smoke || !result.screenshot.empty())) {
         result.frames = 8;
+    }
+    if (!result.document.empty() && !result.take.empty()) {
+        throw std::invalid_argument("Choose a pattern path or --take; a take supplies its own editable pattern.");
     }
     return result;
 }
@@ -137,9 +146,10 @@ std::filesystem::path editor_resource_directory(const Arguments& args) {
 
 struct CompletedRender {
     RenderResult audio;
-    std::vector<float> times;
-    std::vector<float> minimum;
-    std::vector<float> maximum;
+    std::vector<double> times;
+    std::vector<double> beats;
+    std::vector<double> minimum;
+    std::vector<double> maximum;
 };
 
 CompletedRender render_snapshot(const Pattern& pattern) {
@@ -147,6 +157,7 @@ CompletedRender render_snapshot(const Pattern& pattern) {
     result.audio = gtracker::render_pattern(pattern);
     const std::size_t count = std::min<std::size_t>(2048, result.audio.mono.size());
     result.times.reserve(count);
+    result.beats.reserve(count);
     result.minimum.reserve(count);
     result.maximum.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
@@ -154,12 +165,47 @@ CompletedRender render_snapshot(const Pattern& pattern) {
         const std::size_t end = (i + 1) * result.audio.mono.size() / count;
         auto bounds = std::minmax_element(result.audio.mono.begin() + begin,
                                           result.audio.mono.begin() + end);
-        result.times.push_back(static_cast<float>(begin + end) * 0.5f /
-                               static_cast<float>(result.audio.sample_rate));
+        const double seconds = static_cast<double>(begin + end) * 0.5 / result.audio.sample_rate;
+        result.times.push_back(seconds);
+        result.beats.push_back(seconds * pattern.bpm / 60.0);
         result.minimum.push_back(*bounds.first);
         result.maximum.push_back(*bounds.second);
     }
     return result;
+}
+
+struct SourcePreview {
+    gtracker::Take take;
+    std::vector<double> beats;
+    std::vector<double> minimum;
+    std::vector<double> maximum;
+};
+
+SourcePreview load_source_preview(const std::filesystem::path& path) {
+    SourcePreview preview;
+    preview.take = gtracker::load_take(path);
+    const auto& audio = preview.take.audio;
+    const auto count = std::min<std::size_t>(2048, static_cast<std::size_t>(audio.frames));
+    preview.beats.reserve(count);
+    preview.minimum.reserve(count);
+    preview.maximum.reserve(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto begin = i * audio.frames / count;
+        const auto end = (i + 1) * audio.frames / count;
+        const auto bounds = std::minmax_element(audio.interleaved.begin() + static_cast<std::ptrdiff_t>(begin * audio.channels),
+                                                audio.interleaved.begin() + static_cast<std::ptrdiff_t>(end * audio.channels));
+        preview.beats.push_back(preview.take.source_frame_to_beat(static_cast<double>(begin + end) * 0.5));
+        preview.minimum.push_back(*bounds.first);
+        preview.maximum.push_back(*bounds.second);
+    }
+    return preview;
+}
+
+template<std::size_t N>
+void set_text(std::array<char, N>& destination, const std::string& text) {
+    if (text.size() >= N) throw std::invalid_argument("Editor paths must fit within 1023 UTF-8 bytes.");
+    std::fill(destination.begin(), destination.end(), '\0');
+    std::copy(text.begin(), text.end(), destination.begin());
 }
 
 struct Editor {
@@ -171,8 +217,11 @@ struct Editor {
     std::uint64_t rendered_revision = 0;
     std::future<CompletedRender> pending;
     CompletedRender rendered;
+    std::optional<SourcePreview> source;
+    std::optional<SourcePreview> pending_source;
     SDL_AudioStream* audio_stream = nullptr;
     int audio_rate = 0;
+    int audio_channels = 0;
     int selected = 0;
     int cursor_lane = 0;
     double cursor_beat = 0.0;
@@ -181,25 +230,30 @@ struct Editor {
     bool render_failed = false;
     bool play_after_render = false;
     bool playing = false;
+    bool source_from_zero = true;
     std::string status = "Select a fret number, edit the inspector, then Render and Play.";
     std::array<char, 1024> path{};
     std::array<char, 1024> script_path{};
+    std::array<char, 1024> take_path{};
     std::array<char, 1024> confirmation_save_path{};
 
     explicit Editor(const Arguments& args) {
         data_directory = editor_data_directory(args);
         resource_directory = editor_resource_directory(args);
-        const std::string document_text = args.document.empty()
-            ? (data_directory / "sketch.gtrk.json").u8string() : args.document.u8string();
+        for (const auto& argument : {args.document, args.take, args.script}) {
+            if (argument.u8string().size() >= path.size()) throw std::invalid_argument("Editor launch paths must fit within 1023 UTF-8 bytes.");
+        }
+        if (!args.take.empty()) source = load_source_preview(args.take);
+        const auto document_path = source ? source->take.pattern_path : args.document;
+        const std::string document_text = document_path.empty()
+            ? (data_directory / "sketch.gtrk.json").u8string() : document_path.u8string();
         const std::string script_text = args.script.empty()
             ? (resource_directory / "scripts/soften.lua").u8string() : args.script.u8string();
-        if (document_text.size() >= path.size() || script_text.size() >= script_path.size()) {
-            throw std::invalid_argument("Editor paths must fit within 1023 bytes; launch path was not loaded or applied.");
-        }
-        std::copy(document_text.begin(), document_text.end(), path.begin());
-        std::copy(script_text.begin(), script_text.end(), script_path.begin());
-        if (!args.document.empty()) {
-            document = gtracker::EditorDocument(gtracker::load_pattern(args.document), args.document);
+        set_text(path, document_text);
+        set_text(script_path, script_text);
+        if (!args.take.empty()) set_text(take_path, source->take.manifest_path.u8string());
+        if (!document_path.empty()) {
+            document = gtracker::EditorDocument(source ? source->take.pattern : gtracker::load_pattern(document_path), document_path);
         }
         if (!args.script.empty()) {
             Pattern edited = document.pattern();
@@ -272,6 +326,10 @@ struct Editor {
     }
 
     void loaded() {
+        source = std::move(pending_source);
+        pending_source.reset();
+        set_text(path, document.filename().u8string());
+        if (source) set_text(take_path, source->take.manifest_path.u8string());
         selected = document.pattern().events.empty() ? -1 : 0;
         cursor_beat = 0.0;
         cursor_lane = 0;
@@ -280,25 +338,61 @@ struct Editor {
     }
 
     void load() {
+        if (document.pending() != gtracker::EditorDocument::Pending::none) return;
+        pending_source.reset();
         const auto before = document.generation();
         document.request_load(std::filesystem::u8path(path.data()));
         if (document.generation() != before) loaded();
+        else restore_active_path();
+    }
+
+    void restore_active_path() {
+        set_text(path, (document.filename().empty() ? data_directory / "sketch.gtrk.json" : document.filename()).u8string());
+    }
+
+    void load_source() {
+        if (document.pending() != gtracker::EditorDocument::Pending::none) return;
+        auto preview = load_source_preview(std::filesystem::u8path(take_path.data()));
+        if (preview.take.pattern_path.u8string().size() >= path.size() || preview.take.manifest_path.u8string().size() >= take_path.size())
+            throw std::invalid_argument("This take's display paths exceed 1023 UTF-8 bytes.");
+        const auto before = document.generation();
+        document.request_load(preview.take.pattern_path);
+        pending_source = std::move(preview);
+        if (document.generation() != before) loaded();
+        else restore_active_path();
+    }
+
+    std::filesystem::path save_destination(const char* value) const {
+        if (!value[0]) throw std::invalid_argument("Enter a pattern path before saving.");
+        auto destination = std::filesystem::u8path(value);
+        if (source) {
+            if (std::filesystem::weakly_canonical(destination) != source->take.pattern_path)
+                throw std::invalid_argument("Save the attached pattern in its take bundle. Detach source first to save a separate pattern copy.");
+            destination = source->take.pattern_path;
+        }
+        return destination;
+    }
+
+    void detach_source() {
+        if (document.pending() != gtracker::EditorDocument::Pending::none) return;
+        document.end_edit();
+        stop();
+        source.reset();
+        message("Source detached; its files are preserved. Save writes the pattern only.");
     }
 
     void resolve(gtracker::EditorDocument::Decision decision) {
-        if (decision == gtracker::EditorDocument::Decision::save && confirmation_save_path[0] == '\0') {
-            throw std::invalid_argument("Enter a path for the current pattern before saving.");
-        }
         const auto before = document.generation();
-        document.resolve(decision, std::filesystem::u8path(confirmation_save_path.data()));
+        const auto destination = decision == gtracker::EditorDocument::Decision::save
+            ? save_destination(confirmation_save_path.data()) : std::filesystem::path{};
+        document.resolve(decision, destination);
         if (document.generation() != before) loaded();
+        if (decision == gtracker::EditorDocument::Decision::cancel) pending_source.reset();
     }
 
     void save() {
-        if (path[0] == '\0') {
-            throw std::invalid_argument("Enter a pattern path before saving.");
-        }
-        document.save(std::filesystem::u8path(path.data()));
+        document.save(save_destination(path.data()));
+        restore_active_path();
         message("Saved " + std::string(path.data()) + ".");
     }
 
@@ -393,35 +487,62 @@ struct Editor {
             request_render(true);
             return;
         }
-        if (!audio_stream || audio_rate != rendered.audio.sample_rate) {
+        queue_audio(rendered.audio.mono.data(), rendered.audio.mono.size(), rendered.audio.sample_rate, 1);
+        message("Playing rendered revision " + std::to_string(rendered_revision) + ".");
+    }
+
+    void play_source() {
+        if (!source) return;
+        const auto& take = source->take;
+        const auto range = source_playback_range();
+        const auto begin = static_cast<std::size_t>(range.first) * take.audio.channels;
+        const auto count = static_cast<std::size_t>(range.second - range.first) * take.audio.channels;
+        queue_audio(take.audio.interleaved.data() + begin, count, take.audio.sample_rate, take.audio.channels);
+        message("Playing the original source selection; native channel count and timing retained.");
+    }
+
+    std::pair<std::uint64_t, std::uint64_t> source_playback_range() const {
+        if (!source) throw std::runtime_error("No source take is attached.");
+        const auto& timing = source->take.alignment;
+        auto begin = timing.selection_start_frame;
+        if (source_from_zero) {
+            const auto zero = static_cast<std::int64_t>(timing.pattern_zero_frame) + timing.input_offset_frames;
+            if (zero > 0) begin = std::max(begin, static_cast<std::uint64_t>(zero));
+        }
+        if (begin >= timing.selection_end_frame)
+            throw std::runtime_error("This source selection ends before beat zero. Disable From beat 0 or adjust the take alignment.");
+        return {begin, timing.selection_end_frame};
+    }
+
+    void queue_audio(const float* samples, std::size_t count, int rate, int channels) {
+        if (count > static_cast<std::size_t>(std::numeric_limits<int>::max()) / sizeof(float))
+            throw std::runtime_error("Audio exceeds this prototype's playback queue limit.");
+        stop();
+        if (!audio_stream || audio_rate != rate || audio_channels != channels) {
             if (audio_stream) {
                 SDL_DestroyAudioStream(audio_stream);
                 audio_stream = nullptr;
             }
-            if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
+            if (!(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO)) {
                 throw std::runtime_error(std::string("Audio initialization: ") + SDL_GetError());
             }
             SDL_AudioSpec spec{};
             spec.format = SDL_AUDIO_F32;
-            spec.channels = 1;
-            spec.freq = rendered.audio.sample_rate;
+            spec.channels = channels;
+            spec.freq = rate;
             audio_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
             if (!audio_stream) {
                 throw std::runtime_error(std::string("Audio output: ") + SDL_GetError());
             }
             audio_rate = spec.freq;
+            audio_channels = channels;
         }
-        const auto bytes = rendered.audio.mono.size() * sizeof(float);
-        if (bytes > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-            throw std::runtime_error("Rendered audio is too large for this prototype's playback queue.");
-        }
-        SDL_ClearAudioStream(audio_stream);
-        if (!SDL_PutAudioStreamData(audio_stream, rendered.audio.mono.data(), static_cast<int>(bytes)) ||
+        const auto bytes = count * sizeof(float);
+        if (!SDL_PutAudioStreamData(audio_stream, samples, static_cast<int>(bytes)) ||
             !SDL_FlushAudioStream(audio_stream) || !SDL_ResumeAudioStreamDevice(audio_stream)) {
             throw std::runtime_error(std::string("Audio playback: ") + SDL_GetError());
         }
         playing = true;
-        message("Playing rendered revision " + std::to_string(rendered_revision) + ".");
     }
 };
 
@@ -727,10 +848,28 @@ void inspector(Editor& editor) {
         ImGui::TextDisabled("Trusted local scripts.");
         ImGui::TreePop();
     }
+    if (ImGui::TreeNode("Source take")) {
+        ImGui::TextWrapped("Open a preserved take bundle to compare its original audio with this instrument.");
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputText("##take_path", editor.take_path.data(), editor.take_path.size());
+        if (ImGui::Button("Open take", ImVec2(-1.0f, 0.0f))) editor.attempt([&]() { editor.load_source(); });
+        if (editor.source) {
+            const auto& take = editor.source->take;
+            ImGui::TextWrapped("%s", take.source_name.c_str());
+            ImGui::Text("%d Hz, %d channels, %d-bit PCM", take.audio.sample_rate, take.audio.channels, take.audio.sample_width_bits);
+            ImGui::Text("Source tempo: %.2f BPM", take.alignment.bpm);
+            ImGui::Text("Input offset: %lld frames (%s)", static_cast<long long>(take.alignment.input_offset_frames), take.alignment.offset_status.c_str());
+            ImGui::TextWrapped("No latency calibration or note transcription is available. The authored pattern is retained.");
+            if (editor.document.pattern().revision != take.source_pattern_revision)
+                ImGui::TextWrapped("Analysis belongs to an older pattern revision. No proposal is applied.");
+        }
+        ImGui::TreePop();
+    }
 }
 
 void waveform(const Editor& editor, float height) {
-    if (editor.rendered.audio.mono.empty()) {
+    const bool has_render = !editor.rendered.audio.mono.empty();
+    if (!has_render && !editor.source) {
         ImGui::BeginChild("##wave_empty", ImVec2(0.0f, height), ImGuiChildFlags_Borders);
         ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "RENDERED WAVEFORM");
         ImGui::TextWrapped("Render the pattern to inspect the waveform. Space renders and plays the current edit.");
@@ -738,16 +877,38 @@ void waveform(const Editor& editor, float height) {
         return;
     }
     const bool current = editor.current_audio();
-    if (ImPlot::BeginPlot("##waveform", ImVec2(-1.0f, height), ImPlotFlags_NoLegend | ImPlotFlags_NoMenus)) {
-        ImPlot::SetupAxes("Time (seconds)", nullptr, ImPlotAxisFlags_NoHighlight, ImPlotAxisFlags_NoHighlight);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0,
-                               static_cast<double>(editor.rendered.audio.mono.size()) / editor.rendered.audio.sample_rate,
-                               ImGuiCond_Always);
+    const bool source = editor.source.has_value();
+    if (ImPlot::BeginPlot("##waveform", ImVec2(-1.0f, height), ImPlotFlags_NoMenus | (source ? 0 : ImPlotFlags_NoLegend))) {
+        ImPlot::SetupAxes(source ? "Pattern beat" : "Time (seconds)", nullptr, ImPlotAxisFlags_NoHighlight, ImPlotAxisFlags_NoHighlight);
+        if (source) {
+            const auto& preview = *editor.source;
+            const double start = std::min(0.0, preview.take.source_frame_to_beat(0));
+            double end = std::max(editor.document.pattern().length_beats,
+                                  preview.take.source_frame_to_beat(static_cast<double>(preview.take.audio.frames)));
+            if (has_render) end = std::max(end, editor.rendered.beats.back());
+            ImPlot::SetupAxisLimits(ImAxis_X1, start, end, ImGuiCond_Always);
+            ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Horizontal);
+        } else {
+            ImPlot::SetupAxisLimits(ImAxis_X1, 0.0,
+                                   static_cast<double>(editor.rendered.audio.mono.size()) / editor.rendered.audio.sample_rate,
+                                   ImGuiCond_Always);
+        }
         ImPlot::SetupAxisLimits(ImAxis_Y1, -1.05, 1.05, ImGuiCond_Always);
-        ImPlot::SetNextFillStyle(current ? ImVec4(0.30f, 0.83f, 0.87f, 0.80f)
-                                        : ImVec4(0.42f, 0.48f, 0.53f, 0.60f));
-        ImPlot::PlotShaded("Amplitude", editor.rendered.times.data(), editor.rendered.minimum.data(),
-                           editor.rendered.maximum.data(), static_cast<int>(editor.rendered.times.size()));
+        if (source) {
+            const auto& preview = *editor.source;
+            ImPlot::SetNextFillStyle(ImVec4(0.96f, 0.74f, 0.37f, 0.45f));
+            ImPlot::PlotShaded("Source", preview.beats.data(), preview.minimum.data(), preview.maximum.data(), static_cast<int>(preview.beats.size()));
+            const double boundaries[] = {0, editor.document.pattern().length_beats};
+            ImPlot::SetNextLineStyle(ImVec4(0.55f, 0.59f, 0.63f, 0.65f));
+            ImPlot::PlotInfLines("Pattern bounds", boundaries, 2);
+        }
+        if (has_render) {
+            ImPlot::SetNextFillStyle(current ? ImVec4(0.30f, 0.83f, 0.87f, 0.80f)
+                                            : ImVec4(0.42f, 0.48f, 0.53f, 0.60f));
+            ImPlot::PlotShaded(current ? "Synth" : "Synth (previous)",
+                               source ? editor.rendered.beats.data() : editor.rendered.times.data(), editor.rendered.minimum.data(),
+                               editor.rendered.maximum.data(), static_cast<int>(editor.rendered.times.size()));
+        }
         ImPlot::EndPlot();
     }
 }
@@ -844,7 +1005,9 @@ void interface(Editor& editor) {
     ImGui::EndDisabled();
     ImGui::SameLine();
     ImGui::BeginDisabled(editor.rendering());
-    if (ImGui::Button(editor.current_audio() ? "Play" : "Render + Play")) {
+    const char* play_label = editor.source ? (editor.current_audio() ? "Play synth" : "Render + Play synth")
+                                           : (editor.current_audio() ? "Play" : "Render + Play");
+    if (ImGui::Button(play_label)) {
         editor.attempt([&]() { editor.play(); });
     }
     ImGui::EndDisabled();
@@ -886,6 +1049,33 @@ void interface(Editor& editor) {
     ImGui::SameLine();
     ImGui::TextDisabled("%zu strings  |  %zu events  |  cursor %.2f", editor.document.pattern().tuning_midi.size(),
                         editor.document.pattern().events.size(), editor.cursor_beat);
+
+    if (editor.source) {
+        if (ImGui::Button("Play source")) editor.attempt([&]() { editor.play_source(); });
+        ImGui::SameLine();
+        if (ImGui::Checkbox("From beat 0", &editor.source_from_zero)) {
+            editor.stop();
+            editor.message("Source playback range changed. Play source to compare.");
+        }
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Start at the aligned beat-zero frame within the selected source. Disable to hear retained pre-roll. The original file is unchanged.");
+        ImGui::SameLine();
+        const bool detach = ImGui::Button("Detach");
+        ImGui::SameLine();
+        const auto& take = editor.source->take;
+        ImGui::TextDisabled("%s | %.1f kHz, %d ch | source %.1f BPM | no transcript", take.source_name.c_str(),
+                            take.audio.sample_rate / 1000.0, take.audio.channels, take.alignment.bpm);
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::TextWrapped("%s", take.source_name.c_str());
+            ImGui::Text("%d-bit PCM; input offset %lld frames (%s)", take.audio.sample_width_bits,
+                        static_cast<long long>(take.alignment.input_offset_frames), take.alignment.offset_status.c_str());
+            ImGui::TextUnformatted("No latency calibration or note recognition is available.");
+            if (editor.document.pattern().revision != take.source_pattern_revision)
+                ImGui::TextUnformatted("Metadata job belongs to an older pattern revision; no proposal is applied.");
+            ImGui::EndTooltip();
+        }
+        if (detach) editor.detach_source();
+    }
 
     const float waveform_height = 136.0f;
     const float main_height = std::max(255.0f, ImGui::GetContentRegionAvail().y - waveform_height - 65.0f);
@@ -1084,6 +1274,7 @@ int main(int argc, char* argv[]) {
         const Arguments args = arguments(argc, argv);
         if (args.help) {
             std::cout << "gtracker_editor [pattern.gtrk.json] [--script PATH]\n"
+                         "                [--take PATH] (instead of a pattern path)\n"
                          "                [--data-dir PATH] [--resource-dir PATH]\n"
                          "                [--smoke-test] [--frames N] [--screenshot PATH.bmp]\n\n"
                          "Default saves go to the per-user application data folder.\n"

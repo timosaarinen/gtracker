@@ -24,8 +24,8 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
     result = [(dev.executable(root, profile, "gtracker_cli"), "gtracker_cli" + (".exe" if os.name == "nt" else ""))]
     if profile == "desktop":
         result.append((dev.executable(root, profile, "gtracker_editor"), "gtracker_editor" + (".exe" if os.name == "nt" else "")))
-    for name in ("examples/campfire.gtrk.json", "scripts/soften.lua", "schema/pattern.schema.json",
-                 "docs/editor.md", "docs/synthesis.md", "THIRD_PARTY_NOTICES.md"):
+    for name in ("examples/campfire.gtrk.json", "scripts/soften.lua", "schema/pattern.schema.json", "schema/take.schema.json",
+                 "docs/editor.md", "docs/synthesis.md", "docs/takes.md", "THIRD_PARTY_NOTICES.md"):
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
     dependencies = root / ".local/build" / profile / "_deps"

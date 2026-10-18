@@ -78,6 +78,35 @@ unknown chunks and original bytes after RIFF. Preview conversion leaves the
 original file unchanged. SHA-256 follows [FIPS 180-4](https://nvlpubs.nist.gov/nistpubs/fips/nist.fips.180-4.pdf);
 tests check known messages and compare real take hashes/metrics with Python.
 
-Native source waveforms/A-B playback, device selection/capture, count-in and retained capture
-tails, actual latency calibration and editable analysis proposals are subsequent
-increments. Real-device recording and listening must be recorded separately.
+## Native comparison
+
+```sh
+python tools/dev.py editor --take .local/takes/demo/take.json
+```
+
+The take supplies its own editable pattern. The inspector's **Source take**
+section also accepts a manifest path and **Open take**. Loading uses the same
+unsaved-changes protection as ordinary patterns. Cancellation keeps the existing
+pattern/source; failed source checks never replace them.
+
+The waveform overlays the original source in amber and the synth in cyan on a
+beat axis, with pattern-start/end markers and retained pre-roll/tail context.
+**Play source** and **Play synth** share the transport. Source playback queues
+its original channel count/rate; the audio device may convert to its output
+format. There is no capture-clock/latency calibration implied by this conversion.
+**From beat 0** starts at the mapped beat-zero frame within the stored selection;
+disable it to hear selected pre-roll too. Changing that option stops playback.
+All of this affects preview only; original integer PCM bytes stay unchanged.
+
+Saving edits writes the pattern referenced by the take. Reopening the manifest
+restores that pattern and the source association. A revised pattern leaves the
+metadata job visibly associated with its earlier revision; no note proposal is
+applied. To save a separate pattern without its take association, select
+**Detach** first. Source files remain available in the original bundle.
+
+Native tests generate a 44.1 kHz stereo fixture from the canonical renderer with
+one second of pre-roll, exercise source/synth stream switching, guarded loads,
+source-byte preservation and save/reopen, and capture the actual comparison UI.
+They use dummy audio/video. Device selection/capture, count-in, capture tails,
+measured latency calibration and editable analysis proposals remain subsequent
+increments. Real-device recording and listening require separate evidence.

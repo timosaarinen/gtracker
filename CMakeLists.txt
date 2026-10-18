@@ -153,16 +153,25 @@ if(GT_BUILD_TESTS)
         --output "${CMAKE_CURRENT_BINARY_DIR}/lua-smoke.wav" --tail 0.5 --json)
     endif()
     if(GT_BUILD_EDITOR)
+      find_package(Python3 3.10 COMPONENTS Interpreter REQUIRED)
+      set(editor_take_fixture "${CMAKE_CURRENT_BINARY_DIR}/editor-take-fixture/take.json")
+      add_test(NAME editor_take_fixture COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/make_editor_take.py"
+        --output "${CMAKE_CURRENT_BINARY_DIR}/editor-take-fixture" --profile desktop)
+      set_tests_properties(editor_take_fixture PROPERTIES FIXTURES_SETUP editor_take_files TIMEOUT 40)
       add_executable(gtracker_editor_ui_tests tests/editor_ui_tests.cpp)
       if(MSVC)
         target_compile_options(gtracker_editor_ui_tests PRIVATE /utf-8)
       endif()
       target_link_libraries(gtracker_editor_ui_tests PRIVATE gtracker_editor_state gtracker_scripts gtracker_imgui Threads::Threads)
-      add_test(NAME editor_ui COMMAND gtracker_editor_ui_tests "${CMAKE_CURRENT_SOURCE_DIR}")
+      add_test(NAME editor_ui COMMAND gtracker_editor_ui_tests "${CMAKE_CURRENT_SOURCE_DIR}" "${editor_take_fixture}")
       add_test(NAME editor_smoke COMMAND gtracker_editor "${CMAKE_CURRENT_SOURCE_DIR}/examples/campfire.gtrk.json"
         --data-dir "${CMAKE_CURRENT_BINARY_DIR}/editor-data" --resource-dir "${CMAKE_CURRENT_SOURCE_DIR}"
         --smoke-test --frames 8 --screenshot "${CMAKE_CURRENT_BINARY_DIR}/editor-smoke.bmp")
-      set_tests_properties(editor_ui editor_smoke PROPERTIES
+      add_test(NAME editor_take_smoke COMMAND gtracker_editor --take "${editor_take_fixture}"
+        --data-dir "${CMAKE_CURRENT_BINARY_DIR}/editor-data" --resource-dir "${CMAKE_CURRENT_SOURCE_DIR}"
+        --smoke-test --frames 8 --screenshot "${CMAKE_CURRENT_BINARY_DIR}/editor-take-smoke.bmp")
+      set_tests_properties(editor_ui editor_take_smoke PROPERTIES FIXTURES_REQUIRED editor_take_files)
+      set_tests_properties(editor_ui editor_smoke editor_take_smoke PROPERTIES
         ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_RENDER_DRIVER=software;SDL_AUDIODRIVER=dummy" TIMEOUT 40)
     endif()
   endif()

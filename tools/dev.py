@@ -396,7 +396,8 @@ def main(argv: list[str] | None = None) -> int:
     render.add_argument("--script")
     render.add_argument("--json", action="store_true")
     editor = commands.add_parser("editor")
-    editor.add_argument("file", nargs="?", default="examples/campfire.gtrk.json")
+    editor.add_argument("file", nargs="?")
+    editor.add_argument("--take")
     editor.add_argument("--script")
     editor.add_argument("--smoke-test", action="store_true")
     editor.add_argument("--frames", type=int)
@@ -469,7 +470,13 @@ def main(argv: list[str] | None = None) -> int:
                         command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.json: command.append("--json")
         else:
-            command = [str(executable(ROOT, "desktop", "gtracker_editor")), args.file]
+            if args.take == "" or args.file == "":
+                raise RuntimeError("Editor pattern/take paths cannot be empty.")
+            if args.take and args.file:
+                raise RuntimeError("Choose a pattern file or --take, not both.")
+            command = [str(executable(ROOT, "desktop", "gtracker_editor"))]
+            if not args.take: command.append(args.file or "examples/campfire.gtrk.json")
+            if args.take: command += ["--take", args.take]
             for option in ("script", "frames", "screenshot", "data_dir", "resource_dir"):
                 if getattr(args, option) is not None:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]

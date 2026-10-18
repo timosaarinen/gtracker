@@ -60,6 +60,8 @@ jobs:
             .local/build/desktop/Testing/Temporary/LastTest.log
             .local/build/desktop/editor-smoke.bmp
             .local/build/desktop/editor-unsaved-dialog.bmp
+            .local/build/desktop/editor-source-comparison.bmp
+            .local/build/desktop/editor-take-smoke.bmp
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14

@@ -28,8 +28,8 @@ class PackageTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
         (self.root / ".gitignore").write_text(".local/\n", encoding="utf-8")
         self.suffix = ".exe" if os.name == "nt" else ""
-        names = ["examples/campfire.gtrk.json", "scripts/soften.lua", "schema/pattern.schema.json",
-                 "docs/editor.md", "docs/synthesis.md", "THIRD_PARTY_NOTICES.md", "packaging/README.txt",
+        names = ["examples/campfire.gtrk.json", "scripts/soften.lua", "schema/pattern.schema.json", "schema/take.schema.json",
+                 "docs/editor.md", "docs/synthesis.md", "docs/takes.md", "THIRD_PARTY_NOTICES.md", "packaging/README.txt",
                  ".local/build/headless/bin/gtracker_cli" + self.suffix,
                  ".local/build/headless/_deps/gt_json-src/LICENSE.MIT",
                  ".local/build/headless/_deps/gt_lua-src/src/lua.h", ".local/private.wav"]

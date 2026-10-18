@@ -22,8 +22,8 @@ executable; `--resource-dir PATH` overrides that resource root. Explicit pattern
 script and override paths resolve against the process working directory.
 `tools/dev.py editor` supplies the repository resource root and `.local/` data
 folder for development, so generated work stays ignored. The prototype's path fields
-hold at most 1,023 bytes; longer launch paths are rejected before loading or
-applying anything, so the displayed save/script path is never silently truncated.
+hold at most 1,023 UTF-8 bytes. Oversized launch/display paths fail clearly rather
+than being silently truncated or applied to an unintended save location.
 Pattern, WAV and Lua filenames round-trip through UTF-8 on Windows as well as
 Unix; the CLI uses Windows' original wide command-line arguments. The bundled
 default UI font has limited glyph coverage, so some non-Latin filename characters
@@ -90,6 +90,15 @@ The output device opens only when playback is requested. A missing device leaves
 the editor usable and shows an error. Rendering and headless UI smoke require no
 microphone and no output device. There is no microphone recording UI yet.
 
+Use `python tools/dev.py editor --take .local/takes/NAME/take.json` to open a
+[preserved take](takes.md) and its editable pattern. The inspector also has a
+**Source take** path and **Open take** button. **Play source** compares original
+PCM with **Play synth**; the waveforms share a beat axis, including retained
+source context. **From beat 0** skips selected pre-roll during preview only.
+Saving an attached pattern preserves the take association; **Detach** permits a
+separate pattern copy. Source bytes and analysis proposals are never rewritten
+by preview playback. The metadata-only worker supplies no musical proposals.
+
 ## Lua operations
 
 Build with `GT_ENABLE_LUA=ON` (the normal desktop preset). Expand `Lua command`,
@@ -126,6 +135,7 @@ The executable accepts these flags:
 
 ```text
 gtracker_editor [pattern.gtrk.json] [--script PATH]
+                [--take PATH] (instead of a pattern path)
                 [--data-dir PATH] [--resource-dir PATH]
                 [--smoke-test] [--frames N] [--screenshot PATH.bmp]
 ```

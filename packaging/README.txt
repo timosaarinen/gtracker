@@ -14,6 +14,9 @@ With no explicit document, the suggested save location is the per-user gtracker
 application-data folder, outside the installation. Use --data-dir PATH to choose
 another writable directory. Save editable copies there when opening bundled
 examples from a read-only installation. --resource-dir PATH overrides resources.
+Open a preserved take with --take PATH/TO/take.json to compare its source audio
+with the native synth. Source playback and hash verification need no Python.
+See docs/takes.md for the optional Python import workflow in a source checkout.
 
 Command-line examples (use .exe on Windows):
 

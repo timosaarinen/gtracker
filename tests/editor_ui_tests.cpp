@@ -4,6 +4,9 @@
 #include "../src/editor.cpp"
 
 #include <functional>
+#include <fstream>
+#include <iterator>
+#include "gtracker/hash.hpp"
 
 namespace {
 void check_ui(bool condition, const char* message) {
@@ -165,11 +168,95 @@ void writable_defaults(const Arguments& args) {
     check_ui(gtracker::pattern_json(reopened.document.pattern()) == gtracker::pattern_json(edited),
              "user-data save/reopen changed musical content");
 }
+
+std::string file_bytes(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+}
+
+void source_workflow(Host& host, const Arguments& args, const std::filesystem::path& fixture) {
+    const auto directory = args.document.parent_path() / "take-copy";
+    std::filesystem::copy(fixture.parent_path(), directory, std::filesystem::copy_options::recursive);
+    const auto manifest = directory / "take.json";
+    const auto source_before = file_bytes(directory / "source.wav");
+    Arguments source_args = args;
+    source_args.document.clear();
+    source_args.take = manifest;
+    Editor editor(source_args);
+    check_ui(editor.source && editor.source->take.audio.channels == 2 && editor.source->take.audio.sample_rate == 44100,
+             "stereo take did not load at its original rate");
+    check_ui(editor.source_playback_range().first == 44100, "source playback did not honor aligned beat zero");
+    check_ui(editor.source->take.source_frame_to_beat(static_cast<double>(editor.source_playback_range().first)) == 0,
+             "source playback and display used different frame mappings");
+    editor.source_from_zero = false;
+    check_ui(editor.source_playback_range().first == 0, "retained pre-roll was not available");
+    editor.source_from_zero = true;
+    editor.request_render(true);
+    editor.play_source();
+    check_ui(editor.playing && !editor.play_after_render && editor.audio_channels == 2 && editor.audio_rate == 44100,
+             "source playback format/transport intent was lost");
+    editor.pending.wait();
+    editor.poll_render();
+    check_ui(editor.playing && editor.audio_channels == 2 && editor.audio_rate == 44100 && editor.current_audio(),
+             "finishing a render interrupted source playback");
+    auto draw = [&] { interface(editor); };
+    frame(host, draw);
+    frame(host, draw);
+    host.screenshot(std::filesystem::current_path() / "editor-source-comparison.bmp");
+    editor.play();
+    check_ui(editor.audio_channels == 1 && editor.audio_rate == 48000, "synth A/B did not reopen the mono renderer stream");
+    editor.play_source();
+    check_ui(editor.audio_channels == 2 && editor.audio_rate == 44100, "source A/B did not restore source rate/channels");
+    auto next = editor.document.pattern();
+    next.bpm = 100;
+    editor.commit(std::move(next), "Edited source pattern");
+    check_ui(!editor.playing && !editor.current_audio(), "edit left old comparison audio playing/current");
+    editor.save();
+    Editor reopened(source_args);
+    check_ui(reopened.source && reopened.document.pattern().bpm == 100 && reopened.source->take.alignment.bpm == 90,
+             "take save/reopen lost source timing or edited pattern");
+    check_ui(reopened.document.pattern().revision != reopened.source->take.source_pattern_revision,
+             "old metadata job was presented as the current pattern revision");
+    const auto separate = directory / "separate-pattern.json";
+    set_text(reopened.path, separate.u8string());
+    reopened.attempt([&] { reopened.save(); });
+    check_ui(reopened.status_error && !std::filesystem::exists(separate), "save silently broke the take association");
+    reopened.detach_source();
+    reopened.save();
+    check_ui(std::filesystem::is_regular_file(separate), "detached pattern could not be saved separately");
+
+    Editor guarded(args);
+    auto edited = guarded.document.pattern();
+    edited.bpm = 105;
+    guarded.commit(std::move(edited), "Before source load");
+    set_text(guarded.take_path, manifest.u8string());
+    guarded.load_source();
+    check_ui(guarded.pending_source && !guarded.source && guarded.document.pattern().bpm == 105,
+             "pending take load replaced unsaved content");
+    guarded.resolve(gtracker::EditorDocument::Decision::cancel);
+    check_ui(!guarded.pending_source && !guarded.source && guarded.document.dirty(), "cancel applied the pending source");
+    guarded.load_source();
+    guarded.resolve(gtracker::EditorDocument::Decision::discard);
+    check_ui(guarded.source && guarded.document.pattern().bpm == 100, "guarded source load did not attach the chosen pattern");
+    edited = guarded.document.pattern();
+    edited.bpm = 110;
+    guarded.commit(std::move(edited), "Before ordinary load");
+    set_text(guarded.path, args.document.u8string());
+    guarded.load();
+    check_ui(guarded.source && guarded.document.pending() == gtracker::EditorDocument::Pending::load,
+             "ordinary load cleared source before resolving unsaved edits");
+    set_text(guarded.confirmation_save_path, guarded.document.filename().u8string());
+    guarded.resolve(gtracker::EditorDocument::Decision::save);
+    check_ui(!guarded.source && guarded.document.pattern().bpm == 90 && !guarded.document.dirty(),
+             "save/load did not detach the previous take safely");
+    check_ui(gtracker::load_pattern(directory / "pattern.gtrk.json").bpm == 110, "guarded take edit was not saved before loading");
+    check_ui(file_bytes(directory / "source.wav") == source_before, "A/B/edit/save changed original source bytes");
+}
 }
 
 int main(int argc, char** argv) {
     try {
-        check_ui(argc == 2, "Expected source root");
+        check_ui(argc == 3, "Expected source root and generated take manifest");
         const auto directory = std::filesystem::current_path() / "editor-ui-test-output";
         std::filesystem::create_directories(directory);
         Arguments args;
@@ -184,6 +271,9 @@ int main(int argc, char** argv) {
         guarded_interface(host, args);
         render_and_dummy_audio(args);
         writable_defaults(args);
+        source_workflow(host, args, std::filesystem::path(argv[2]));
+        check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
+                 "test cleanup target escaped its working directory");
         std::filesystem::remove_all(directory);
         std::cout << "editor UI: synthetic controls/modal, stale rendering and dummy playback passed\n";
         return 0;
