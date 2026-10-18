@@ -230,7 +230,7 @@ def run_command(root: Path, argv: list[str], log_path: Path | None = None, echo:
     log = log_path.open("w", encoding="utf-8") if log_path else None
     code = 127
     try:
-        process = subprocess.Popen(argv, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+        process = subprocess.Popen(argv, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         try:
             assert process.stdout is not None
             for line in process.stdout:
@@ -419,6 +419,14 @@ def main(argv: list[str] | None = None) -> int:
     importer.add_argument("--job-id")
     inspector = commands.add_parser("take-info", help="Verify a preserved take and report sample/beat timing and analysis provenance.")
     inspector.add_argument("take")
+    if __package__:
+        from . import record as recorder
+    else:
+        import record as recorder
+    recording = commands.add_parser("record-take", help="Explicit native capture, retained recovery and metadata-only take import.")
+    recorder.configure_parser(recording)
+    devices = commands.add_parser("input-devices", help="List current SDL recording-device selectors without starting capture.")
+    devices.add_argument("--json", action="store_true")
     for take_command in (importer, inspector):
         take_command.add_argument("--profile", choices=PROFILES, default="headless")
         take_command.add_argument("--json", action="store_true")
@@ -443,6 +451,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "ci":
             return run_ci(ROOT, args.if_due)
+        if args.command == "record-take":
+            return recorder.run_args(args)
         if args.command == "configure":
             command = ["cmake", "--preset", args.profile]
         elif args.command == "build":
@@ -459,6 +469,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "package":
             output = args.output or f".local/packages/gtracker-{args.profile}-{platform.system()}-{platform.machine()}.zip"
             command = [sys.executable, str(ROOT / "tools/package.py"), "--profile", args.profile, "--output", output]
+        elif args.command == "input-devices":
+            command = [str(executable(ROOT, "desktop", "gtracker_capture")), "devices"]
+            if args.json: command.append("--json")
         elif args.command in ("import-take", "take-info"):
             operation = "import" if args.command == "import-take" else "inspect"
             path = args.input if args.command == "import-take" else args.take
@@ -482,7 +495,7 @@ def main(argv: list[str] | None = None) -> int:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:
                 command.append("--smoke-test")
-        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info") and args.json))["returncode"]
+        return run_command(ROOT, command, echo=not (args.command in ("render", "import-take", "take-info", "input-devices") and args.json))["returncode"]
     except (RuntimeError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

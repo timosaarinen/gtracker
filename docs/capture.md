@@ -5,6 +5,36 @@ the same document/take code as the editor and keeps SDL out of the instrument.
 Capture requires an explicit input choice; help and offline rendering never open
 a microphone. All repository recordings belong under ignored `.local/`.
 
+In a source checkout, use the authoring command to capture and create a complete
+take bundle for source/synth comparison:
+
+```sh
+python tools/dev.py input-devices --json
+python tools/dev.py record-take --pattern examples/campfire.gtrk.json \
+  --device 0 --output .local/takes/first --count-in 4 --pre-roll 1 --tail 2 --json
+python tools/dev.py editor --take .local/takes/first/take.json
+```
+
+`record-take` needs the desktop build and Python, invokes the native capture
+tool, then runs the existing **metadata-only** analysis job. It checks source,
+reference and pattern hashes plus job/revision/frame identity before publishing
+the new bundle. Authored events remain unchanged. Each operation gets a unique
+job ID unless `--job-id` is explicitly supplied. Editing the original pattern
+while recording does not alter the active snapshot or its analysis revision.
+The complete bundle includes the unmodified capture receipt and reference WAV
+beside the normal v1 imported-take files; its origin is still `import` because
+it imports the native application's capture without changing the v1 contract.
+
+On cancellation, native failure or analysis failure, the command prints a
+`recovery_path` under `.local/` and leaves the received WAV, pattern snapshot,
+capture receipt and diagnostics there. No successful take is published. It
+requests graceful cancellation before considering process termination. Retry
+analysis using `import-take` on the retained `raw/source.wav` and
+`raw/pattern.gtrk.json`, with a source-frame zero chosen from the receipt (or
+bounded to the partial take); original recovery files remain available.
+
+The lower-level packaged native tool works without Python:
+
 ```sh
 .local/build/desktop/bin/gtracker_capture devices --json
 .local/build/desktop/bin/gtracker_capture record \

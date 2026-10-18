@@ -46,6 +46,8 @@ jobs:
         run: python tools/dev.py build --profile desktop
       - name: Run desktop regression tests with dummy video/audio
         run: python tools/dev.py test --profile desktop
+      - name: Check authoring integration with generated captures
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Assemble local developer package
         run: python tools/dev.py package --profile desktop
       - name: Preserve qualification evidence and example render

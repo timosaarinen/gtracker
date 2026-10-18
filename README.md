@@ -29,7 +29,8 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   the editor overlays source/synth waveforms and compares original mono/stereo PCM.
 - A separate native SDL3 [capture tool](docs/capture.md) with explicit input
   selection, nominal sample timing, count-in/metronome and partial recovery;
-  generated/dummy input checks are distinct from real-device qualification.
+  `dev.py record-take` connects it to checked bundles and metadata-only analysis.
+  Generated/dummy input checks are distinct from real-device qualification.
 - Agent instructions, a portable development CLI, local CI receipts, a staged
   repository guard, issue templates and manual cross-platform qualification.
 

@@ -1,7 +1,8 @@
 # Preserved takes and source timing
 
-The first issue #2 increment imports a stable integer-PCM WAV into an ignored
-take bundle. It does not capture a microphone or recognize musical events.
+The import command attaches a stable integer-PCM WAV to an ignored take bundle.
+Use [record-take](capture.md) for explicit native capture followed by this import
+workflow. Analysis remains metadata-only and recognizes no musical events.
 The source is copied byte-for-byte, including its header/extra chunks, channel
 count, rate, pre-roll and decay tail. Selecting a region only stores coordinates;
 it never crops, resamples, normalizes or replaces the source.

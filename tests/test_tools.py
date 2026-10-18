@@ -115,6 +115,18 @@ class GitFixture(unittest.TestCase):
 
 
 class SourceAndEvidenceTests(GitFixture):
+    def test_native_utf8_output_and_log_preserve_json_strings(self):
+        text = json.dumps({"path": "äänitys-原音.wav"}, ensure_ascii=False) + "\n"
+        command = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(" + repr(text.encode("utf-8")) + ")"]
+        log = self.directory / ".local/utf8.log"
+        log.parent.mkdir()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            result = dev.run_command(self.directory, command, log_path=log, echo=False)
+        self.assertEqual(result["returncode"], 0)
+        self.assertEqual(json.loads(output.getvalue()), {"path": "äänitys-原音.wav"})
+        self.assertEqual(log.read_text(encoding="utf-8"), text)
+
     def test_unborn_fingerprint_tracks_changes_but_not_local_outputs(self):
         source = self.directory / "source.cpp"
         source.write_text("first\n", encoding="utf-8")

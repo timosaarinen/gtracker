@@ -62,6 +62,12 @@ simulation opens no device; dummy drivers are labelled. Generated 44.1/48 kHz
 mono/stereo PCM and recovery checks pass. Real-device capture remains untested;
 input/output clock alignment is uncalibrated. See docs/capture.md. Musical
 transcription remains unavailable.
+`dev.py record-take` now connects completed capture to the preserved bundle and
+analysis job. It verifies snapshot/source/reference identities, retains raw
+recovery on cancellation or analysis failure, and publishes only a complete
+checked take. Generated integration checks cover pattern edits during capture,
+partial recovery, tampered receipts and native take reopen. The editor can open
+the resulting normal v1 take manifest; recording controls are still CLI-only.
 The native CLI now also exposes `take-info` using the shared bounded PCM reader,
 SHA-256 source verification and checked job/timing/metrics. Focused PCM tests
 cover channel/width/rate variants, unknown chunks, truncation and buffer bounds;
@@ -80,6 +86,5 @@ ASan/UBSan evidence covers the earlier bootstrap source, not these new edits;
 LeakSanitizer was blocked there. Intel Mac and current cross-platform
 qualification remain outstanding. Keep issue #1 open for those real checks.
 
-Next: connect completed capture to take import/analysis and source comparison,
-then add a bounded calibration path and an end-to-end musical feature or polish.
+Next: add a bounded calibration path and an end-to-end musical feature or polish.
 Real takes, clock/latency calibration and transcription need separate evidence.
