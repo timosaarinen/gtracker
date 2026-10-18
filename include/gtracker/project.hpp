@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -75,6 +76,14 @@ struct RenderResult {
     std::size_t frames() const { return samples.size() / static_cast<std::size_t>(channels); }
 };
 
+// Authoring-job control only; it is not an audible option/cache-key input.
+// Callbacks run on the calling/render thread and may throw. Cancellation checks
+// occur before allocation, at native block boundaries and during metrics.
+struct RenderControl {
+    std::function<bool()> cancelled;
+    std::function<void(std::uint64_t completed_frames, std::uint64_t total_frames)> progress;
+};
+
 void validate_pattern(const Pattern& pattern);
 gt_model instrument_model(std::string_view name);
 bool supports_slides(const Pattern& pattern);
@@ -84,7 +93,7 @@ Pattern parse_pattern_json(std::string_view json);
 std::string pattern_json(const Pattern& pattern);
 Pattern load_pattern(const std::filesystem::path& path);
 void save_pattern(const Pattern& pattern, const std::filesystem::path& path);
-RenderResult render_pattern(const Pattern& pattern, const RenderOptions& options = {});
+RenderResult render_pattern(const Pattern& pattern, const RenderOptions& options = {}, const RenderControl& control = {});
 NativePerformance compile_pattern(const Pattern& pattern, int sample_rate);
 ProductionSettings effective_production(const Pattern& pattern, const RenderOptions& options);
 NativeRenderer pattern_renderer(const Pattern& pattern, const RenderOptions& options = {});

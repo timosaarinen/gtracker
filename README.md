@@ -21,7 +21,7 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
   string's vibration when replucked, with a dry A/B study and repeatable generated
   pitch/decay probes. It remains experimental and separately selectable.
 - Native SDL3 + Dear ImGui/ImPlot editor: horizontal string/body lanes, event
-  selection and editing, add/delete, undo/redo, load/save, asynchronous rendering,
+  selection and editing, add/delete, undo/redo, load/save, cancellable asynchronous rendering,
   queued playback, waveform preview, keyboard shortcuts, grouped control undo
   and an unsaved-changes dialog for loading/closing.
 - Embedded Lua 5.5.1 commands for tempo, transposition, attack strength and note

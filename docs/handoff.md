@@ -292,3 +292,19 @@ the four-note job without third-party packages. Native synthetic UI tested the
 actual accept button, no preselection, one-step undo/redo, save/reopen, A/B queuing
 and a changed source after load; framebuffer `editor-proposal-review.bmp` was
 inspected. This is not physical playback or real-guitar transcription evidence.
+
+Committed proposal checkpoint `1aefe7a` passed Ubuntu native20, desktop28,
+Python94 without skips and Clang10 ASan/UBSan20. Logs use the
+`.local/qualification/ubuntu/.local/proposals-` prefix.
+
+Editor preview jobs now expose Cancel render and audio progress, retain the last
+completed preview on cancellation, cancel obsolete work after edits, and request
+cancellation before joining on shutdown. The shared in-memory API has optional
+render-thread callbacks and cancellation checks before allocation, at native
+blocks and through metrics; PCM/cache identity is unchanged by job control.
+Native checks cover unused-control PCM/metrics identity, early/mid/late cancel,
+callback failure and fresh subsequent renders. Synthetic UI presses the actual
+cancel button and verifies no playback/history change or replacement preview.
+Windows CI `.local/ci/runs/20261018T071826Z-30c5adc9/report.json` passed20 native
+and94 Python (one POSIX-only skip), with fresh desktop28 also passing. GUI/device
+interaction and hard real-time cancellation latency remain unqualified.

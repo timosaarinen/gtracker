@@ -367,7 +367,9 @@ StreamRenderResult render_pattern_wav(const Pattern& pattern, const std::filesys
     return export_wav(renderer, path, render_identity(pattern, options), stream);
 }
 
-RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
+RenderResult render_pattern(const Pattern& p, const RenderOptions& options, const RenderControl& control) {
+    const auto checkpoint = [&] { if (control.cancelled && control.cancelled()) throw RenderCancelled(); };
+    checkpoint();
     validate_pattern(p);
     require(options.sample_rate >= 8000 && options.sample_rate <= 192000, "sample_rate must be in 8000..192000");
     require(std::isfinite(options.tail_seconds) && options.tail_seconds >= 0 && options.tail_seconds <= 30, "tail must be in 0..30 seconds");
@@ -378,6 +380,9 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     const double room_tail = production_tail_seconds(production);
     const double frame_count = dry_frame_count + std::ceil(room_tail * options.sample_rate);
     require(frame_count >= 1 && frame_count * channels <= max_render_samples, "Render exceeds the prototype's 32 Mi-sample buffer limit; render a shorter pattern or lower sample rate");
+    const auto total_frames = static_cast<std::uint64_t>(frame_count);
+    if (control.progress) control.progress(0, total_frames);
+    checkpoint();
     const auto dry_frames = static_cast<std::uint64_t>(dry_frame_count);
     NativeRenderer renderer(compile_pattern(p, options.sample_rate), dry_frames, production);
     RenderResult result;
@@ -385,14 +390,20 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
     result.channels = channels;
     result.production_tail_seconds = room_tail;
     result.identity = render_identity(p, options);
+    checkpoint();
     result.samples.resize(static_cast<std::size_t>(frame_count) * static_cast<std::size_t>(channels));
     const auto start = std::chrono::steady_clock::now();
-    for (std::size_t offset = 0; offset < result.frames(); offset += 1024)
-        require(renderer.read(result.samples.data() + offset * channels, std::min<std::size_t>(1024, result.frames() - offset)) > 0, "Unexpected renderer EOF");
+    for (std::size_t offset = 0; offset < result.frames(); offset += 1024) {
+        checkpoint();
+        const auto count = std::min<std::size_t>(1024, result.frames()-offset);
+        require(renderer.read(result.samples.data() + offset * channels, count) == count, "Unexpected renderer EOF");
+        if (control.progress) control.progress(offset+count, total_frames);
+    }
     result.elapsed_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     double squares = 0;
     const auto end_begin = result.samples.size() - std::min(result.samples.size(), static_cast<std::size_t>(options.sample_rate / 20 * channels));
     for (std::size_t i = 0; i < result.samples.size(); ++i) {
+        if ((i & 4095) == 0) checkpoint();
         const float value = result.samples[i];
         require(std::isfinite(value), "Synthesizer produced non-finite audio");
         result.peak = std::max(result.peak, std::abs(value));
@@ -401,6 +412,7 @@ RenderResult render_pattern(const Pattern& p, const RenderOptions& options) {
         if (i >= end_begin) result.end_peak = std::max(result.end_peak, std::abs(value));
     }
     result.rms = static_cast<float>(std::sqrt(squares / static_cast<double>(result.samples.size())));
+    checkpoint();
     return result;
 }
 

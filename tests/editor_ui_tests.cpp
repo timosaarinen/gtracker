@@ -169,6 +169,36 @@ void writable_defaults(const Arguments& args) {
              "user-data save/reopen changed musical content");
 }
 
+void render_cancellation(Host& host, const Arguments& args) {
+    Editor editor(args);
+    editor.request_render(); editor.pending.wait(); editor.poll_render();
+    const auto previous = editor.rendered.audio.samples;
+    const auto generation = editor.document.generation();
+    editor.request_render(true);
+    ImVec2 a, b;
+    auto draw = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20,20)); ImGui::SetNextWindowSize(ImVec2(400,120));
+        ImGui::Begin("Render cancellation regression"); render_button(editor);
+        a = ImGui::GetItemRectMin(); b = ImGui::GetItemRectMax(); ImGui::End();
+    };
+    frame(host,draw); frame(host,draw);
+    frame(host,draw,[&] { ImGui::GetIO().AddMousePosEvent((a.x+b.x)*.5f,(a.y+b.y)*.5f); ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,true); });
+    frame(host,draw,[&] { ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left,false); });
+    check_ui(editor.render_job && editor.render_job->cancelled.load() && !editor.play_after_render, "real Cancel render button did not cancel pending playback intent");
+    editor.pending.wait(); editor.poll_render();
+    check_ui(!editor.rendering() && !editor.render_failed && !editor.playing && editor.current_audio() && editor.rendered.audio.samples == previous,
+             "cancelled render replaced/lost the previous preview or reported failure");
+    check_ui(editor.document.generation() == generation && !editor.document.dirty(), "render cancellation edited score/history");
+    editor.request_render(); const auto job = editor.render_job;
+    editor.pending.wait();
+    check_ui(job->completed_frames.load() == job->total_frames.load() && job->total_frames.load() > 0, "editor progress did not reach generated frame count");
+    editor.cancel_render(); // A result ready between frames must still honor explicit cancellation.
+    editor.poll_render();
+    check_ui(editor.rendered.audio.samples == previous && !editor.render_failed, "late cancellation published the unwanted result");
+    editor.request_render(); editor.pending.wait(); editor.poll_render();
+    check_ui(editor.current_audio() && !editor.render_job, "cancelled worker could not be followed by a new render");
+}
+
 std::string file_bytes(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
@@ -565,6 +595,7 @@ int main(int argc, char** argv) {
         grouped_widget(host, args);
         guarded_interface(host, args);
         render_and_dummy_audio(args);
+        render_cancellation(host, args);
         writable_defaults(args);
         source_workflow(host, args, std::filesystem::path(argv[2]));
         slide_authoring(host, args);

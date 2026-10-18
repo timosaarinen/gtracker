@@ -5,6 +5,16 @@ keeps its 32 Mi-float-sample limit. `--stream` uses the same native renderer and
 writes completed blocks to a sibling temporary WAV, then atomically publishes
 the finished file. It does not allocate the whole rendered audio buffer.
 
+The editor's in-memory preview also supports **Cancel render** and frame-based
+audio progress, followed by waveform preparation. A cancelled or obsolete job
+retains the last completed preview; it never publishes partially generated audio
+or starts pending playback. Edits and shutdown request cancellation. The native
+`RenderControl` callbacks on `render_pattern()` run on its calling thread, with
+checks before allocation, at 1,024-frame boundaries and during metrics. The editor
+also checks during waveform preparation. Callbacks may throw; they do not enter the audible render/cache identity.
+This is cooperative job control, not a real-time interruption guarantee. The
+32 Mi-float-sample preview limit still applies; song export remains streamed.
+
 ```sh
 python tools/dev.py render examples/slide-study.gtrk.json --stream --production examples/room.json --output .local/slide-stream.wav --json
 python tools/dev.py render examples/slide-study.gtrk.json --production examples/room.json --start-frame 48000 --end-frame 144000 --output .local/slide-preview.wav --json

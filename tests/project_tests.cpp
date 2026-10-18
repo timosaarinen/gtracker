@@ -50,6 +50,31 @@ int main(int argc, char** argv) {
         check(rendered.samples.size() == 134000, "Musical timing/decay tail frame count changed");
         check(rendered.peak > 0.001f && rendered.rms > 0.0001f, "Fixture rendered silence");
         check(gtracker::render_pattern(pattern, {24000, 0.25}).samples == rendered.samples, "Renderer lost seed reproducibility");
+        gtracker::RenderControl control;
+        bool cancelled = false;
+        std::uint64_t completed = 0, total = 0;
+        std::size_t updates = 0;
+        control.cancelled = [&] { return cancelled; };
+        control.progress = [&](std::uint64_t done, std::uint64_t count) {
+            check(done >= completed && done <= count && (total == 0 || total == count), "In-memory render progress is not bounded/monotonic");
+            completed = done; total = count; ++updates;
+        };
+        const auto controlled = gtracker::render_pattern(pattern, {24000, 0.25}, control);
+        check(controlled.samples == rendered.samples && controlled.peak == rendered.peak && controlled.rms == rendered.rms && controlled.identity == rendered.identity,
+              "Job control changed audio/metrics/cache identity");
+        check(completed == rendered.frames() && total == completed && updates > 2, "In-memory render did not report completion");
+        cancelled = true;
+        rejects([&] { gtracker::render_pattern(pattern, {24000, 0.25}, control); }, "Pre-cancelled render ran");
+        cancelled = false;
+        control.progress = [&](std::uint64_t done, std::uint64_t) { if (done >= 1024) cancelled = true; };
+        rejects([&] { gtracker::render_pattern(pattern, {24000, 0.25}, control); }, "Mid-render cancellation was ignored");
+        cancelled = false;
+        control.progress = [&](std::uint64_t done, std::uint64_t count) { if (done == count) cancelled = true; };
+        rejects([&] { gtracker::render_pattern(pattern, {24000, 0.25}, control); }, "Cancellation after audio generation published a completed result");
+        control.progress = [](std::uint64_t, std::uint64_t) { throw std::runtime_error("injected progress failure"); };
+        cancelled = false;
+        rejects([&] { gtracker::render_pattern(pattern, {24000, 0.25}, control); }, "Progress callback failure was swallowed");
+        check(gtracker::render_pattern(pattern, {24000, 0.25}).samples == rendered.samples, "Cancelled jobs changed later native state");
         auto reordered = pattern;
         std::swap(reordered.events.front(), reordered.events.back());
         check(gtracker::render_pattern(reordered, {24000, 0.25}).samples == rendered.samples, "Unsorted score changed scheduled result");

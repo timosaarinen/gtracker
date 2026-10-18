@@ -84,7 +84,12 @@ Every edit has an application-local generation independent of the saved document
 revision. A finished render from an older generation is discarded. An old
 waveform may remain visible in gray, with an explicit previous-revision label;
 it cannot be played as if it represented the current edit. Editing stops queued
-playback. The current prototype waits for an in-flight render when closing.
+playback. **Cancel render** stops an in-flight preview while retaining the last
+completed waveform/audio. Progress shows audio generation, then waveform
+preparation. Editing automatically cancels obsolete work. Closing requests
+cancellation and joins the worker; it never leaves an editor-owned worker behind.
+Cancellation is checked at block/metrics/preview boundaries and does not change
+the pattern, undo history or source files.
 
 The output device opens only when playback is requested. A missing device leaves
 the editor usable and shows an error. Rendering and headless UI smoke require no
@@ -229,7 +234,6 @@ queued playback, waveform inspection, and unattended UI capture.
 Future work includes editor recording controls (CLI capture exists), musical
 general guitar transcription, hammer/pull-off and additional contact/expression gestures,
 an arrangement UI (CLI songs exist), course-aware twelve-string instruments,
-richer keyboard tab entry, autosave/recovery, render
-cancellation and output-device selection.
+richer keyboard tab entry, autosave/recovery and output-device selection.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.

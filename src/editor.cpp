@@ -12,6 +12,7 @@
 #include <implot.h>
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -21,6 +22,7 @@
 #include <future>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -155,9 +157,14 @@ struct CompletedRender {
     std::vector<double> maximum;
 };
 
-CompletedRender render_snapshot(const Pattern& pattern) {
+struct RenderJob {
+    std::atomic<bool> cancelled{false};
+    std::atomic<std::uint64_t> completed_frames{0}, total_frames{0};
+};
+
+CompletedRender render_snapshot(const Pattern& pattern, const gtracker::RenderControl& control = {}) {
     CompletedRender result;
-    result.audio = gtracker::render_pattern(pattern);
+    result.audio = gtracker::render_pattern(pattern, {}, control);
     result.end_beat = static_cast<double>(result.audio.frames()) / result.audio.sample_rate * pattern.bpm / 60.0;
     const std::size_t count = std::min<std::size_t>(2048, result.audio.frames());
     result.times.reserve(count);
@@ -165,6 +172,7 @@ CompletedRender render_snapshot(const Pattern& pattern) {
     result.minimum.reserve(count);
     result.maximum.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
+        if (control.cancelled && control.cancelled()) throw gtracker::RenderCancelled();
         const std::size_t begin = i * result.audio.frames() / count;
         const std::size_t end = (i + 1) * result.audio.frames() / count;
         auto bounds = std::minmax_element(result.audio.samples.begin() + begin * result.audio.channels,
@@ -220,6 +228,7 @@ struct Editor {
     std::uint64_t rendered_generation = 0;
     std::uint64_t rendered_revision = 0;
     std::future<CompletedRender> pending;
+    std::shared_ptr<RenderJob> render_job;
     CompletedRender rendered;
     std::optional<SourcePreview> source;
     std::optional<SourcePreview> pending_source;
@@ -286,8 +295,9 @@ struct Editor {
     }
 
     ~Editor() {
-        // The renderer owns its snapshot; finishing this job never touches UI
-        // state. The prototype waits for an in-flight job on shutdown.
+        if (render_job) render_job->cancelled.store(true, std::memory_order_relaxed);
+        // The worker owns its snapshot. Request cancellation, then join without
+        // allowing a worker to outlive its application resources.
         if (pending.valid()) {
             pending.wait();
         }
@@ -316,6 +326,7 @@ struct Editor {
     }
 
     void changed() {
+        if (render_job) render_job->cancelled.store(true, std::memory_order_relaxed);
         stop();
         if (selected >= static_cast<int>(document.pattern().events.size())) {
             selected = static_cast<int>(document.pattern().events.size()) - 1;
@@ -622,16 +633,39 @@ struct Editor {
         pending_generation = document.generation();
         play_after_render = then_play;
         render_failed = false;
-        pending = std::async(std::launch::async, [snapshot]() { return render_snapshot(snapshot); });
+        auto job = std::make_shared<RenderJob>();
+        render_job = job;
+        try {
+            pending = std::async(std::launch::async, [snapshot, job]() {
+                gtracker::RenderControl control;
+                control.cancelled = [job] { return job->cancelled.load(std::memory_order_relaxed); };
+                control.progress = [job](std::uint64_t completed, std::uint64_t total) {
+                    job->total_frames.store(total, std::memory_order_relaxed);
+                    job->completed_frames.store(completed, std::memory_order_relaxed);
+                };
+                return render_snapshot(snapshot, control);
+            });
+        } catch (...) {
+            render_job.reset(); play_after_render = false; throw;
+        }
         message("Rendering revision " + std::to_string(snapshot.revision) + "...");
+    }
+
+    void cancel_render() {
+        if (!rendering() || !render_job) return;
+        render_job->cancelled.store(true, std::memory_order_relaxed);
+        play_after_render = false;
+        message("Cancelling render; the previous completed preview is retained.");
     }
 
     void poll_render() {
         if (!rendering() || pending.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
             return;
         }
+        const auto job = std::move(render_job);
         try {
             CompletedRender completed = pending.get();
+            if (job && job->cancelled.load(std::memory_order_relaxed)) throw gtracker::RenderCancelled();
             if (pending_generation != document.generation()) {
                 play_after_render = false;
                 message("Render finished for an older edit and was discarded. Render the current pattern.");
@@ -650,6 +684,11 @@ struct Editor {
                 play_after_render = false;
                 play();
             }
+        } catch (const gtracker::RenderCancelled&) {
+            render_failed = false;
+            play_after_render = false;
+            message(pending_generation == document.generation() ? "Render cancelled; previous completed preview retained." :
+                "Obsolete render cancelled. Render the current pattern.");
         } catch (const std::exception& error) {
             render_failed = true;
             play_after_render = false;
@@ -1359,6 +1398,17 @@ void keyboard(Editor& editor) {
     }
 }
 
+void render_button(Editor& editor) {
+    if (editor.rendering()) {
+        const bool cancelling = editor.render_job && editor.render_job->cancelled.load(std::memory_order_relaxed);
+        ImGui::BeginDisabled(cancelling);
+        if (ImGui::Button(cancelling ? "Cancelling..." : "Cancel render")) editor.cancel_render();
+        ImGui::EndDisabled();
+    } else if (ImGui::Button("Render")) {
+        editor.attempt([&] { editor.request_render(); });
+    }
+}
+
 void interface(Editor& editor) {
     const auto* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -1418,11 +1468,7 @@ void interface(Editor& editor) {
     }
     if (ImGui::IsItemHovered()) ImGui::SetTooltip(slides_enabled ? "Add a continuous fret curve on the current string. It retains ringing vibration." : "Select the experimental contact model and v2 format. Undo restores the previous model; the original baseline remains selectable.");
     ImGui::SameLine(0.0f, 20.0f);
-    ImGui::BeginDisabled(editor.rendering());
-    if (ImGui::Button(editor.rendering() ? "Rendering..." : "Render")) {
-        editor.attempt([&]() { editor.request_render(); });
-    }
-    ImGui::EndDisabled();
+    render_button(editor);
     ImGui::SameLine();
     ImGui::BeginDisabled(editor.rendering());
     const char* play_label = editor.source ? (editor.current_audio() ? "Play synth" : "Render + Play synth")
@@ -1532,7 +1578,16 @@ void interface(Editor& editor) {
     inspector(editor);
     ImGui::EndChild();
 
-    if (editor.status_error) {
+    if (editor.rendering() && editor.render_job && !editor.status_error) {
+        const auto completed = editor.render_job->completed_frames.load(std::memory_order_relaxed);
+        const auto total = editor.render_job->total_frames.load(std::memory_order_relaxed);
+        if (editor.render_job->cancelled.load(std::memory_order_relaxed))
+            ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "Cancelling render; previous completed preview retained.");
+        else if (total && completed >= total)
+            ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "Audio rendered. Preparing waveform preview...");
+        else
+            ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "Rendering: %.1f%%. Cancel render to stop.", total ? 100.0 * completed / total : 0.0);
+    } else if (editor.status_error) {
         ImGui::TextColored(ImVec4(1.0f, 0.46f, 0.38f, 1.0f), "%s", editor.status.c_str());
     } else {
         ImGui::TextColored(ImVec4(0.96f, 0.74f, 0.37f, 1.0f), "%s", editor.status.c_str());
