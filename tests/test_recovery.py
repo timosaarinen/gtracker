@@ -25,6 +25,9 @@ class RecoveryProcessTests(unittest.TestCase):
     def test_forced_owned_process_stop_leaves_a_valid_score_and_original_unchanged(self):
         original=ROOT/"examples/campfire.gtrk.json"; before=original.read_bytes()
         data=self.directory/"user-data"
+        # Case-insensitive filesystems resolve this as the app's recovery folder.
+        # Case-sensitive filesystems keep it separate from the app's lowercase one.
+        (data/"Recovery").mkdir(parents=True)
         command=[str(EDITOR),str(original),"--script",str(ROOT/"scripts/soften.lua"),"--data-dir",str(data),"--resource-dir",str(ROOT)]
         child=subprocess.Popen(command,cwd=ROOT,env=self.env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
                                creationflags=getattr(subprocess,"CREATE_NO_WINDOW",0))

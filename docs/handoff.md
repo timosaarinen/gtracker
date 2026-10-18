@@ -1,7 +1,8 @@
 # Current handoff
 
 Night shift, 2026-10-18, requested eight-hour window starting about 01:51 UTC.
-This handoff records the completed implementation and checks as of 09:20 UTC.
+This handoff records the implementation and checks through the final recovery
+follow-up around 09:41 UTC; the delivery index records the last completed runs.
 Read `README.md`, `AGENTS.md` and the relevant issue before editing. Local checks
 are authoritative; generated/private files stay in `.local/`.
 
@@ -49,13 +50,15 @@ work; no hosted workflow, public release or issue communication was triggered.
 
 ## Verified source and platforms
 
-The final implementation checkpoint is **239e599**. It passed Windows full CI
-and both platforms' expanded 101-test Python suites, plus the seven-case generated
-evaluation. Native/editor C++ has not changed since **44ed22e**, which passed the
-Linux native/desktop/sanitizer matrix below. Focused layout source fingerprints
-and framebuffer names are in `.local/nightshift/layout-checks.json`. Subsequent
-changes only clarify documentation and the package file-count message; package
-unit tests passed (5/5) after that message change.
+The main feature checkpoint is **239e599**. It passed Windows full CI and both
+platforms' 101-test Python suites, plus the seven-case generated evaluation.
+The later delivery checkpoint **67d7d08** passed both full local CI runs. A final
+Windows follow-up fixes recovery when an existing folder is spelled `Recovery`:
+canonical spelling is retained only for the expected child of user data. Original
+scores stay protected. Native recovery/UI/fixtures4 and owned-process tests2
+passed after the fix; current clean follow-up receipts and artifact hashes are
+recorded in `.local/nightshift/final-evidence.json`. Core/production/renderer DSP
+has not changed during these final editor/authoring follow-ups.
 
 | Platform/toolchain | Actual evidence |
 | --- | --- |

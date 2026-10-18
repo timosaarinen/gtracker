@@ -23,7 +23,19 @@ std::filesystem::path unique_copy(const std::filesystem::path& directory, const 
 
 RecoveryCopies::RecoveryCopies(const std::filesystem::path& data_directory)
     : data_directory_(std::filesystem::weakly_canonical(std::filesystem::absolute(data_directory))),
-      directory_(data_directory_/"recovery") {}
+      directory_(data_directory_/"recovery") {
+    // Windows (and case-insensitive Mac volumes) may already spell this folder
+    // "Recovery". Keep its canonical spelling without accepting a redirected
+    // subdirectory outside user data or a differently named sibling target.
+    if (std::filesystem::exists(directory_) && !std::filesystem::is_symlink(directory_)) {
+        const auto canonical = std::filesystem::weakly_canonical(directory_);
+        auto name = canonical.filename().u8string();
+        std::transform(name.begin(),name.end(),name.begin(),[](unsigned char c) {
+            return static_cast<char>(c >= 'A' && c <= 'Z' ? c+('a'-'A') : c);
+        });
+        if (canonical.parent_path() == data_directory_ && name == "recovery") directory_ = canonical;
+    }
+}
 
 bool RecoveryCopies::contains(const std::filesystem::path& path) const {
     return copy_name(path) && std::filesystem::weakly_canonical(path).parent_path() == directory_;

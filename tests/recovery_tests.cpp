@@ -60,6 +60,14 @@ int main(int argc,char** argv) {
         const auto blocker=directory/"blocked"; { std::ofstream file(blocker); file << "owned write-failure fixture"; }
         gtracker::RecoveryCopies blocked(blocker); rejects([&] { blocked.update(document,6); });
         check(gtracker::sha256_file(original)==saved_hash && std::filesystem::is_regular_file(blocker),"Write failure damaged unrelated files");
+        const auto casing=directory/"case-data";
+        std::filesystem::create_directories(casing/"Recovery");
+        gtracker::RecoveryCopies case_copy(casing);
+        check(case_copy.update(document,6),"Preexisting differently cased recovery folder blocked checkpointing");
+        const auto expected=std::filesystem::exists(casing/"recovery") ? std::filesystem::weakly_canonical(casing/"recovery") : casing/"recovery";
+        check(case_copy.owned_path().parent_path()==expected,"Case handling changed the recovery destination");
+        check(gtracker::pattern_json(gtracker::load_pattern(case_copy.owned_path()))==gtracker::pattern_json(document.pattern()),"Case-handled recovery lost score data");
+        case_copy.clear_owned();
         check(std::filesystem::weakly_canonical(directory).parent_path()==std::filesystem::current_path(),"Owned recovery cleanup escaped its build directory");
         std::filesystem::remove_all(directory);
         std::cout << "recovery: interval, exact score copies, session ownership, save cleanup, failure preservation, bounded listing and safe reopen passed\n";
