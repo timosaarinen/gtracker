@@ -139,8 +139,8 @@ original bytes; that is separate from physical-window or hard-power-loss testing
 editor remains available while that job runs. Its min/max waveform envelope is
 calculated on the worker as well, with at most 2,048 display bins.
 
-`Play` queues the current rendered mono floating-point PCM through SDL3's default
-playback device. When a current render is missing, the button reads
+`Play` queues the current rendered mono/stereo floating-point PCM through SDL3's
+selected playback device (initially system default). When a current render is missing, the button reads
 `Render + Play`. Space performs the same action, or stops current playback.
 `Stop` clears queued playback and cancels the intent to play after a pending
 render; it does not cancel the renderer itself.
@@ -159,6 +159,32 @@ the pattern, undo history or source files.
 The output device opens only when playback is requested. A missing device leaves
 the editor usable and shows an error. Rendering and headless UI smoke require no
 microphone and no output device. There is no microphone recording UI yet.
+
+## Export a WAV
+
+Choose **Export WAV** above the tab to open the inspector's **WAV export** panel.
+Enter a `.wav` filename and select **Export current score**. The default is
+`render.wav` in writable user data. This exports an immutable snapshot using the
+same native renderer as the CLI: 48 kHz, PCM16, a two-second instrument tail and
+the score's optional production/room tail. Dry scores export mono; an active
+room exports stereo. Source playback selection and audio-device choice do not
+change the synthesized export. Save the editable score separately.
+
+Export runs in the background with bounded PCM buffers, progress and **Cancel
+WAV export**. Further edits belong to a later export; the completion result names
+the revision actually written and reports duration, channels, peak and clipped
+samples. Existing files need **Replace** confirmation; Escape/Cancel preserves
+them. Native atomic writing retains the previous output on failure or handled
+cancellation. Cancellation racing with a completed export keeps that completed
+file and reports success. Closing requests cancellation and joins the worker.
+
+Export refuses the current score, attached source/take files, active script and
+proposal path, including filesystem aliases. Loading a different score/take waits
+until export finishes or is cancelled; saving a score over an active export path
+is rejected. Normal score edits and playback remain available. CLI rendering
+provides alternate rates/tails, song export, crops and persistent cache options.
+
+## Source comparison and note proposals
 
 Use `python tools/dev.py editor --take .local/takes/NAME/take.json` to open a
 [preserved take](takes.md) and its editable pattern. The inspector also has a
@@ -293,12 +319,13 @@ savepoints, revision bounds and history without SDL.
 
 Implemented: pluck/damp/body-hit and continuous-slide editing, explicit baseline/
 contact/retained model selection, reviewed single-note proposal acceptance, basic instrument parameters,
-JSON load/save, document undo/redo, a small Lua command API, asynchronous rendering,
-queued playback, waveform inspection, and unattended UI capture.
+JSON load/save, document undo/redo, a small Lua command API, asynchronous rendering
+and WAV export, selected-output playback, waveform inspection, score recovery
+copies and unattended UI capture.
 
 Future work includes editor recording controls (CLI capture exists),
 general guitar transcription, hammer/pull-off and additional contact/expression gestures,
 an arrangement UI (CLI songs exist), course-aware twelve-string instruments,
-chord/selection shortcuts, full session recovery and output-device selection.
+chord/selection shortcuts and full session recovery including undo/transport.
 The editor currently uses SDL's maintained 2D renderer backend; migration to
 SDL_GPU is optional future work, not required to use or test this prototype.

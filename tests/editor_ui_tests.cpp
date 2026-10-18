@@ -252,6 +252,82 @@ std::string file_bytes(const std::filesystem::path& path) {
     return std::string(std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
 }
 
+void export_workflow(Host& host,const Arguments& args) {
+    Editor editor(args);
+    const auto original = file_bytes(args.document);
+    const auto output = args.document.parent_path()/std::filesystem::u8path(u8"export-ääni-音.wav");
+    const auto expected_path = args.document.parent_path()/"export-reference.wav";
+    set_text(editor.export_path,output.u8string());
+    const auto generation = editor.document.generation();
+    ImVec2 a{},b{};
+    auto draw = [&] {
+        ImGui::SetNextWindowPos(ImVec2(20,20)); ImGui::SetNextWindowSize(ImVec2(440,130));
+        ImGui::Begin("WAV export regression"); export_button(editor);
+        a=ImGui::GetItemRectMin(); b=ImGui::GetItemRectMax(); ImGui::End();
+    };
+    auto click = [&](bool down) { auto& io=ImGui::GetIO(); io.AddMousePosEvent((a.x+b.x)/2,(a.y+b.y)/2); io.AddMouseButtonEvent(0,down); };
+    frame(host,draw); frame(host,draw);
+    frame(host,draw,[&] { click(true); }); frame(host,draw,[&] { click(false); });
+    check_ui(editor.exporting(),"real Export button did not launch the native worker");
+    const auto first_job=editor.export_job;
+    editor.pending_export.wait();
+    check_ui(first_job->total_frames.load()>0 && first_job->completed_frames.load()==first_job->total_frames.load(),"export progress did not reach the full native frame count");
+    editor.poll_export();
+    const auto reference = gtracker::render_pattern(editor.document.pattern());
+    gtracker::write_wav(expected_path,reference.samples,reference.sample_rate,reference.channels);
+    check_ui(editor.export_result && file_bytes(output)==file_bytes(expected_path) && editor.document.generation()==generation && !editor.document.dirty(),
+        "editor dry export differed from shared renderer or changed score/history");
+    const auto first = file_bytes(output);
+    editor.request_export();
+    check_ui(!editor.exporting() && !editor.export_replace_path.empty() && file_bytes(output)==first,"existing WAV was replaced without its dialog");
+    auto full = [&] { interface(editor); };
+    frame(host,full); frame(host,full);
+    check_ui(ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId),"replace-WAV modal did not open");
+    frame(host,full,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape,true); });
+    frame(host,full,[&] { ImGui::GetIO().AddKeyEvent(ImGuiKey_Escape,false); });
+    check_ui(editor.export_replace_path.empty() && !editor.exporting() && file_bytes(output)==first,"Escape did not preserve existing WAV");
+    auto wet = editor.document.pattern(); wet.schema_version = 2; wet.production = gtracker::ProductionSettings{}; wet.production->enabled = true;
+    editor.commit(wet,"Original wet export fixture");
+    const auto snapshot = editor.document.pattern();
+    editor.request_export();
+    const auto other = args.document.parent_path()/"unconfirmed.wav"; set_text(editor.export_path,other.u8string());
+    editor.replace_export();
+    auto changed = editor.document.pattern(); changed.bpm = 101; editor.commit(changed,"Edited during WAV export");
+    bool load_blocked=false,save_blocked=false;
+    try { editor.load(); } catch (const std::exception&) { load_blocked=true; }
+    try { editor.save_destination(output.u8string().c_str()); } catch (const std::exception&) { save_blocked=true; }
+    check_ui(load_blocked && save_blocked,"active export allowed a conflicting document load/save");
+    editor.pending_export.wait(); editor.cancel_export(); editor.poll_export();
+    const auto expected = gtracker::render_pattern(snapshot);
+    gtracker::write_wav(expected_path,expected.samples,expected.sample_rate,expected.channels);
+    check_ui(editor.export_result && editor.export_result->channels==2 && editor.exported_revision==snapshot.revision &&
+        file_bytes(output)==file_bytes(expected_path) && !std::filesystem::exists(other),"export lost its immutable wet snapshot/frozen path or retracted completed output after late cancel");
+    auto long_score=editor.document.pattern(); long_score.length_beats=256; long_score.bpm=20; long_score.schema_version=2; long_score.model="retained_0_5";
+    editor.commit(long_score,"Long bounded export fixture");
+    const auto previous=file_bytes(output); editor.start_export(output);
+    frame(host,draw); frame(host,draw);
+    frame(host,draw,[&] { click(true); }); frame(host,draw,[&] { click(false); });
+    check_ui(editor.export_job && editor.export_job->cancelled.load(),"real Cancel WAV export button did not request cancellation");
+    editor.pending_export.wait(); editor.poll_export();
+    check_ui(!editor.export_result && editor.export_error.empty() && file_bytes(output)==previous,"cancelled stream replaced old output or reported failure");
+    const auto alias=args.document.parent_path()/"source-alias.wav";
+    std::filesystem::create_hard_link(args.document,alias);
+    set_text(editor.export_path,alias.u8string());
+    bool alias_blocked=false; try { editor.request_export(); } catch (const std::exception&) { alias_blocked=true; }
+    check_ui(alias_blocked && !editor.exporting() && file_bytes(args.document)==original,"WAV export overwrote a hard-linked score input");
+    editor.commit(snapshot,"Restore short export study");
+    const auto blocked=args.document.parent_path()/"blocked.wav"; std::filesystem::create_directory(blocked);
+    editor.start_export(blocked); editor.pending_export.wait(); editor.poll_export();
+    check_ui(!editor.export_error.empty() && std::filesystem::is_directory(blocked) && file_bytes(output)==previous,"failed export damaged prior output or hid its error");
+    const auto shutdown=args.document.parent_path()/"shutdown.wav";
+    { Editor closing(args); closing.commit(long_score,"Shutdown export fixture"); closing.start_export(shutdown); }
+    check_ui(!std::filesystem::exists(shutdown),"shutdown failed to cancel its owned long export");
+    set_text(editor.export_path,output.u8string()); editor.start_export(output); editor.pending_export.wait(); editor.poll_export();
+    editor.open_export_panel=true; frame(host,full); frame(host,full);
+    host.screenshot(std::filesystem::current_path()/"editor-wav-export.bmp");
+    check_ui(file_bytes(args.document)==original,"export changed the saved score input");
+}
+
 void source_workflow(Host& host, const Arguments& args, const std::filesystem::path& fixture) {
     const auto directory = args.document.parent_path() / "take-copy";
     std::filesystem::copy(fixture.parent_path(), directory, std::filesystem::copy_options::recursive);
@@ -264,6 +340,10 @@ void source_workflow(Host& host, const Arguments& args, const std::filesystem::p
     editor.refresh_audio_outputs();
     const auto output_device = editor.audio_outputs.front().id;
     editor.select_audio_output(output_device);
+    set_text(editor.export_path,editor.source->take.source_path.u8string());
+    bool protected_source=false; try { editor.request_export(); } catch (const std::exception&) { protected_source=true; }
+    check_ui(protected_source && !editor.exporting() && editor.export_replace_path.empty() && file_bytes(editor.source->take.source_path)==source_before,
+        "editor export did not protect the attached original WAV before replacement confirmation");
     check_ui(editor.source && editor.source->take.audio.channels == 2 && editor.source->take.audio.sample_rate == 44100,
              "stereo take did not load at its original rate");
     check_ui(editor.source_playback_range().first == 44100, "source playback did not honor aligned beat zero");
@@ -793,8 +873,8 @@ void timeline_navigation(Host& host, const Arguments& original, const std::files
 int main(int argc, char** argv) {
     try {
         check_ui(argc == 4, "Expected source root, generated take and proposal manifests");
-        const auto directory = std::filesystem::current_path() / "editor-ui-test-output";
-        std::filesystem::create_directories(directory);
+        const auto directory = gtracker::unique_sibling_path(std::filesystem::current_path()/"editor-ui-test-output","owned");
+        check_ui(std::filesystem::create_directory(directory),"Could not exclusively own editor test storage");
         Arguments args;
         args.data_dir = directory / "data";
         args.resource_dir = std::filesystem::path(argv[1]);
@@ -808,6 +888,7 @@ int main(int argc, char** argv) {
         render_and_dummy_audio(args);
         output_selection(host,args);
         render_cancellation(host, args);
+        export_workflow(host,args);
         writable_defaults(args);
         source_workflow(host, args, std::filesystem::path(argv[2]));
         slide_authoring(host, args);

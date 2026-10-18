@@ -8,6 +8,9 @@ Extract the whole gtracker folder. A headless package contains the CLI only.
 In a desktop package, on Windows double-click gtracker_editor.exe; on Linux/macOS
 run ./gtracker_editor. The editor opens an original built-in
 sketch. Render + Play generates its audio. See docs/editor.md for controls.
+Export WAV opens a background snapshot exporter in the inspector. Choose a
+writable .wav path; existing WAVs require Replace confirmation. Audio output
+selects the playback device for this session, independently of WAV export.
 The original slide-study example opts into the experimental contact model and
 v2 continuous curves; see docs/gestures.md. V1 keeps the unchanged baseline.
 The repluck-study and scripts/retain.lua compare explicit retained excitation;
@@ -32,6 +35,7 @@ Command-line examples (use .exe on Windows):
   ./gtracker_cli validate examples/campfire.gtrk.json --json
   ./gtracker_cli render examples/campfire.gtrk.json --output /writable/path/demo.wav --json
   ./gtracker_cli render-song examples/night-shift.gsong.json --cache-dir /writable/path/cache --output /writable/path/night-shift.wav --json
+  ./gtracker_cli render-song examples/night-watch.gsong.json --tail 3 --output /writable/path/night-watch.wav --json
   ./gtracker_cli --version --json
   ./gtracker_editor --data-dir /writable/path
 
@@ -50,4 +54,5 @@ provenance, not evidence that another operating system or physical device passed
 
 Patterns, script filenames and CLI JSON use UTF-8. The bundled UI font has limited
 glyph coverage. Microphone hardware and latency require separate qualification;
-the generated/dummy capture checks do not establish them. No transcript exists.
+the generated/dummy capture checks do not establish them. Metadata analysis has
+no transcript; optional single-note proposals remain experimental.

@@ -1,6 +1,7 @@
 #include "gtracker/project.hpp"
 #include "gtracker/editor_document.hpp"
 #include "gtracker/editor_recovery.hpp"
+#include "gtracker/io.hpp"
 #include "gtracker/take.hpp"
 #include "gtracker/timeline.hpp"
 #include "gtracker/proposals.hpp"
@@ -16,6 +17,7 @@
 #include <atomic>
 #include <array>
 #include <chrono>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -240,6 +242,13 @@ struct Editor {
     std::uint64_t rendered_revision = 0;
     std::future<CompletedRender> pending;
     std::shared_ptr<RenderJob> render_job;
+    std::future<gtracker::StreamRenderResult> pending_export;
+    std::shared_ptr<RenderJob> export_job;
+    std::optional<gtracker::StreamRenderResult> export_result;
+    std::filesystem::path export_destination, export_replace_path;
+    bool open_export_panel = false;
+    std::uint64_t exported_revision = 0;
+    std::string export_error;
     CompletedRender rendered;
     std::optional<SourcePreview> source;
     std::optional<SourcePreview> pending_source;
@@ -282,11 +291,13 @@ struct Editor {
     std::array<char, 1024> script_path{};
     std::array<char, 1024> take_path{};
     std::array<char, 1024> proposal_path{};
+    std::array<char, 1024> export_path{};
     std::array<char, 1024> confirmation_save_path{};
 
     explicit Editor(const Arguments& args) {
         data_directory = editor_data_directory(args);
         resource_directory = editor_resource_directory(args);
+        set_text(export_path,(data_directory/"render.wav").u8string());
         for (const auto& argument : {args.document, args.take, args.script}) {
             if (argument.u8string().size() >= path.size()) throw std::invalid_argument("Editor launch paths must fit within 1023 UTF-8 bytes.");
         }
@@ -332,11 +343,13 @@ struct Editor {
             try { recovery->clear_owned(document.filename()); } catch (const std::exception&) { /* Keep the copy if cleanup fails. */ }
         }
         if (render_job) render_job->cancelled.store(true, std::memory_order_relaxed);
+        if (export_job) export_job->cancelled.store(true, std::memory_order_relaxed);
         // The worker owns its snapshot. Request cancellation, then join without
         // allowing a worker to outlive its application resources.
         if (pending.valid()) {
             pending.wait();
         }
+        if (pending_export.valid()) pending_export.wait();
         if (audio_stream) {
             SDL_DestroyAudioStream(audio_stream);
         }
@@ -348,6 +361,7 @@ struct Editor {
     }
 
     bool rendering() const { return pending.valid(); }
+    bool exporting() const { return pending_export.valid(); }
     bool current_audio() const {
         return rendered_generation == document.generation() && !rendered.audio.samples.empty();
     }
@@ -514,6 +528,7 @@ struct Editor {
     }
 
     void load() {
+        if (exporting()) throw std::runtime_error("Finish or cancel WAV export before loading another document.");
         if (document.pending() != gtracker::EditorDocument::Pending::none) return;
         pending_source.reset();
         const auto before = document.generation();
@@ -528,6 +543,7 @@ struct Editor {
     }
 
     void load_source() {
+        if (exporting()) throw std::runtime_error("Finish or cancel WAV export before opening another source take.");
         if (document.pending() != gtracker::EditorDocument::Pending::none) return;
         auto preview = load_source_preview(std::filesystem::u8path(take_path.data()));
         if (preview.take.pattern_path.u8string().size() >= path.size() || preview.take.manifest_path.u8string().size() >= take_path.size())
@@ -542,6 +558,7 @@ struct Editor {
     std::filesystem::path save_destination(const char* value) const {
         if (!value[0]) throw std::invalid_argument("Enter a pattern path before saving.");
         auto destination = std::filesystem::u8path(value);
+        if (exporting()) gtracker::require_distinct_output(destination,{export_destination});
         if (source) {
             if (std::filesystem::weakly_canonical(destination) != source->take.pattern_path)
                 throw std::invalid_argument("Save the attached pattern in its take bundle. Detach source first to save a separate pattern copy.");
@@ -834,6 +851,77 @@ struct Editor {
         Pattern next = pattern;
         next.events.erase(next.events.begin() + selected);
         commit(std::move(next), "Deleted event");
+    }
+
+    std::filesystem::path checked_export_destination(const std::filesystem::path& value) const {
+        if (value.empty()) throw std::runtime_error("Enter a WAV output path.");
+        auto destination = std::filesystem::weakly_canonical(std::filesystem::absolute(value));
+        auto extension = destination.extension().u8string();
+        std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (extension != ".wav") throw std::runtime_error("WAV export needs a .wav filename.");
+        std::vector<std::filesystem::path> inputs{document.filename(),std::filesystem::u8path(path.data()),
+            std::filesystem::u8path(script_path.data()),std::filesystem::u8path(proposal_path.data())};
+        if (source) inputs.insert(inputs.end(),{source->take.source_path,source->take.pattern_path,source->take.manifest_path,source->take.analysis_path});
+        gtracker::require_distinct_output(destination,inputs);
+        return destination;
+    }
+
+    void start_export(const std::filesystem::path& value) {
+        if (exporting()) return;
+        const auto destination = checked_export_destination(value);
+        // Use one immutable score and resolved output. Edits can continue, but
+        // loading another source/document waits until this output is settled.
+        end_fret_entry(); document.end_edit();
+        const Pattern snapshot = document.pattern();
+        gtracker::validate_pattern(snapshot);
+        auto job = std::make_shared<RenderJob>();
+        export_job = job; export_destination = destination; exported_revision = snapshot.revision;
+        export_result.reset(); export_error.clear();
+        try {
+            pending_export = std::async(std::launch::async,[snapshot,destination,job] {
+                gtracker::StreamOptions stream;
+                stream.cancelled = [job] { return job->cancelled.load(std::memory_order_relaxed); };
+                stream.progress = [job](const gtracker::RenderProgress& progress) {
+                    job->total_frames.store(progress.processing_frames,std::memory_order_relaxed);
+                    job->completed_frames.store(progress.processed_frames,std::memory_order_relaxed);
+                };
+                if (stream.cancelled()) throw gtracker::RenderCancelled();
+                return gtracker::render_pattern_wav(snapshot,destination,{},stream);
+            });
+        } catch (...) { export_job.reset(); throw; }
+        message("Exporting revision "+std::to_string(exported_revision)+" to "+destination.filename().u8string()+"...");
+    }
+
+    void request_export() {
+        if (exporting()) return;
+        const auto destination = checked_export_destination(std::filesystem::u8path(export_path.data()));
+        if (std::filesystem::exists(destination)) { export_replace_path = destination; return; }
+        start_export(destination);
+    }
+
+    void replace_export() {
+        if (export_replace_path.empty()) return;
+        start_export(export_replace_path);
+        export_replace_path.clear();
+    }
+
+    void cancel_export() {
+        if (!exporting() || !export_job) return;
+        export_job->cancelled.store(true,std::memory_order_relaxed);
+        message("WAV export cancellation requested; an already completed export is kept.");
+    }
+
+    void poll_export() {
+        if (!exporting() || pending_export.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
+        export_job.reset();
+        try {
+            // The native exporter has already atomically published this file.
+            // A cancellation racing with completion cannot retract that success.
+            export_result = pending_export.get();
+            message("Exported revision "+std::to_string(exported_revision)+" to "+export_destination.filename().u8string()+
+                ". Clipped samples: "+std::to_string(export_result->clipped_samples)+".");
+        } catch (const gtracker::RenderCancelled&) { message("WAV export cancelled; previous output retained."); }
+        catch (const std::exception& error) { export_error = error.what(); message("WAV export failed: "+export_error,true); }
     }
 
     void request_render(bool then_play = false) {
@@ -1461,6 +1549,57 @@ void recovery_inspector(Editor& editor) {
     if (editor.recovery) ImGui::TextWrapped("Folder: %s",editor.recovery->directory().u8string().c_str());
 }
 
+void export_button(Editor& editor) {
+    if (editor.exporting()) {
+        if (ImGui::Button("Cancel WAV export",ImVec2(-1,0))) editor.cancel_export();
+    } else if (ImGui::Button("Export current score",ImVec2(-1,0))) editor.attempt([&] { editor.request_export(); });
+}
+
+void export_inspector(Editor& editor) {
+    ImGui::TextWrapped("Export a score snapshot as 48 kHz, 16-bit PCM WAV, with its production settings and decay tail.");
+    ImGui::BeginDisabled(editor.exporting());
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##export_path",editor.export_path.data(),editor.export_path.size());
+    ImGui::EndDisabled();
+    export_button(editor);
+    if (editor.exporting() && editor.export_job) {
+        const auto total = editor.export_job->total_frames.load(std::memory_order_relaxed);
+        const auto completed = editor.export_job->completed_frames.load(std::memory_order_relaxed);
+        if (total) ImGui::ProgressBar(static_cast<float>(static_cast<double>(completed)/total),ImVec2(-1,0));
+        else ImGui::TextUnformatted("Preparing WAV...");
+        ImGui::TextWrapped("Exporting revision %llu. Further edits belong to the next export.",static_cast<unsigned long long>(editor.exported_revision));
+    }
+    if (!editor.export_error.empty()) ImGui::TextWrapped("Last export error: %s",editor.export_error.c_str());
+    if (editor.export_result) {
+        const auto& result = *editor.export_result;
+        ImGui::TextWrapped("Wrote revision %llu: %.2f seconds, %s. Peak %.3f; clipped %llu.",
+            static_cast<unsigned long long>(editor.exported_revision),static_cast<double>(result.frames)/result.sample_rate,
+            result.channels == 2 ? "stereo" : "mono",result.peak,static_cast<unsigned long long>(result.clipped_samples));
+        ImGui::TextWrapped("%s",editor.export_destination.u8string().c_str());
+    }
+    ImGui::TextWrapped("Attached source audio is protected. Saving the score remains a separate action.");
+}
+
+void export_replace_dialog(Editor& editor) {
+    if (editor.export_replace_path.empty()) return;
+    if (!ImGui::IsPopupOpen("Replace WAV?")) ImGui::OpenPopup("Replace WAV?");
+    ImGui::SetNextWindowSize(ImVec2(520,0),ImGuiCond_Appearing);
+    if (ImGui::BeginPopupModal("Replace WAV?",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextWrapped("Replace the existing WAV at this path?");
+        ImGui::TextWrapped("%s",editor.export_replace_path.u8string().c_str());
+        ImGui::TextWrapped("The previous file is kept if export fails or cancellation is handled before completion.");
+        if (ImGui::Button("Replace",ImVec2(120,0))) {
+            editor.attempt([&] { editor.replace_export(); });
+            if (editor.export_replace_path.empty()) ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel",ImVec2(120,0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            editor.export_replace_path.clear(); ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 void audio_output_options(Editor& editor) {
     if (ImGui::Selectable("System default",editor.audio_output == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK))
         editor.attempt([&] { editor.select_audio_output(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK); });
@@ -1582,6 +1721,14 @@ void inspector(Editor& editor) {
     }
     if (ImGui::TreeNode("Audio output")) {
         audio_output_inspector(editor);
+        ImGui::TreePop();
+    }
+    const bool focus_export = editor.open_export_panel;
+    if (focus_export) ImGui::SetNextItemOpen(true,ImGuiCond_Always);
+    editor.open_export_panel = false;
+    if (ImGui::TreeNode("WAV export")) {
+        if (focus_export) ImGui::SetScrollHereY(0);
+        export_inspector(editor);
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Production / room")) {
@@ -1805,6 +1952,8 @@ void interface(Editor& editor) {
         editor.stop();
         editor.message("Stopped playback.");
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Export WAV")) editor.open_export_panel = true;
 
     double bpm = editor.document.pattern().bpm;
     double length = editor.document.pattern().length_beats;
@@ -1924,6 +2073,7 @@ void interface(Editor& editor) {
         ImGui::TextDisabled("Space play/stop | Ctrl/Cmd+S save | Ctrl/Cmd+Z undo | Delete selection");
     }
     unsaved_dialog(editor);
+    export_replace_dialog(editor);
     ImGui::End();
 }
 
@@ -2038,6 +2188,7 @@ int run(const Arguments& args) {
             }
         }
         editor.poll_render();
+        editor.poll_export();
         editor.checkpoint_recovery(std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count());
         if (args.smoke && editor.render_failed) {
             throw std::runtime_error(editor.status);

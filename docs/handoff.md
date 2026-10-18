@@ -364,3 +364,22 @@ byte-identical snapshot rendering with 997-frame blocks. Package tests5 passed.
 The first audit report write failed on a Python Path serialization mistake in
 the ignored helper; converting command arguments to strings fixed the receipt.
 No physical listening or performance judgement is claimed.
+
+The editor's Export WAV panel now streams an immutable current-score snapshot on
+an owned worker, with progress/cancel, PCM16/48 kHz mono/stereo, native room/tails,
+replacement confirmation and persistent result/error details. Edits remain
+available; conflicting document/source loads and output-path saves wait. Native
+alias checks protect score/script/proposals and attached take/source files.
+Closing cancels/joins; a cancellation racing with a completed file reports that
+success rather than falsely claiming the previous file survived.
+
+Windows desktop29 passed with fingerprint recorded in
+`.local/nightshift/editor-export-checks.json`; `editor-wav-export.bmp` was
+inspected. Tests click actual export/cancel widgets, exercise the replacement
+modal, compare shared-renderer mono/stereo PCM, verify immutable revision/path,
+progress, hard links/original WAV protection, failure preservation and shutdown.
+Earlier failures were in new tests: a named popup query outside a frame caused
+a segfault, fixed-name stale storage interfered on retry, and two fixtures
+violated declared schema/length bounds. Those were corrected before the pass;
+test storage is now exclusively owned per run. `ci --if-due` correctly skipped
+a not-due full run; fresh platform qualification follows this checkpoint.
