@@ -459,7 +459,19 @@ def main(argv: list[str] | None = None) -> int:
             song.add_argument("--cache-dir")
             song.add_argument("--refresh-cache", action="store_true")
             song.add_argument("--cache-read-only", action="store_true")
-    editor = commands.add_parser("editor")
+    for launch in ("editor", "dev"):
+        editor = commands.add_parser(launch, help="Configure, build and launch from the repo." if launch == "dev" else "Launch the existing desktop build.")
+        editor.add_argument("file", nargs="?")
+        editor.add_argument("--take")
+        editor.add_argument("--sid", action="store_true")
+        if launch == "dev": editor.add_argument("--guitar", action="store_true")
+        editor.add_argument("--script")
+        editor.add_argument("--smoke-test", action="store_true")
+        editor.add_argument("--no-recovery", action="store_true")
+        editor.add_argument("--frames", type=int)
+        editor.add_argument("--screenshot")
+        editor.add_argument("--data-dir", default=".local/dev" if launch == "dev" else ".local")
+        editor.add_argument("--resource-dir", default=str(ROOT))
     for operation in ("sid-validate", "sid-info", "sid-export", "sid-render", "sid-export-prg", "sid-export-sng"):
         sid = commands.add_parser(operation)
         sid.add_argument("file")
@@ -467,16 +479,6 @@ def main(argv: list[str] | None = None) -> int:
         sid.add_argument("--sid-tools", default=".local/sid/tools")
         sid.add_argument("--json", action="store_true")
         sid.add_argument("--profile", choices=PROFILES, default="desktop")
-    editor.add_argument("file", nargs="?")
-    editor.add_argument("--take")
-    editor.add_argument("--sid", action="store_true")
-    editor.add_argument("--script")
-    editor.add_argument("--smoke-test", action="store_true")
-    editor.add_argument("--no-recovery", action="store_true")
-    editor.add_argument("--frames", type=int)
-    editor.add_argument("--screenshot")
-    editor.add_argument("--data-dir", default=".local")
-    editor.add_argument("--resource-dir", default=str(ROOT))
     package = commands.add_parser("package", help="Build a local relocatable developer ZIP; does not publish a release.")
     package.add_argument("--profile", choices=PROFILES, default="desktop")
     package.add_argument("--output")
@@ -543,6 +545,25 @@ def main(argv: list[str] | None = None) -> int:
             return run_ci(ROOT, args.if_due)
         if args.command == "record-take":
             return recorder.run_args(args)
+        if args.command == "dev":
+            if args.guitar and (args.sid or (args.file and args.file.endswith(".sidtrk.json"))):
+                raise RuntimeError("Choose SID or guitar mode, not both.")
+            if args.take and args.file:
+                raise RuntimeError("Choose a pattern file or --take, not both.")
+            args.sid = args.sid or (not args.guitar and not args.file and not args.take)
+            for step in (["cmake", "--preset", "desktop"],
+                         ["cmake", "--build", "--preset", "desktop", "--config", "Release", "--target", "gtracker_editor", "gtracker_cli"]):
+                code = run_command(ROOT, step)["returncode"]
+                if code: return code
+            needs_sid = args.sid or bool(args.file and args.file.endswith(".sidtrk.json"))
+            if needs_sid:
+                exists = (ROOT / ".local/sid/tools/backend.json").is_file()
+                if not exists and os.name != "nt":
+                    raise RuntimeError("Prepare SID backend tools under .local/sid/tools first; automatic backend setup currently targets Windows. Use --guitar for guitar mode.")
+                operation = "check" if exists else "prepare"
+                code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), operation])["returncode"]
+                if code: return code
+            args.command = "editor"
         if args.command == "configure":
             command = ["cmake", "--preset", args.profile]
         elif args.command == "build":

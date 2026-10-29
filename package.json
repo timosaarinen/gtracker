@@ -1,0 +1,7 @@
+{
+  "name": "gtracker",
+  "private": true,
+  "scripts": {
+    "dev": "python tools/dev.py dev"
+  }
+}

@@ -74,6 +74,23 @@ work. The existing model is a reference to compare with future physical models.
 
 ## Build and listen
 
+For everyday development from the repository, run:
+
+```sh
+bun run dev
+bun run dev --guitar
+bun run dev examples/sid/heavy-mellow.sidtrk.json
+```
+
+This configures and incrementally builds the native desktop editor, then launches
+it directly with repo resources and development data under `.local/dev`.
+The default is a new SID song; `--guitar` opens guitar mode, or pass a score file.
+No `bun install` is needed. Without Bun, use `python tools/dev.py dev` with the
+same arguments. The build prerequisites below still apply. A first SID launch
+prepares missing Windows backend tools; later launches check existing tools.
+Audition cache misses prepare asynchronously in the editor; the full packaged
+audition bank is optional for repository development.
+
 Requirements: a C++17 compiler and C compiler, CMake 3.25+, Ninja, Python 3.10+,
 and network access for the first dependency fetch. Native dependency archives
 are version-pinned and SHA-256 checked in CMake. No ML installation is required.

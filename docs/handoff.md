@@ -1,5 +1,18 @@
 # Current handoff
 
+Development launcher follow-up, 2026-10-29: `bun run dev` now configures/builds
+the desktop editor/CLI and launches a new SID song straight from this checkout;
+`--guitar` or a score path chooses another start. `python tools/dev.py dev` is
+the equivalent without Bun. No JS dependencies/install or package extraction
+is involved. Repo resources are used directly; development data uses `.local/dev`.
+Existing SID tools are checked; missing tools are prepared on Windows, requiring
+the documented backend build prerequisites. Failed setup/build/checks stop launch.
+Actual bounded SID launch and dummy guitar smoke passed on Windows; launcher
+failure/default/path tests cover rejecting stale builds and backend failures.
+Logs are `.local/sid/dev-{launcher,guitar-launcher}.log`. An initial mock test
+lacked its built-executable fixture and was corrected before the passing checks.
+This change adds no watcher/hot reload and no physical listening qualification.
+
 SID implementation, 2026-10-29, supersedes the earlier document-only checkpoint
 `c741361`. The contract remains `docs/sid-tracker-implementation-plan.md`; user
 instructions explicitly require the complete native workflow. The new separate

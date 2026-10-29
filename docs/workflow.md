@@ -35,6 +35,14 @@ scheduler or agent wake-up mechanism. `ci` without `--if-due` always requests a 
 
 ## Build and use the prototype
 
+`bun run dev` (or `python tools/dev.py dev`) configures the desktop preset,
+incrementally builds the editor/CLI, checks or initially prepares SID backend
+tools, and launches directly from the repo in SID mode. Pass `--guitar` or a score
+path to choose another starting document. Resources resolve from the repo and
+development data goes under `.local/dev`. A failed configure/build/backend check
+stops the launch. There is no package assembly, file watcher or hot reload.
+The lower-level `editor` command still launches an already-built executable.
+
 All commands resolve project-relative paths from the repository root, even when
 the runner is invoked by absolute path from another directory.
 
