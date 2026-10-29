@@ -1,17 +1,76 @@
 # Current handoff
 
-SID follow-up, 2026-10-29: the latest implementation contract is
-`docs/sid-tracker-implementation-plan.md`. Work so far adds only a separate native
-SID document library, structural schema, validation/inspection CLI and focused
-document tests. See `docs/sid-tracker.md` for exact scope. M0 and M1 are not
-complete; M2–M7 remain. Do not mistake preset labels for implemented sounds.
-Startup Windows headless CI passed at source 40b9622 before edits; the modified
-Windows Release headless build and all 22 native tests passed, including the new
-SID document checks. No physical GUI/listening/C64 playback was tested.
-Backend investigation downloaded Debian GoatTracker 2.77 sources under ignored
-`.local/sid/`; this is not a reproducible backend recipe or package dependency.
-Next establish genuine SNG -> pinned packer -> SID -> integer PCM, then continue
-the complete contract. No guitar DSP or document semantics were changed.
+SID implementation, 2026-10-29, supersedes the earlier document-only checkpoint
+`c741361`. The contract remains `docs/sid-tracker-implementation-plan.md`; user
+instructions explicitly require the complete native workflow. The new separate
+SID mode now includes the document/compiler, original bank, genuine external
+GoatTracker packer, exact-SID PCM renderer, prepared auditions, native transport,
+keyboard grid/block editing/undo, sections/order/library editing, persistence,
+recovery, SID/WAV/SNG/runnable-PRG export, original demo and offline Windows bundle.
+See `docs/sid-tracker.md` for controls, bounds and deliberate backend adaptation.
+Guitar DSP and existing score semantics are unchanged.
+
+The first inspected console renderer had repeat differences up to four PCM units.
+The shipped external GPL adapter instead builds libsidplayfp 3.1.1/reSIDfp 1.2.3
+with serial analogue-table construction. It uses no ROMs or user configuration.
+`tools/sid_backend.py` pins archives, patches/builds tools, checks hashes and
+generates the 579-note bank. Runtime needs no Python/compiler/download. Source
+archives, licenses, adapter and recipe accompany the external binaries in ZIPs.
+
+Windows 11 AMD64 / i7-10700K / Clang 18.1.8 Release / Python 3.12.6 evidence:
+
+- Startup doctor passed; CI cadence was not due. The previous full headless CI
+  receipt remains `.local/ci/runs/20261029T004736Z-5140b1df/report.json` at 40b9622;
+  it does not certify new code.
+- `python tools/dev.py build --profile desktop` and CTest passed all 31 native
+  desktop cases, including SID document, real synthetic SID widgets, prepared
+  PCM/loop/pause/stop and stale-job checks, plus existing guitar UI/capture tests.
+  Logs: `.local/sid/desktop-tests.log`, focused follow-ups in `.local/sid/`.
+- All 101 Python tests passed (one POSIX-only interrupt skip), recorded in
+  `.local/sid/python-tests.log`.
+- Final full headless CI passed at the dirty implementation checkpoint in
+  `.local/ci/runs/20261029T014542Z-5d06e699/report.json` (22 native / 101 Python,
+  one POSIX-only skip). The sequential desktop rebuild and all 31 tests passed
+  in `.local/sid/sequential-{build,tests}.log`; a concurrent attempt had hit an
+  executable lock while CI capture tests used the desktop binary, so that failed
+  build was rerun sequentially. Later dialog/load-error and layout follow-ups use
+  focused SID/guitar UI checks. Normal/125% synthetic 980x680 layouts were viewed;
+  warm prepared audition queueing measured roughly 8–9 ms with dummy output.
+  That timing is software queue evidence, not physical input-to-speaker latency.
+- The final desktop guitar render retained campfire SHA-256
+  `3313199adea191ad76b5b03c06839dfd473d0677f1e026bc84d77cfa2ce845d9`.
+- `python tools/sid_verify.py` checks all eleven presets on all three voices at
+  speeds 4/6/12, A4 frequency, post-drum state, boundary HOLD, finite released gates,
+  repeated SID bytes and PCM equality. Generated report is
+  `.local/sid/verification/report.json`; the measured final-half-second DC-removed
+  RMS was about 0.00173 with a declared limit 0.005. This is signal evidence,
+  not listening. py65 is an isolated authoring test dependency in `.local/sid/python`.
+- VICE 3.10 actually autoloaded/started the BASIC SYS PRG and recorded non-silent
+  PCM. A 252-call trace measured mean 19656.004 cycles/play call (instruction
+  sampling varies +/-2), one PAL frame. Logs/audio are
+  `.local/sid/vice-final{,-trace}.log` and `.local/sid/vice-final.wav`. VICE's
+  bounded cycle-limit exit was 1 as documented in its log; it was not a crash.
+  Earlier invalid model/monitor-quit attempts failed and are retained separately.
+- The Windows ZIP is `.local/packages/gtracker-desktop-Windows-AMD64.zip`.
+  Relocation to a Unicode/space path with restricted PATH passed all four exports,
+  exact SID/PRG music-payload equality, dummy editor launch and unchanged packaged
+  hashes (`.local/sid/relocation-report.json`). An ACL-enforced read-only install
+  also rendered a fresh uniquely named score to exclude a preview-cache hit;
+  temporary ACLs were restored (`.local/sid/readonly-fresh-report.json`).
+
+The package's own source fingerprint records its exact build inputs; final focused
+checks/refresh accompany publication. These Windows results do not qualify Linux
+or Intel Mac. Physical Windows interaction was attempted through the computer-use
+skill, but its native pipe was unavailable even after retry/reset. No human
+listening or physical SID hardware assessment is claimed. Those environmental
+checks remain to qualify musical balance, audition feel and real display/input;
+do not relabel synthetic tests or VICE file audio as physical listening.
+
+The independent original example is about 123 seconds, with seven reusable phrases
+and sixteen placements through intro/heavy/mellow/return/outro. Generated audio,
+SID/PRG exports, all tools and private evidence stay ignored. Useful next step:
+perform the guide's real-window/listening journey on the delivered package,
+especially the heavy/mellow transitions and isolated-loop smoothing.
 
 Night shift, 2026-10-18, requested eight-hour window starting about 01:51 UTC.
 This handoff records the implementation and checks through the final recovery

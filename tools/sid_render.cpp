@@ -1,0 +1,83 @@
+// Standalone GPL-2.0-or-later renderer adapter, distributed separately from gtracker.
+// Uses libsidplayfp/reSIDfp; no synthesizer is reimplemented here.
+#include <algorithm>
+#include <cstdint>
+#include <fstream>
+#include <iostream>
+#include <sidplayfp/SidConfig.h>
+#include <sidplayfp/SidTune.h>
+#include <sidplayfp/builders/residfp.h>
+#include <sidplayfp/sidplayfp.h>
+#include <stdexcept>
+#include <vector>
+void le(std::ostream &out, std::uint32_t value, int bytes) {
+    for (int i = 0; i < bytes; ++i)
+        out.put(static_cast<char>(value >> (8 * i)));
+}
+int main(int argc, char **argv) {
+    try {
+        if (argc != 4)
+            throw std::runtime_error("gtracker_sidrender SID WAV FRAMES");
+        const auto frames = std::stoul(argv[3]);
+        if (frames > 32 * 1024 * 1024 || !frames)
+            throw std::runtime_error("Render sample bound exceeded");
+        SidTune tune(argv[1]);
+        if (!tune.getStatus())
+            throw std::runtime_error(tune.statusString());
+        tune.selectSong(1);
+        ReSIDfpBuilder builder("gtracker pinned reSIDfp");
+        builder.filter6581Curve(0.5);
+        builder.filter6581Range(0.5);
+        builder.enableOld6581caps(false);
+        builder.offset6581(0);
+        builder.dacLeakage(1);
+        builder.combinedWaveformsStrength(SidConfig::AVERAGE);
+        sidplayfp engine;
+        auto config = engine.config();
+        config.frequency = 48000;
+        config.defaultC64Model = SidConfig::PAL;
+        config.forceC64Model = true;
+        config.defaultSidModel = SidConfig::MOS6581;
+        config.forceSidModel = true;
+        config.powerOnDelay = 0;
+        config.sidEmulation = &builder;
+        config.samplingMethod = SidConfig::RESAMPLE_INTERPOLATE;
+        if (!engine.config(config) || !engine.load(&tune))
+            throw std::runtime_error(engine.error());
+        engine.initMixer(false);
+        std::ofstream out(argv[2], std::ios::binary);
+        out.write("RIFF", 4);
+        le(out, 36 + frames * 2, 4);
+        out.write("WAVEfmt ", 8);
+        le(out, 16, 4);
+        le(out, 1, 2);
+        le(out, 1, 2);
+        le(out, 48000, 4);
+        le(out, 96000, 4);
+        le(out, 2, 2);
+        le(out, 16, 2);
+        out.write("data", 4);
+        le(out, frames * 2, 4);
+        std::vector<short> buffer(static_cast<std::size_t>(engine.getBufSize(20000)) / sizeof(short) + 1024);
+        unsigned long written = 0;
+        while (written < frames) {
+            const int samples = engine.play(20000);
+            if (samples < 0)
+                throw std::runtime_error(engine.error());
+            const auto count = engine.mix(buffer.data(), static_cast<unsigned>(samples));
+            const auto n = std::min<unsigned long>(count, frames - written);
+            for (unsigned long i = 0; i < n; ++i)
+                le(out, static_cast<std::uint16_t>(buffer[i]), 2);
+            written += n;
+        }
+        out.close();
+        if (!out)
+            throw std::runtime_error("WAV write failed");
+        engine.load(nullptr);
+        std::cout << "libsidplayfp 3.1.1 / reSIDfp 1.2.3 deterministic serial tables; frames=" << frames
+                  << '\n';
+    } catch (const std::exception &e) {
+        std::cerr << e.what() << '\n';
+        return 1;
+    }
+}

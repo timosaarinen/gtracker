@@ -460,8 +460,16 @@ def main(argv: list[str] | None = None) -> int:
             song.add_argument("--refresh-cache", action="store_true")
             song.add_argument("--cache-read-only", action="store_true")
     editor = commands.add_parser("editor")
+    for operation in ("sid-validate", "sid-info", "sid-export", "sid-render", "sid-export-prg", "sid-export-sng"):
+        sid = commands.add_parser(operation)
+        sid.add_argument("file")
+        sid.add_argument("--output")
+        sid.add_argument("--sid-tools", default=".local/sid/tools")
+        sid.add_argument("--json", action="store_true")
+        sid.add_argument("--profile", choices=PROFILES, default="desktop")
     editor.add_argument("file", nargs="?")
     editor.add_argument("--take")
+    editor.add_argument("--sid", action="store_true")
     editor.add_argument("--script")
     editor.add_argument("--smoke-test", action="store_true")
     editor.add_argument("--no-recovery", action="store_true")
@@ -565,6 +573,11 @@ def main(argv: list[str] | None = None) -> int:
             for name in ("output", "sample_rate"):
                 if getattr(args, name, None) is not None: command += ["--" + name.replace("_", "-"), str(getattr(args, name))]
             if args.json: command.append("--json")
+        elif args.command.startswith("sid-"):
+            command=[str(executable(ROOT,args.profile,"gtracker_cli")),args.command,args.file]
+            if args.output: command += ["--output",args.output]
+            if args.command not in ("sid-info","sid-validate"): command += ["--sid-tools",args.sid_tools]
+            if args.json: command.append("--json")
         elif args.command == "package":
             output = args.output or f".local/packages/gtracker-{args.profile}-{platform.system()}-{platform.machine()}.zip"
             command = [sys.executable, str(ROOT / "tools/package.py"), "--profile", args.profile, "--output", output]
@@ -593,7 +606,8 @@ def main(argv: list[str] | None = None) -> int:
             if args.take and args.file:
                 raise RuntimeError("Choose a pattern file or --take, not both.")
             command = [str(executable(ROOT, "desktop", "gtracker_editor"))]
-            if not args.take: command.append(args.file or "examples/campfire.gtrk.json")
+            if args.sid: command.append("--sid")
+            if not args.take and (args.file or not args.sid): command.append(args.file or "examples/campfire.gtrk.json")
             if args.take: command += ["--take", args.take]
             for option in ("script", "frames", "screenshot", "data_dir", "resource_dir"):
                 if getattr(args, option) is not None:

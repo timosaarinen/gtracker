@@ -10,6 +10,13 @@ not yet a realistic guitar instrument or an automatic guitar transcriber.
 
 ## What works now
 
+- A separate native [SID tracker](docs/sid-tracker.md): three-voice vertical grid,
+  fixed original presets, keyboard note entry, section/order editing and undo,
+  prepared PCM playback/auditions, and real PAL/6581 SID, WAV and runnable C64 PRG
+  exports through pinned external GoatTracker/libsidplayfp tools. An original
+  two-minute heavy/mellow example is included. Physical listening and window/input
+  qualification are distinct from the automated checks documented in the handoff.
+
 - C++17 plucked-string renderer with a small C ABI, deterministic excitation,
   fractional frets, damping and synthetic body taps; no stored audio samples.
 - Versioned JSON patterns, strict validation, stable event IDs, beat timing,
@@ -112,6 +119,9 @@ scripts and dependency notices. Extract the whole folder and move it as needed.
 The packaged editor resolves resources beside its executable and suggests a
 per-user save folder, so the installation can be read-only. System runtime
 libraries remain prerequisites. This command does not publish a release.
+Windows desktop packaging also requires the SID backend and audition preparation
+described in [the SID guide](docs/sid-tracker.md). The resulting bundle works
+offline; backend compilation and downloads are development-time operations.
 
 The initial phrase is original test material. The renderer produces the audio;
 there are no committed sample recordings or sound banks.

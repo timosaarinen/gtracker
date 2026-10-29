@@ -1,5 +1,7 @@
 #include "gtracker/project.hpp"
 #include "gtracker/sid_song.hpp"
+#include "gtracker/sid_backend.hpp"
+#include "gtracker/hash.hpp"
 #include "gtracker/proposals.hpp"
 #include <iterator>
 #include "gtracker/core.h"
@@ -70,6 +72,8 @@ void help() {
     std::cout << "gtracker " << GT_VERSION << " - acoustic guitar prototype\n\n"
         "Usage:\n"
         "  gtracker_cli validate PATTERN [--json]\n"
+        "  gtracker_cli sid-validate|sid-info SONG [--json]\n"
+        "  gtracker_cli sid-export|sid-render|sid-export-prg|sid-export-sng SONG --output FILE [--sid-tools DIR] [--json]\n"
         "  gtracker_cli render PATTERN --output WAV [--sample-rate HZ] [--tail SECONDS]\n"
         "                       [--script LUA] [--production JSON] [--bypass-production] [--json]\n"
         "                       [--stream] [--progress-json] [--cancel-file PATH]\n"
@@ -252,6 +256,36 @@ int cli_main(int argc, char** argv) {
             return 0;
         }
         const std::string command = argv[1];
+        if(command=="sid-backend-info") {
+            std::filesystem::path folder=".local/sid/tools";
+            for(int i=2;i<argc;++i){const std::string flag=argv[i];if(flag=="--json")continue;if(flag=="--sid-tools" && i+1<argc)folder=std::filesystem::u8path(argv[++i]);else throw std::runtime_error("Unknown SID backend option");}
+            std::cout<<nlohmann::json{{"ok",true},{"cache_identity",gtracker::sid::audition_identity({folder,{}})}}.dump()<<'\n';return 0;
+        }
+        if(command=="sid-audition") {
+            if(argc<6)throw std::runtime_error("sid-audition NOTE INSTR --output FILE [--sid-tools DIR]");
+            const int note=std::stoi(argv[2]),instrument=std::stoi(argv[3]);
+            std::filesystem::path output;
+            gtracker::sid::Backend backend{std::filesystem::u8path(argv[0]).parent_path()/"sid-tools",std::filesystem::temp_directory_path()/"gtracker-sid"/"jobs"};if(!std::filesystem::exists(backend.tools))backend.tools=".local/sid/tools";
+            for(int i=4;i<argc;++i){const std::string flag=argv[i];if(flag=="--json")continue;if((flag=="--output" || flag=="--sid-tools") && i+1<argc){const auto value=std::filesystem::u8path(argv[++i]);if(flag=="--output")output=value;else backend.tools=value;}else throw std::runtime_error("Unknown SID audition option");}
+            if(output.empty())throw std::runtime_error("An audition output is required");
+            auto song=gtracker::sid::new_song();song.speed=4;song.patterns.resize(1);song.sections.resize(1);song.patterns[0].voices[0]={{0,gtracker::sid::EventType::note,note,instrument},{3,gtracker::sid::EventType::off,60,1}};
+            const std::atomic<bool> cancel{false};const auto r=gtracker::sid::prepare(song,backend,cancel,true,false,3.1);
+            gtracker::write_binary_atomic(output,[&](std::ostream& out){std::ifstream in(r.wav,std::ios::binary);out<<in.rdbuf();});
+            std::cout<<nlohmann::json{{"ok",true},{"bank_sha256",r.bank_hash},{"cache_identity",gtracker::sid::audition_identity(backend)},{"output",output.u8string()}}.dump()<<'\n';return 0;
+        }
+        if (command == "sid-export" || command == "sid-render" || command == "sid-export-prg" || command == "sid-export-sng") {
+            if(argc<3) throw std::runtime_error("A SID song path is required");
+            const auto input=std::filesystem::u8path(argv[2]);
+            std::filesystem::path output;
+            gtracker::sid::Backend backend{std::filesystem::u8path(argv[0]).parent_path()/"sid-tools",std::filesystem::temp_directory_path()/"gtracker-sid"/"jobs"};
+            if(!std::filesystem::exists(backend.tools)) backend.tools=".local/sid/tools";
+            for(int i=3;i<argc;++i) {const std::string flag=argv[i];if(flag=="--json")continue;if((flag=="--output" || flag=="--sid-tools") && i+1<argc){const auto value=std::filesystem::u8path(argv[++i]);if(flag=="--output")output=value;else backend.tools=value;}else throw std::runtime_error("Unknown SID option: "+flag);}
+            if(output.empty())throw std::runtime_error("SID export requires --output");
+            gtracker::require_distinct_output(output,{input});
+            const auto song=gtracker::sid::load(input);const std::atomic<bool> cancel{false};
+            const auto sid_result=gtracker::sid::export_file(song,backend,output,command=="sid-render"?"wav":command=="sid-export-prg"?"prg":command=="sid-export-sng"?"sng":"sid",cancel);
+            std::cout<<nlohmann::json{{"ok",true},{"command",command},{"source_revision",song.revision},{"output",output.u8string()},{"size_bytes",std::filesystem::file_size(output)},{"source_sha256",gtracker::sha256_file(input)},{"output_sha256",gtracker::sha256_file(output)},{"bank_sha256",sid_result.bank_hash},{"instrument_bank_version",1},{"target","pal/6581"},{"patterns",song.patterns.size()},{"orders",gtracker::sid::order_count(song)},{"backend",{{"goattracker","2.77"},{"sidplayfp","3.2.1"},{"libsidplayfp","3.1.1"}}},{"sid_sha256",sid_result.sid_hash},{"load_address",sid_result.load},{"init_address",sid_result.init},{"play_address",sid_result.play},{"preroll_ticks",sid_result.preroll_ticks},{"rendered_seconds",sid_result.seconds},{"warnings",sid_result.warnings},{"authored_seconds",gtracker::sid::duration(song)}}.dump(2)<<'\n';return 0;
+        }
         if (command == "sid-validate" || command == "sid-info") {
             if (argc < 3) throw std::runtime_error("A SID song path is required");
             for (int i = 3; i < argc; ++i) if (std::string(argv[i]) != "--json") throw std::runtime_error("Unknown SID option: " + std::string(argv[i]));

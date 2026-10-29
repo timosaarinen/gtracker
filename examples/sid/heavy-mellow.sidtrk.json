@@ -1,0 +1,1361 @@
+{
+  "format": "gtracker.sid",
+  "schema_version": 1,
+  "instrument_bank_version": 1,
+  "name": "Heavy and Mellow",
+  "author": "gtracker original demo",
+  "revision": 1,
+  "target": {
+    "clock": "pal",
+    "sid_model": "6581"
+  },
+  "timing": {
+    "ticks_per_row": 6,
+    "rows_per_beat": 4
+  },
+  "patterns": [
+    {
+      "id": "p0",
+      "name": "Dawn",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 32,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 59,
+            "instrument": 1
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          }
+        ],
+        [
+          {
+            "row": 32,
+            "type": "note",
+            "note": 50,
+            "instrument": 4
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          }
+        ]
+      ]
+    },
+    {
+      "id": "p1",
+      "name": "Iron Signal",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 69,
+            "instrument": 1
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 59,
+            "instrument": 1
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 50,
+            "instrument": 4
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          }
+        ]
+      ]
+    },
+    {
+      "id": "p2",
+      "name": "Iron Answer",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 70,
+            "instrument": 1
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 72,
+            "instrument": 1
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 70,
+            "instrument": 1
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 63,
+            "instrument": 1
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 63,
+            "instrument": 1
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 70,
+            "instrument": 1
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 63,
+            "instrument": 1
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 62,
+            "instrument": 1
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 48,
+            "instrument": 3
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 48,
+            "instrument": 3
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 53,
+            "instrument": 3
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 48,
+            "instrument": 3
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 36,
+            "instrument": 2
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 36,
+            "instrument": 2
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 36,
+            "instrument": 2
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 36,
+            "instrument": 2
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          }
+        ]
+      ]
+    },
+    {
+      "id": "p3",
+      "name": "Ember",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 57,
+            "instrument": 5
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 64,
+            "instrument": 5
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 67,
+            "instrument": 5
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 64,
+            "instrument": 5
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 69,
+            "instrument": 5
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 67,
+            "instrument": 5
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 60,
+            "instrument": 5
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 64,
+            "instrument": 5
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 45,
+            "instrument": 8
+          },
+          {
+            "row": 10,
+            "type": "off"
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 45,
+            "instrument": 8
+          },
+          {
+            "row": 26,
+            "type": "off"
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 50,
+            "instrument": 8
+          },
+          {
+            "row": 42,
+            "type": "off"
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 45,
+            "instrument": 8
+          },
+          {
+            "row": 58,
+            "type": "off"
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          }
+        ]
+      ]
+    },
+    {
+      "id": "p4",
+      "name": "Ember Major",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 60,
+            "instrument": 5
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 67,
+            "instrument": 5
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 70,
+            "instrument": 5
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 67,
+            "instrument": 5
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 72,
+            "instrument": 5
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 70,
+            "instrument": 5
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 63,
+            "instrument": 5
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 67,
+            "instrument": 5
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 48,
+            "instrument": 7
+          },
+          {
+            "row": 10,
+            "type": "off"
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 48,
+            "instrument": 7
+          },
+          {
+            "row": 26,
+            "type": "off"
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 53,
+            "instrument": 7
+          },
+          {
+            "row": 42,
+            "type": "off"
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 48,
+            "instrument": 7
+          },
+          {
+            "row": 58,
+            "type": "off"
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 36,
+            "instrument": 6
+          }
+        ]
+      ]
+    },
+    {
+      "id": "p5",
+      "name": "Signal Return",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 66,
+            "instrument": 1
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 69,
+            "instrument": 1
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 67,
+            "instrument": 1
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 66,
+            "instrument": 1
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 57,
+            "instrument": 1
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 69,
+            "instrument": 1
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 64,
+            "instrument": 1
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 1
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 59,
+            "instrument": 1
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 59,
+            "instrument": 1
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 50,
+            "instrument": 4
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 45,
+            "instrument": 4
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 4,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 12,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 20,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 28,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 32,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 36,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 40,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 44,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          },
+          {
+            "row": 48,
+            "type": "note",
+            "note": 33,
+            "instrument": 2
+          },
+          {
+            "row": 52,
+            "type": "note",
+            "note": 60,
+            "instrument": 11
+          },
+          {
+            "row": 56,
+            "type": "note",
+            "note": 60,
+            "instrument": 9
+          },
+          {
+            "row": 60,
+            "type": "note",
+            "note": 60,
+            "instrument": 10
+          }
+        ]
+      ]
+    },
+    {
+      "id": "p6",
+      "name": "Last Light",
+      "rows": 64,
+      "voices": [
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 57,
+            "instrument": 5
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 64,
+            "instrument": 5
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 67,
+            "instrument": 5
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 64,
+            "instrument": 5
+          },
+          {
+            "row": 48,
+            "type": "off"
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 45,
+            "instrument": 8
+          },
+          {
+            "row": 10,
+            "type": "off"
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 45,
+            "instrument": 8
+          },
+          {
+            "row": 26,
+            "type": "off"
+          },
+          {
+            "row": 48,
+            "type": "off"
+          }
+        ],
+        [
+          {
+            "row": 0,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 8,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 16,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 24,
+            "type": "note",
+            "note": 33,
+            "instrument": 6
+          },
+          {
+            "row": 48,
+            "type": "off"
+          }
+        ]
+      ]
+    }
+  ],
+  "sections": [
+    {
+      "id": "s0",
+      "name": "INTRO",
+      "order": [
+        {
+          "id": "o0-0",
+          "pattern_id": "p0"
+        },
+        {
+          "id": "o0-1",
+          "pattern_id": "p0"
+        }
+      ]
+    },
+    {
+      "id": "s1",
+      "name": "HEAVY A",
+      "order": [
+        {
+          "id": "o1-0",
+          "pattern_id": "p1"
+        },
+        {
+          "id": "o1-1",
+          "pattern_id": "p2"
+        },
+        {
+          "id": "o1-2",
+          "pattern_id": "p1"
+        },
+        {
+          "id": "o1-3",
+          "pattern_id": "p2"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "name": "MELLOW B",
+      "order": [
+        {
+          "id": "o2-0",
+          "pattern_id": "p3"
+        },
+        {
+          "id": "o2-1",
+          "pattern_id": "p4"
+        },
+        {
+          "id": "o2-2",
+          "pattern_id": "p3"
+        },
+        {
+          "id": "o2-3",
+          "pattern_id": "p4"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "name": "HEAVY RETURN",
+      "order": [
+        {
+          "id": "o3-0",
+          "pattern_id": "p1"
+        },
+        {
+          "id": "o3-1",
+          "pattern_id": "p5"
+        },
+        {
+          "id": "o3-2",
+          "pattern_id": "p2"
+        },
+        {
+          "id": "o3-3",
+          "pattern_id": "p5"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "name": "OUTRO",
+      "order": [
+        {
+          "id": "o4-0",
+          "pattern_id": "p3"
+        },
+        {
+          "id": "o4-1",
+          "pattern_id": "p6"
+        }
+      ]
+    }
+  ]
+}

@@ -138,3 +138,28 @@ CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
 TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
+# SID backend tools
+
+SID mode invokes separately distributed executables; it does not link GPL SID
+libraries into the gtracker application or guitar core.
+
+- GoatTracker 2.77 by Lasse Oorni and contributors: GPL-2.0-or-later for the
+  packer/editor. Its player source and song-binary exception are described in
+  the upstream readme; do not conflate that exception with the executable license.
+  Source archive SHA-256 and the console-entry/diagnostic patch are in
+  `tools/sid_backend.py`.
+- libsidplayfp 3.1.1 and libresidfp 1.2.3: GPL-2.0-or-later. The separate
+  `gtracker_sidrender` adapter (`tools/sid_render.cpp`) is GPL-2.0-or-later.
+  reSIDfp table-construction tasks are serialized for deterministic results;
+  source versions, checksums and the complete patch recipe are preserved.
+- SDL 1.2, commit ef3a6c05, used by the external packer: LGPL-2.1-or-later.
+  Windows backend preparation copies the MSYS2 i686 SDL DLL. Its source archive
+  and license travel in the developer package; it remains replaceable.
+- MinGW-w64 winpthreads runtime: its permissive notices are included beside the
+  DLL as `winpthreads-COPYING.txt`.
+
+The Windows developer bundle includes the required backend binaries, corresponding
+source archives, adapter source, recipes, checksum manifest and applicable license
+texts under `sid-tools/`. No binaries, ROMs or generated audio are committed to
+Git. The optional upstream sidplayfp 3.2.1 console download is an investigation
+tool; it is not the application's runtime renderer or part of the bundle.

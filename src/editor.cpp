@@ -5,6 +5,7 @@
 #include "gtracker/take.hpp"
 #include "gtracker/timeline.hpp"
 #include "gtracker/proposals.hpp"
+#include "gtracker/sid_editor.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -54,6 +55,7 @@ struct Arguments {
     bool smoke = false;
     bool help = false;
     bool recovery = true;
+    bool sid = false;
 };
 
 Arguments arguments(int argc, char* argv[]) {
@@ -67,7 +69,9 @@ Arguments arguments(int argc, char* argv[]) {
             if (argv[i][0] == '\0') throw std::invalid_argument("empty value after " + argument);
             return argv[i];
         };
-        if (argument == "--script") {
+        if (argument == "--sid") {
+            result.sid = true;
+        } else if (argument == "--script") {
             result.script = std::filesystem::u8path(value());
         } else if (argument == "--take") {
             result.take = std::filesystem::u8path(value());
@@ -234,6 +238,7 @@ void set_text(std::array<char, N>& destination, const std::string& text) {
 }
 
 struct Editor {
+    bool sid_requested = false;
     gtracker::EditorDocument document{initial_pattern()};
     std::filesystem::path data_directory;
     std::filesystem::path resource_directory;
@@ -1900,6 +1905,8 @@ void interface(Editor& editor) {
     ImGui::TextColored(ImVec4(0.31f, 0.83f, 0.87f, 1.0f), "gtracker");
     ImGui::SameLine();
     ImGui::TextDisabled(" /  ACOUSTIC PATTERN EDITOR");
+    ImGui::SameLine();
+    if(ImGui::Button("New SID Song"))editor.sid_requested=true;
     const auto title=editor.document.pattern().name+(editor.document.dirty() ? " *" : "")+"  |  r"+std::to_string(editor.document.pattern().revision);
     toolbar_next(title.c_str());
     const float title_width = ImGui::CalcTextSize(title.c_str()).x;
@@ -1911,7 +1918,8 @@ void interface(Editor& editor) {
     ImGui::InputText("##document_path", editor.path.data(), editor.path.size());
     ImGui::SameLine();
     if (ImGui::Button("Load", ImVec2(60.0f, 0.0f))) {
-        editor.attempt([&]() { editor.load(); });
+        if(std::string(editor.path.data()).find(".sidtrk.json")!=std::string::npos)editor.sid_requested=true;
+        else editor.attempt([&]() { editor.load(); });
     }
     ImGui::SameLine();
     if (ImGui::Button("Save", ImVec2(60.0f, 0.0f))) {
@@ -2195,11 +2203,19 @@ struct Host {
     }
 };
 
-int run(const Arguments& args) {
+int run(const Arguments &args) {
     Host host;
     host.initialize();
-    Editor editor(args);
-    if (args.smoke) {
+    const bool sid_initial = args.sid || args.document.u8string().find(".sidtrk.json") != std::string::npos;
+    Arguments guitar_args = args;
+    if (sid_initial)
+        guitar_args.document.clear();
+    Editor editor(guitar_args);
+    std::unique_ptr<gtracker::sid::Editor> sid_editor;
+    if (sid_initial)
+        sid_editor = std::make_unique<gtracker::sid::Editor>(args.document, editor.resource_directory,
+                                                             editor.data_directory);
+    if (args.smoke && !sid_editor) {
         editor.request_render();
     }
     const auto started = std::chrono::steady_clock::now();
@@ -2210,16 +2226,21 @@ int run(const Arguments& args) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL3_ProcessEvent(&event);
-            if (event.type == SDL_EVENT_AUDIO_DEVICE_REMOVED) editor.audio_device_removed(event.adevice);
-            if (event.type == SDL_EVENT_QUIT ||
-                (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(host.window))) {
-                editor.document.request_close();
+            if (event.type == SDL_EVENT_AUDIO_DEVICE_REMOVED)
+                editor.audio_device_removed(event.adevice);
+            if (event.type == SDL_EVENT_QUIT || (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED &&
+                                                 event.window.windowID == SDL_GetWindowID(host.window))) {
+                if (sid_editor)
+                    sid_editor->request_close();
+                else
+                    editor.document.request_close();
             }
         }
         editor.poll_render();
         editor.poll_export();
-        editor.checkpoint_recovery(std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count());
-        if (args.smoke && editor.render_failed) {
+        editor.checkpoint_recovery(
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
+        if (args.smoke && !sid_editor && editor.render_failed) {
             throw std::runtime_error(editor.status);
         }
         if (editor.playing && editor.audio_stream && SDL_GetAudioStreamQueued(editor.audio_stream) == 0) {
@@ -2228,18 +2249,48 @@ int run(const Arguments& args) {
         }
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
+        if (sid_editor)
+            ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+        else
+            ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         ImGui::NewFrame();
-        interface(editor);
-        if (editor.document.close_requested()) running = false;
+        SDL_SetWindowTitle(host.window,sid_editor ? "gtracker - SID tracker" : "gtracker - acoustic pattern editor");
+        if (sid_editor) {
+            sid_editor->draw();
+            if (sid_editor->closed())
+                running = false;
+            if (sid_editor->guitar_requested())
+                sid_editor.reset();
+        } else {
+            interface(editor);
+            if (editor.sid_requested) {
+                editor.sid_requested = false;
+                editor.stop();
+                const std::string requested = editor.path.data();
+                const auto source = requested.find(".sidtrk.json") != std::string::npos
+                                        ? std::filesystem::u8path(requested)
+                                        : std::filesystem::path{};
+                editor.attempt([&] {
+                    sid_editor = std::make_unique<gtracker::sid::Editor>(source, editor.resource_directory,
+                                                                       editor.data_directory);
+                });
+                set_text(editor.path,
+                         (editor.document.filename().empty() ? editor.data_directory / "sketch.gtrk.json"
+                                                             : editor.document.filename())
+                             .u8string());
+            }
+            if (editor.document.close_requested())
+                running = false;
+        }
         ImGui::Render();
-        const auto& io = ImGui::GetIO();
+        const auto &io = ImGui::GetIO();
         SDL_SetRenderScale(host.renderer, io.DisplayFramebufferScale.x, io.DisplayFramebufferScale.y);
         SDL_SetRenderDrawColor(host.renderer, 11, 15, 21, 255);
         SDL_RenderClear(host.renderer);
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), host.renderer);
         ++frames;
-        const bool frame_limit = args.frames > 0 && frames >= args.frames &&
-                                 (!args.smoke || editor.current_audio());
+        const bool frame_limit =
+            args.frames > 0 && frames >= args.frames && (!args.smoke || sid_editor || editor.current_audio());
         if (!args.screenshot.empty() && (!running || frame_limit)) {
             host.screenshot(args.screenshot);
             captured = true;
@@ -2257,7 +2308,7 @@ int run(const Arguments& args) {
         throw std::runtime_error("No screenshot was captured");
     }
     if (args.smoke) {
-        if (!editor.current_audio() || frames < args.frames) {
+        if ((!sid_initial && !editor.current_audio()) || frames < args.frames) {
             throw std::runtime_error("UI smoke closed before its render and frame checks completed");
         }
         std::cout << "gtracker_editor: smoke passed; frames=" << frames
