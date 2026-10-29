@@ -1,0 +1,221 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "gtracker.sid"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "instrument_bank_version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "author": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clock": {
+          "const": "pal"
+        },
+        "sid_model": {
+          "const": "6581"
+        }
+      },
+      "required": [
+        "clock",
+        "sid_model"
+      ]
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ticks_per_row": {
+          "type": "integer",
+          "minimum": 4,
+          "maximum": 12
+        },
+        "rows_per_beat": {
+          "const": 4
+        }
+      },
+      "required": [
+        "ticks_per_row",
+        "rows_per_beat"
+      ]
+    },
+    "patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[^\\u0000]*$",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[^\\u0000]*$"
+          },
+          "rows": {
+            "const": 64
+          },
+          "voices": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "row": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "type": {
+                        "const": "note"
+                      },
+                      "note": {
+                        "type": "integer",
+                        "minimum": 24,
+                        "maximum": 95
+                      },
+                      "instrument": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 11
+                      }
+                    },
+                    "required": [
+                      "row",
+                      "type",
+                      "note",
+                      "instrument"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "row": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "type": {
+                        "const": "off"
+                      }
+                    },
+                    "required": [
+                      "row",
+                      "type"
+                    ]
+                  }
+                ]
+              },
+              "maxItems": 64
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "rows",
+          "voices"
+        ]
+      },
+      "maxItems": 64
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[^\\u0000]*$",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^[^\\u0000]*$"
+          },
+          "order": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "pattern": "^[^\\u0000]*$",
+                  "minLength": 1
+                },
+                "pattern_id": {
+                  "type": "string",
+                  "maxLength": 256,
+                  "pattern": "^[^\\u0000]*$",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "pattern_id"
+              ]
+            },
+            "maxItems": 128
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "order"
+        ]
+      },
+      "maxItems": 16
+    }
+  },
+  "required": [
+    "format",
+    "schema_version",
+    "instrument_bank_version",
+    "name",
+    "author",
+    "revision",
+    "target",
+    "timing",
+    "patterns",
+    "sections"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "SID source v1. Native validation additionally checks references, duplicate IDs/rows, global order count, UTF-8 byte lengths, and canonical drum notes."
+}

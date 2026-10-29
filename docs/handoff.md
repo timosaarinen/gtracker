@@ -1,5 +1,18 @@
 # Current handoff
 
+SID follow-up, 2026-10-29: the latest implementation contract is
+`docs/sid-tracker-implementation-plan.md`. Work so far adds only a separate native
+SID document library, structural schema, validation/inspection CLI and focused
+document tests. See `docs/sid-tracker.md` for exact scope. M0 and M1 are not
+complete; M2–M7 remain. Do not mistake preset labels for implemented sounds.
+Startup Windows headless CI passed at source 40b9622 before edits; the modified
+Windows Release headless build and all 22 native tests passed, including the new
+SID document checks. No physical GUI/listening/C64 playback was tested.
+Backend investigation downloaded Debian GoatTracker 2.77 sources under ignored
+`.local/sid/`; this is not a reproducible backend recipe or package dependency.
+Next establish genuine SNG -> pinned packer -> SID -> integer PCM, then continue
+the complete contract. No guitar DSP or document semantics were changed.
+
 Night shift, 2026-10-18, requested eight-hour window starting about 01:51 UTC.
 This handoff records the implementation and checks through the final recovery
 follow-up around 09:41 UTC; the delivery index records the last completed runs.

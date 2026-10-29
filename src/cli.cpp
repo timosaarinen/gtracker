@@ -1,4 +1,5 @@
 #include "gtracker/project.hpp"
+#include "gtracker/sid_song.hpp"
 #include "gtracker/proposals.hpp"
 #include <iterator>
 #include "gtracker/core.h"
@@ -251,6 +252,17 @@ int cli_main(int argc, char** argv) {
             return 0;
         }
         const std::string command = argv[1];
+        if (command == "sid-validate" || command == "sid-info") {
+            if (argc < 3) throw std::runtime_error("A SID song path is required");
+            for (int i = 3; i < argc; ++i) if (std::string(argv[i]) != "--json") throw std::runtime_error("Unknown SID option: " + std::string(argv[i]));
+            const auto song = gtracker::sid::load(std::filesystem::u8path(argv[2]));
+            const auto report = nlohmann::json{{"ok",true},{"command",command},{"schema_version",1},{"instrument_bank_version",1},
+                {"name",song.name},{"revision",song.revision},{"patterns",song.patterns.size()},{"orders",gtracker::sid::order_count(song)},
+                {"target","pal/6581"},{"ticks_per_row",song.speed},{"approximate_bpm",60*gtracker::sid::frame_rate/(4*song.speed)},
+                {"authored_seconds",gtracker::sid::duration(song)},{"render_tail_seconds",3}};
+            std::cout << report.dump(as_json ? -1 : 2) << '\n';
+            return 0;
+        }
         if (command == "proposal-info" || command == "accept-proposals") return proposal_command(argc, argv, as_json);
         if (command == "calibration-probe" || command == "align-audio") return alignment_command(argc, argv, as_json);
         const bool is_render = command == "render" || command == "render-song";
