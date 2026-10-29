@@ -51,12 +51,23 @@ Windows 11 AMD64 / i7-10700K / Clang 18.1.8 Release / Python 3.12.6 evidence:
   `.local/sid/vice-final{,-trace}.log` and `.local/sid/vice-final.wav`. VICE's
   bounded cycle-limit exit was 1 as documented in its log; it was not a crash.
   Earlier invalid model/monitor-quit attempts failed and are retained separately.
+  A subsequent filesystem LOAD/RUN check (autostart PRG mode 0, not RAM injection)
+  also passed: 333 player calls averaged 19655.997 cycles, recorded PCM peak 17680
+  in signed-16 units. The ROM loader's Searching/Loading/Ready/Starting sequence
+  and signal evidence are in `.local/sid/vice-load-run{,-trace}.log`,
+  `.local/sid/vice-load-run.wav` and `.local/sid/vice-load-run-report.json`.
 - The Windows ZIP is `.local/packages/gtracker-desktop-Windows-AMD64.zip`.
   Relocation to a Unicode/space path with restricted PATH passed all four exports,
   exact SID/PRG music-payload equality, dummy editor launch and unchanged packaged
   hashes (`.local/sid/relocation-report.json`). An ACL-enforced read-only install
   also rendered a fresh uniquely named score to exclude a preview-cache hit;
   temporary ACLs were restored (`.local/sid/readonly-fresh-report.json`).
+  Implementation commit: `8e97f01`. Its clean-source package (653 payload files)
+  was re-extracted and verified again with restricted PATH, a full SID render,
+  dummy editor and unchanged packaged hashes in
+  `.local/sid/published-package-report.json`. Final dialogs/load-error guards
+  passed six focused checks in `.local/sid/release-focused.log`; the CLI audition
+  and validation follow-up passed after its final help/argument-bound correction.
 
 The package's own source fingerprint records its exact build inputs; final focused
 checks/refresh accompany publication. These Windows results do not qualify Linux
