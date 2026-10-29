@@ -3,6 +3,7 @@
 #include "gtracker/sid_backend.hpp"
 #include "gtracker/sid_document.hpp"
 #include "gtracker/sid_editor.hpp"
+#include "gtracker/ui_scale.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <atomic>
@@ -847,7 +848,7 @@ struct Editor::Impl {
                               ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg,
                               ImVec2(0, -1))) {
             ImGui::TableSetupScrollFreeze(1, 1);
-            ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed, 38);
+            ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed, gtracker::ui::pixels(38));
             for (const char *label : {"Lead", "Inst##1", "Arp", "Inst##2", "Bass", "Inst##3"})
                 ImGui::TableSetupColumn(label);
             ImGui::TableHeadersRow();
@@ -855,7 +856,7 @@ struct Editor::Impl {
             bounds(r0, r1, v0, v1);
             for (int r = 0; r < 64; ++r) {
                 ImGui::PushID(r);
-                ImGui::TableNextRow(0, 22);
+                ImGui::TableNextRow(0, gtracker::ui::pixels(22));
                 if (r % 16 == 0)
                     ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(40, 70, 80, 255));
                 else if (r % 4 == 0)
@@ -877,7 +878,7 @@ struct Editor::Impl {
                         const bool selected = (selection && r >= r0 && r <= r1 && v >= v0 && v <= v1) ||
                                               (r == cursor.row && v == cursor.voice && col == cursor.column);
                         if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_AllowOverlap,
-                                              ImVec2(0, 20))) {
+                                              ImVec2(0, gtracker::ui::pixels(20)))) {
                             navigation(r, v, col, ImGui::GetIO().KeyShift);
                             focus_grid = true;
                         }
@@ -933,7 +934,7 @@ struct Editor::Impl {
         }
         if (ImGui::BeginPopupModal("SID file", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", file_action.c_str());
-            ImGui::SetNextItemWidth(650);
+            ImGui::SetNextItemWidth(gtracker::ui::pixels(650));
             ImGui::InputText("Path", filename, sizeof(filename));
             ImGui::TextWrapped("%s", status.c_str());
             const auto target = std::filesystem::u8path(filename);
@@ -991,14 +992,14 @@ struct Editor::Impl {
                 section = entry.section;
             }
         }
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+        ImGui::SetNextWindowPos(gtracker::ui::content_position());
+        ImGui::SetNextWindowSize(gtracker::ui::content_size());
         ImGui::Begin("SID Tracker", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings);
         attempt([&] { keyboard(); });
         auto button = [&](const char *label, auto f) {
-            if (ImGui::GetCursorPosX() + ImGui::CalcTextSize(label).x + 24 > ImGui::GetWindowWidth())
+            if (ImGui::GetCursorPosX() + ImGui::CalcTextSize(label).x + gtracker::ui::pixels(24) > ImGui::GetWindowWidth())
                 ImGui::NewLine();
             if (ImGui::Button(label))
                 attempt(f);
@@ -1014,10 +1015,10 @@ struct Editor::Impl {
         ImGui::Checkbox("Edit", &edit);
         ImGui::SameLine();
         ImGui::Checkbox("Follow", &follow);
-        ImGui::SetNextItemWidth(90);
+        ImGui::SetNextItemWidth(gtracker::ui::pixels(90));
         ImGui::SliderInt("Octave", &octave, 1, 6);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(70);
+        ImGui::SetNextItemWidth(gtracker::ui::pixels(70));
         if (ImGui::BeginCombo("Step", std::to_string(step).c_str())) {
             for (int n : {0, 1, 2, 4})
                 if (ImGui::Selectable(std::to_string(n).c_str(), step == n))
@@ -1026,7 +1027,7 @@ struct Editor::Impl {
         }
         ImGui::SameLine();
         int speed = doc.song.speed;
-        ImGui::SetNextItemWidth(100);
+        ImGui::SetNextItemWidth(gtracker::ui::pixels(100));
         if (ImGui::SliderInt("Speed", &speed, 4, 12))
             attempt([&] { mutate([&](Song &s) { s.speed = speed; }); });
         ImGui::SameLine();
@@ -1051,8 +1052,8 @@ struct Editor::Impl {
             file("export");
         });
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(80);
-        if (ImGui::GetCursorPosX() + 100 > ImGui::GetWindowWidth())
+        ImGui::SetNextItemWidth(gtracker::ui::pixels(80));
+        if (ImGui::GetCursorPosX() + gtracker::ui::pixels(100) > ImGui::GetWindowWidth())
             ImGui::NewLine();
         if (ImGui::BeginCombo("##export", "More")) {
             for (const auto &f : std::vector<std::pair<const char *, const char *>>{
@@ -1063,12 +1064,12 @@ struct Editor::Impl {
                 }
             ImGui::EndCombo();
         }
-        ImGui::SetNextItemWidth(220);
+        ImGui::SetNextItemWidth(gtracker::ui::pixels(220));
         if (ImGui::InputText("Title", title, sizeof(title), ImGuiInputTextFlags_EnterReturnsTrue) ||
             ImGui::IsItemDeactivatedAfterEdit())
             attempt([&] { mutate([&](Song &s) { s.name = title; }); });
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(180);
+        ImGui::SetNextItemWidth(gtracker::ui::pixels(180));
         if (ImGui::InputText("Author", author, sizeof(author), ImGuiInputTextFlags_EnterReturnsTrue) ||
             ImGui::IsItemDeactivatedAfterEdit())
             attempt([&] { mutate([&](Song &s) { s.author = author; }); });
@@ -1077,10 +1078,11 @@ struct Editor::Impl {
         const float available =
             std::max(120.0f, ImGui::GetContentRegionAvail().y -
                                  std::max(90.0f, ImGui::GetTextLineHeightWithSpacing() * 5));
-        if (ImGui::BeginTable("layout", 3, ImGuiTableFlags_Resizable)) {
-            ImGui::TableSetupColumn("Order", ImGuiTableColumnFlags_WidthFixed, 210);
+        const auto layout_id="layout##"+std::to_string(static_cast<int>(gtracker::ui::pixels(100)));
+        if (ImGui::BeginTable(layout_id.c_str(), 3, ImGuiTableFlags_Resizable)) {
+            ImGui::TableSetupColumn("Order", ImGuiTableColumnFlags_WidthFixed, gtracker::ui::pixels(210));
             ImGui::TableSetupColumn("Grid", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Presets", ImGuiTableColumnFlags_WidthFixed, 210);
+            ImGui::TableSetupColumn("Presets", ImGuiTableColumnFlags_WidthFixed, gtracker::ui::pixels(210));
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::BeginChild("arrangement", ImVec2(0, available));

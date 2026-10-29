@@ -1,5 +1,24 @@
 # Current handoff
 
+4K UI follow-up, 2026-10-29: the editor now uses separately rasterized 16/24/32/48/64
+pixel fonts and matching style/layout sizes. A 4K monitor defaults to maximized
+400%; high-DPI desktop scaling otherwise selects 200%. The top UI scale menu
+supports 100/150/200/300/400% and persists its choice in `ui-scale.txt` beside user
+data. `bun run dev --ui-scale 4` forces 400% for the launch. SID columns/rows and
+fixed control widths scale with text; changing scale resets default column widths
+for that scale rather than retaining widths from a different magnification.
+The user's already-running editor was left intact. Updated objects/libraries and
+UI tests were built, then linked as `.local/build/desktop/bin/gtracker_editor-scale-preview.exe`
+for verification. The usual editor target will relink on the next `bun run dev`
+after the user saves/closes the current window. Synthetic 4K 400/200% captures
+were inspected under `.local/build/desktop/editor-sid-4k-{400,200}.bmp`;
+this is distinct from the user's actual display/input check. No audio or song
+format changes are involved.
+Focused native UI checks passed (four cases including their two generated
+fixtures), as did four development-launcher tests. Logs:
+`.local/sid/scale-verify-{build,tests}.log`. The independent preview also passed
+a dummy-device native launch; no running user process was terminated/replaced.
+
 Development launcher follow-up, 2026-10-29: `bun run dev` now configures/builds
 the desktop editor/CLI and launches a new SID song straight from this checkout;
 `--guitar` or a score path chooses another start. `python tools/dev.py dev` is

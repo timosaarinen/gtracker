@@ -6,6 +6,7 @@
 #include "gtracker/timeline.hpp"
 #include "gtracker/proposals.hpp"
 #include "gtracker/sid_editor.hpp"
+#include "gtracker/ui_scale.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -24,6 +25,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <future>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -56,6 +58,7 @@ struct Arguments {
     bool help = false;
     bool recovery = true;
     bool sid = false;
+    float ui_scale = 0;
 };
 
 Arguments arguments(int argc, char* argv[]) {
@@ -69,7 +72,12 @@ Arguments arguments(int argc, char* argv[]) {
             if (argv[i][0] == '\0') throw std::invalid_argument("empty value after " + argument);
             return argv[i];
         };
-        if (argument == "--sid") {
+        if (argument == "--ui-scale") {
+            const std::string input=value();std::size_t used=0;
+            result.ui_scale=std::stof(input,&used);
+            if(used!=input.size())throw std::invalid_argument("Invalid UI scale");
+            gtracker::ui::scale_index(result.ui_scale);
+        } else if (argument == "--sid") {
             result.sid = true;
         } else if (argument == "--script") {
             result.script = std::filesystem::u8path(value());
@@ -1207,12 +1215,12 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
     const int strings = static_cast<int>(editor.document.pattern().tuning_midi.size());
     const int lanes = strings + 1;
     const gtracker::TimelineGeometry geometry = shared ? *shared
-        : gtracker::TimelineGeometry{editor.view, origin.x + 64.0f, origin.x + size.x - 20.0f};
+        : gtracker::TimelineGeometry{editor.view, origin.x + gtracker::ui::pixels(64.0f), origin.x + size.x - gtracker::ui::pixels(20.0f)};
     editor.tab_geometry = geometry;
     const float left = geometry.left;
     const float right = geometry.right;
-    const float top = origin.y + 32.0f;
-    const float lane_height = (size.y - 42.0f) / static_cast<float>(lanes);
+    const float top = origin.y + gtracker::ui::pixels(32.0f);
+    const float lane_height = (size.y - gtracker::ui::pixels(42.0f)) / static_cast<float>(lanes);
     const double pixels_per_beat = static_cast<double>(right - left) / geometry.view.span();
     auto lane_y = [&](int lane) { return top + (static_cast<float>(lane) + 0.5f) * lane_height; };
     auto beat_x = [&](double beat) {
@@ -1895,9 +1903,8 @@ void toolbar_next(const char* label,float spacing = -1,float item_width = 0) {
 }
 
 void interface(Editor& editor) {
-    const auto* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowPos(gtracker::ui::content_position());
+    ImGui::SetNextWindowSize(gtracker::ui::content_size());
     ImGui::Begin("gtracker", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
                  ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus);
     if (editor.document.pending() == gtracker::EditorDocument::Pending::none) keyboard(editor);
@@ -1914,15 +1921,15 @@ void interface(Editor& editor) {
     ImGui::TextWrapped("%s",title.c_str());
     ImGui::Separator();
 
-    ImGui::SetNextItemWidth(std::max(200.0f, ImGui::GetContentRegionAvail().x - 146.0f));
+    ImGui::SetNextItemWidth(std::max(gtracker::ui::pixels(200), ImGui::GetContentRegionAvail().x - gtracker::ui::pixels(146)));
     ImGui::InputText("##document_path", editor.path.data(), editor.path.size());
     ImGui::SameLine();
-    if (ImGui::Button("Load", ImVec2(60.0f, 0.0f))) {
+    if (ImGui::Button("Load", ImVec2(gtracker::ui::pixels(60), 0.0f))) {
         if(std::string(editor.path.data()).find(".sidtrk.json")!=std::string::npos)editor.sid_requested=true;
         else editor.attempt([&]() { editor.load(); });
     }
     ImGui::SameLine();
-    if (ImGui::Button("Save", ImVec2(60.0f, 0.0f))) {
+    if (ImGui::Button("Save", ImVec2(gtracker::ui::pixels(60), 0.0f))) {
         editor.attempt([&]() { editor.save(); });
     }
     if (!editor.recovery_listing.copies.empty() || editor.recovery_listing.unreadable || !editor.recovery_error.empty()) {
@@ -1991,17 +1998,17 @@ void interface(Editor& editor) {
     };
     ImGui::TextUnformatted("BPM");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(100.0f);
+    ImGui::SetNextItemWidth(gtracker::ui::pixels(100.0f));
     edit_settings(ImGui::InputDouble("##bpm", &bpm, 0.0, 0.0, "%.1f"));
     ImGui::SameLine();
     ImGui::TextUnformatted("Beats");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(85.0f);
+    ImGui::SetNextItemWidth(gtracker::ui::pixels(85.0f));
     edit_settings(ImGui::InputDouble("##length", &length, 0.0, 0.0, "%.2f"));
     ImGui::SameLine(0.0f, 18.0f);
     ImGui::TextUnformatted("Snap");
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(120.0f);
+    ImGui::SetNextItemWidth(gtracker::ui::pixels(120.0f));
     const char* snaps[] = {"1/4 beat", "1/2 beat", "1 beat"};
     int snap = editor.snap == 0.25f ? 0 : (editor.snap == 0.5f ? 1 : 2);
     if (ImGui::Combo("##snap", &snap, snaps, 3)) {
@@ -2045,8 +2052,8 @@ void interface(Editor& editor) {
 
     const float footer_height=2*ImGui::GetTextLineHeightWithSpacing()+ImGui::GetStyle().WindowPadding.y+8;
     const float main_height = std::max(250.0f, ImGui::GetContentRegionAvail().y - footer_height);
-    const float waveform_height = std::clamp(main_height-180,110.0f,136.0f);
-    const float inspector_width = 268.0f;
+    const float waveform_height = std::clamp(main_height-gtracker::ui::pixels(180),gtracker::ui::pixels(110),gtracker::ui::pixels(136));
+    const float inspector_width = gtracker::ui::pixels(268.0f);
     const float canvas_width = std::max(300.0f, ImGui::GetContentRegionAvail().x - inspector_width - 8.0f);
     ImGui::BeginChild("Timeline", ImVec2(canvas_width, main_height), ImGuiChildFlags_Borders,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -2067,7 +2074,7 @@ void interface(Editor& editor) {
     const auto canvas_origin = ImGui::GetCursorScreenPos();
     const auto available = ImGui::GetContentRegionAvail();
     const float canvas_view_height=std::max(60.0f,available.y-waveform_height-8);
-    const float content_height=42+(editor.document.pattern().tuning_midi.size()+1)*(ImGui::GetTextLineHeight()+10);
+    const float content_height=gtracker::ui::pixels(42)+(editor.document.pattern().tuning_midi.size()+1)*(ImGui::GetTextLineHeight()+gtracker::ui::pixels(10));
     const ImVec2 canvas_size(available.x,std::max(canvas_view_height,content_height));
     // Measure/draw the plot first, then use its exact data rectangle for the tab.
     // Both widgets therefore share current-frame bounds even during plot zoom.
@@ -2115,6 +2122,16 @@ void interface(Editor& editor) {
 }
 
 struct Host {
+    std::array<ImFont*,5> scale_fonts{};
+    ImGuiStyle base_style;
+    float ui_scale=1;
+    void apply_scale(float scale){
+        const auto index=gtracker::ui::scale_index(scale);
+        ImGui::GetStyle()=base_style;ImGui::GetStyle().ScaleAllSizes(scale);
+        ImGui::GetIO().FontDefault=scale_fonts[static_cast<std::size_t>(index)];
+        ImGui::GetIO().FontGlobalScale=1;
+        ui_scale=scale;gtracker::ui::requested_scale=scale;
+    }
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
     bool platform_backend = false;
@@ -2144,7 +2161,7 @@ struct Host {
         SDL_Quit();
     }
 
-    void initialize() {
+    void initialize(float requested_scale=0) {
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             throw std::runtime_error(std::string("SDL video: ") + SDL_GetError());
         }
@@ -2154,6 +2171,11 @@ struct Host {
             throw std::runtime_error(std::string("Window: ") + SDL_GetError());
         }
         SDL_SetWindowMinimumSize(window, 980, 680);
+        const auto* display=SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
+        const float automatic=display && std::max(display->w,display->h)>=3800 && std::min(display->w,display->h)>=2000?4.0f:
+            (SDL_GetWindowDisplayScale(window)>=1.5f?2.0f:1.0f);
+        const float initial=requested_scale>0?requested_scale:automatic;
+        if(initial>1)SDL_MaximizeWindow(window);
         const char* render_driver = SDL_getenv("SDL_RENDER_DRIVER");
         const char* video_driver = SDL_GetCurrentVideoDriver();
         if (!render_driver && video_driver && std::string(video_driver) == "dummy") {
@@ -2173,10 +2195,12 @@ struct Host {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.IniFilename = nullptr;
         io.LogFilename = nullptr;
-        ImFontConfig font;
-        font.SizePixels = 16.0f;
-        io.Fonts->AddFontDefault(&font);
+        for(std::size_t i=0;i<gtracker::ui::scales.size();++i){
+            ImFontConfig font;font.SizePixels=16*gtracker::ui::scales[i];
+            scale_fonts[i]=io.Fonts->AddFontDefault(&font);
+        }
         theme();
+        base_style=ImGui::GetStyle();apply_scale(initial);
         platform_backend = ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
         if (!platform_backend) {
             throw std::runtime_error("ImGui SDL3 platform backend initialization failed");
@@ -2205,7 +2229,9 @@ struct Host {
 
 int run(const Arguments &args) {
     Host host;
-    host.initialize();
+    host.initialize(args.ui_scale);
+    const auto scale_file=editor_data_directory(args)/"ui-scale.txt";
+    if(args.ui_scale==0){std::ifstream saved_scale(scale_file);float scale=0;if(saved_scale>>scale){try{host.apply_scale(scale);if(scale>1)SDL_MaximizeWindow(host.window);}catch(const std::invalid_argument&){}}}
     const bool sid_initial = args.sid || args.document.u8string().find(".sidtrk.json") != std::string::npos;
     Arguments guitar_args = args;
     if (sid_initial)
@@ -2223,6 +2249,11 @@ int run(const Arguments &args) {
     bool captured = false;
     int frames = 0;
     while (running) {
+        if(host.ui_scale!=gtracker::ui::requested_scale){
+            if(gtracker::ui::requested_scale>host.ui_scale)SDL_MaximizeWindow(host.window);
+            host.apply_scale(gtracker::ui::requested_scale);
+            try{gtracker::write_binary_atomic(scale_file,[&](std::ostream& out){out<<host.ui_scale<<'\n';});}catch(const std::exception& error){std::cerr<<"UI scale preference: "<<error.what()<<'\n';}
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             ImGui_ImplSDL3_ProcessEvent(&event);
@@ -2254,6 +2285,7 @@ int run(const Arguments &args) {
         else
             ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         ImGui::NewFrame();
+        gtracker::ui::scale_menu();
         SDL_SetWindowTitle(host.window,sid_editor ? "gtracker - SID tracker" : "gtracker - acoustic pattern editor");
         if (sid_editor) {
             sid_editor->draw();
@@ -2328,6 +2360,7 @@ int main(int argc, char* argv[]) {
             std::cout << "gtracker_editor [pattern.gtrk.json] [--script PATH]\n"
                          "                [--take PATH] (instead of a pattern path)\n"
                          "                [--data-dir PATH] [--resource-dir PATH] [--no-recovery]\n"
+                         "                [--ui-scale 1|1.5|2|3|4] (auto: 4x on 4K displays)\n"
                          "                [--smoke-test] [--frames N] [--screenshot PATH.bmp]\n\n"
                          "Default saves go to the per-user application data folder.\n"
                          "Unsaved scores get recovery copies there every five seconds; --no-recovery disables this session.\n"

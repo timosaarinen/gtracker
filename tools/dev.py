@@ -464,6 +464,7 @@ def main(argv: list[str] | None = None) -> int:
         editor.add_argument("file", nargs="?")
         editor.add_argument("--take")
         editor.add_argument("--sid", action="store_true")
+        editor.add_argument("--ui-scale", type=float, choices=(1,1.5,2,3,4))
         if launch == "dev": editor.add_argument("--guitar", action="store_true")
         editor.add_argument("--script")
         editor.add_argument("--smoke-test", action="store_true")
@@ -630,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.sid: command.append("--sid")
             if not args.take and (args.file or not args.sid): command.append(args.file or "examples/campfire.gtrk.json")
             if args.take: command += ["--take", args.take]
-            for option in ("script", "frames", "screenshot", "data_dir", "resource_dir"):
+            for option in ("script", "frames", "screenshot", "data_dir", "resource_dir", "ui_scale"):
                 if getattr(args, option) is not None:
                     command += ["--" + option.replace("_", "-"), str(getattr(args, option))]
             if args.smoke_test:

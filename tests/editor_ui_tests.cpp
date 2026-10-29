@@ -902,6 +902,21 @@ void layout_review(Host& host,const Arguments& args,const std::filesystem::path&
     frame(host,draw);
 }
 
+void sid_four_k_scale(Host& host,const Arguments& args) {
+    SDL_SetWindowSize(host.window,3840,2160);
+    gtracker::sid::Editor editor(args.resource_dir/"examples/sid/heavy-mellow.sidtrk.json",args.resource_dir,args.data_dir/"sid-scale");
+    const auto draw=[&]{gtracker::ui::scale_menu();editor.draw();};
+    {Editor guitar(args);host.apply_scale(4);const auto guitar_draw=[&]{gtracker::ui::scale_menu();interface(guitar);};frame(host,guitar_draw);frame(host,guitar_draw);host.screenshot(std::filesystem::current_path()/"editor-guitar-4k-400.bmp");}
+    host.apply_scale(4);frame(host,draw);frame(host,draw);
+    check_ui(ImGui::GetFontSize()==64 && gtracker::ui::pixels(22)==88,"4x scale must enlarge text and tracker rows together");
+    host.screenshot(std::filesystem::current_path()/"editor-sid-4k-400.bmp");
+    host.apply_scale(2);frame(host,draw);frame(host,draw);
+    check_ui(ImGui::GetFontSize()==32,"switching scale must select a sharp matching font");
+    host.screenshot(std::filesystem::current_path()/"editor-sid-4k-200.bmp");
+    host.apply_scale(1);SDL_SetWindowSize(host.window,1152,760);frame(host,draw);
+    check_ui(ImGui::GetFontSize()==16,"scale reset must restore original dimensions");
+}
+
 int main(int argc, char** argv) {
     try {
         check_ui(argc == 4, "Expected source root, generated take and proposal manifests");
@@ -930,6 +945,7 @@ int main(int argc, char** argv) {
         keyboard_entry(host,args);
         timeline_navigation(host, args, std::filesystem::path(argv[2]));
         layout_review(host,args,std::filesystem::path(argv[2]));
+        sid_four_k_scale(host,args);
         check_ui(std::filesystem::weakly_canonical(directory).parent_path() == std::filesystem::current_path(),
                  "test cleanup target escaped its working directory");
         std::filesystem::remove_all(directory);

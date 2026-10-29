@@ -8,6 +8,12 @@ from tools import dev
 
 
 class DevelopmentLaunchTests(unittest.TestCase):
+    def test_ui_scale_is_forwarded_to_native_editor(self):
+        with mock.patch.object(dev,"run_command",return_value={"returncode":0}) as run:
+            self.assertEqual(dev.main(["dev","--guitar","--ui-scale","4"]),0)
+            command=run.call_args.args[1]
+            self.assertEqual(command[command.index("--ui-scale")+1],"4.0")
+
     def test_failed_build_does_not_launch_stale_executable(self):
         with mock.patch.object(dev, "run_command", side_effect=[{"returncode": 0}, {"returncode": 23}]) as run:
             self.assertEqual(dev.main(["dev", "--guitar"]), 23)
