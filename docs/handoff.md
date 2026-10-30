@@ -1,5 +1,12 @@
 # Current handoff
 
+Release published, 2026-10-30: after the owner corrected token access,
+`v0.5.0-rc.1` was published as a prerelease with Windows/Linux portable ZIPs,
+SHA256SUMS.txt and verification.json. GitHub-reported asset digests match the
+verified local files. Release source remains tagged `5645e74`; no tag rewrite.
+URL: https://github.com/timosaarinen/gtracker/releases/tag/v0.5.0-rc.1 .
+This supersedes the upload blocker below.
+
 Initial release upload blocked, 2026-10-30: clean source `5645e74` built and
 passed package verification on Windows and Ubuntu WSL2 (all four exports, both
 dummy editor launches, complete manifest hashes, unchanged installation).
