@@ -29,8 +29,17 @@ program. It's 2026. We can at least have decent title music.
 
 ## Start making noise
 
-Windows and Linux are supported build targets. Downloadable releases haven't
-been published yet; you can run directly from this repository:
+Download the [first release, v0.5.0-rc.1](https://github.com/timosaarinen/gtracker/releases/tag/v0.5.0-rc.1):
+
+- [Windows x64 portable ZIP](https://github.com/timosaarinen/gtracker/releases/download/v0.5.0-rc.1/gtracker-v0.5.0-rc.1-windows-x64.zip)
+- [Linux x86_64 portable ZIP](https://github.com/timosaarinen/gtracker/releases/download/v0.5.0-rc.1/gtracker-v0.5.0-rc.1-linux-x86_64.zip)
+
+Extract the whole folder. On Windows, open **Start SID Tracker.cmd**; on Linux,
+run `./start-sid.sh`. Windows needs the Visual C++ x64 runtime; Linux needs the
+SDL 1.2 ABI library. See the release notes for prerequisites. These are prerelease
+builds; macOS comes later.
+
+Prefer running from source? Use:
 
 ```sh
 git clone https://github.com/timosaarinen/gtracker.git

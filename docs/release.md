@@ -1,6 +1,7 @@
 # Release readiness
 
-This document describes Windows/Linux release preparation, not a published release.
+The first Windows/Linux prerelease is `v0.5.0-rc.1` (project version 0.5.0).
+See the [release assets and notes](https://github.com/timosaarinen/gtracker/releases/tag/v0.5.0-rc.1).
 The source repository can be public while binary builds remain experimental
 prereleases. The owner changes repository visibility. Project code is MIT, with explicit
 GPL helper exceptions and preserved dependency licenses.

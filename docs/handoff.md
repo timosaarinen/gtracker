@@ -1,5 +1,13 @@
 # Current handoff
 
+Initial release preparation, 2026-10-30: owner requested the first GitHub release.
+Version `v0.5.0-rc.1` follows CMake project version 0.5.0 and is explicitly a
+prerelease. Windows x64 and Linux x86_64 portable packages include original scores,
+SID helpers and corresponding source/license material. macOS remains deferred.
+README and Pages now link to versioned downloads. Package provenance and separate
+verification reports identify the exact clean source revision; release assets
+include SHA-256 checksums. Physical listening and clean-machine limits remain.
+
 GitHub Pages, 2026-10-30: added a static SID-first site in `docs/index.html` and
 `docs/site.css`, reusing the banner, with no emojis, scripts, analytics or external
 fonts. `docs/.nojekyll` serves these files directly. Publication uses GitHub's
