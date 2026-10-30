@@ -115,6 +115,10 @@ struct EditorTest {
             check(s.playing_audition && !s.job.valid(),
                   "Realtime audition should start without a complete render");
             s.stop();
+            s.audition(60);
+            check(!s.job.valid() && s.transport.active && s.transport.realtime,
+                  "repeated note should reuse compiled player without preparation");
+            s.stop();
             s.path.clear();
             s.doc.opened(new_song());
             s.pattern = 0;

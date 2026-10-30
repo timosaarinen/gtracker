@@ -127,7 +127,7 @@ python tools/dev.py package --profile desktop
 `sid-info` and `sid-validate` inspect sources. Native export commands accept
 `--sid-tools DIR`; packaged CLI resolves adjacent tools. The package carries
 checksums, licenses, source archives and build/patch recipe. To reconstruct
-backend build inputs, copy `sid-tools/source/sid_backend.py` and `sid_render.cpp`
+backend build inputs, copy all helper `.cpp`/`.hpp` sources and `sid_backend.py` from `sid-tools/source`
 to `ROOT/tools/` and archives to `ROOT/.local/sid/`, then run the recipe with the
 documented build prerequisites. GPL backend executables remain external; this
 does not select gtracker's own license.

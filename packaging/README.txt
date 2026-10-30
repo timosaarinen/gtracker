@@ -5,7 +5,8 @@ not selected its own distribution license. See THIRD_PARTY_NOTICES.md and the
 licenses directory for dependency notices; they do not license gtracker itself.
 
 Extract the whole gtracker folder. A headless package contains the CLI only.
-In a desktop package, on Windows double-click gtracker_editor.exe; on Linux/macOS
+In a Windows desktop package, double-click Start SID Tracker.cmd or
+Start Guitar Editor.cmd. On Linux/macOS
 run ./gtracker_editor. The editor opens an original built-in
 sketch. Play starts realtime synthesis. See docs/editor.md for controls.
 Export WAV opens a background snapshot exporter in the inspector. Choose a

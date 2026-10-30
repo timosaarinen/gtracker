@@ -16,6 +16,7 @@
 #include <future>
 #include <imgui.h>
 #include <optional>
+#include <map>
 #include <stdexcept>
 
 namespace gtracker::sid {
@@ -84,6 +85,8 @@ struct Editor::Impl {
     std::optional<Result> prepared;
     std::size_t prepared_generation = 0;
     int pending_audition = -1, pending_preset = 1;
+    int audition_key=0;
+    std::map<int,Result> audition_players;
     std::size_t seek_frame = 0, loop_first = 0, loop_last = 0;
     bool playing_loop = false, playing_audition = false;
     int playback_order = 0;
@@ -304,6 +307,12 @@ struct Editor::Impl {
             cancel = true;
             return;
         }
+        audition_key=preset*128+note;
+        const auto cached=audition_players.find(audition_key);
+        if(cached!=audition_players.end()){
+            transport.play_live(cached->second,backend,static_cast<size_t>(7/frame_rate*48000));
+            playing_audition=true;pending_audition=-1;status="Realtime audition.";return;
+        }
         const auto bank = compile_audition(note, preset);
         cancel=false;job_generation=doc.generation;purpose=Purpose::audition;
         job=std::async(std::launch::async,[this,bank]{return prepare(bank,backend,cancel,false,false,3.1);});
@@ -361,6 +370,7 @@ struct Editor::Impl {
                 } else if (purpose == Purpose::output) {
                     status = "Export completed.";
                 } else if (purpose == Purpose::audition) {
+                    audition_players[audition_key]=r;
                     transport.play_live(r,backend,static_cast<std::size_t>(7 / frame_rate * 48000));
                     playing_audition = true;
                     status = "Audition ready.";
@@ -878,7 +888,7 @@ struct Editor::Impl {
             playback_order = static_cast<int>(std::max(0.0, ticks) / (64 * doc.song.speed));
         }
         if (transport.active && transport.realtime && !transport.live.error().empty()) {
-            status="Realtime playback: "+transport.live.error();transport.stop();
+            status="Realtime playback: "+transport.live.error();transport.stop();transport.synth.reset();
         }
         if (transport.active && !playing_loop &&
             transport.live.done()) {

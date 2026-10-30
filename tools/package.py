@@ -71,7 +71,10 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
         for notice in sorted(sdl_source.rglob("LICENSE*")):
             if notice.is_file():
                 result.append((notice, "licenses/sdl-vendored/" + notice.relative_to(sdl_source).as_posix()))
-    if profile=="desktop" and os.name=="nt":result.extend(sid_inputs(root))
+    if profile=="desktop" and os.name=="nt":
+        result.extend(sid_inputs(root))
+        result.extend([(root/"packaging/start-sid.cmd","Start SID Tracker.cmd"),
+                       (root/"packaging/start-guitar.cmd","Start Guitar Editor.cmd")])
     for path, _ in result:
         if not path.is_file():
             raise RuntimeError(f"Package input is missing: {path}. Configure/build the {profile} profile first.")

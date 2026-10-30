@@ -57,6 +57,8 @@ class LiveSynth {
   }
 
 public:
+  LiveSynth(const LiveSynth&)=delete;
+  LiveSynth& operator=(const LiveSynth&)=delete;
   explicit LiveSynth(const std::filesystem::path &tools) {
 #ifdef _WIN32
     auto exe =

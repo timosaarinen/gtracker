@@ -1,5 +1,14 @@
 # Current handoff
 
+Release-candidate follow-up: implementation `d2f435d` is pushed. Its clean
+82-file package passed all manifest hashes, Unicode/space relocation with a
+restricted PATH, SID/PRG/WAV/MP4 export, dummy editor launch and live helper RPC;
+installation hashes were unchanged. Archive was 17,693,176 bytes. Report:
+`.local/sid/release-package-report.json`. Helpers were subsequently rebuilt from
+the packaged shared configuration, and stream/offline comparison passed again.
+A follow-up reuses output devices and compiled note players between auditions,
+recovers a failed helper on retry, and adds Windows mode launchers.
+
 Realtime/release preparation, 2026-10-30, based on `5605cf9`: SID song, loop
 and note playback now use a warmed persistent external emulator and bounded
 512-frame PCM blocks. Guitar playback and fret/click auditions use NativeRenderer

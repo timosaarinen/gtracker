@@ -15,7 +15,9 @@ high-quality emulator setting; playback does not substitute a simpler oscillator
 
 Notes, full-song playback and pattern loops use this service. Compilation is
 asynchronous and bounded by the score, not by audio duration. Restarting an
-unchanged song reuses its compiled SID. A new edit cancels stale preparation and
+unchanged song reuses its compiled SID. Repeated notes reuse their compiled
+players, and the output stream stays open between notes when the device and
+channel count match. A new edit cancels stale preparation and
 stops the previous snapshot. Audition plays the latest requested note. This is
 snapshot playback, not live rewriting of an already-running C64 program.
 
@@ -29,7 +31,7 @@ the editor and terminated when its instance is destroyed.
 
 `python tools/sid_stream_verify.py` compares the real helper's small PCM blocks
 against a normal WAV export and repeats a load in the same process. On Windows
-11 / i7-10700K, the measured helper startup/warm-up was about 327–450 ms; loading a
+11 / i7-10700K, the measured helper startup/warm-up was about 327â€“450 ms; loading a
 prepared SID and obtaining its first 512 frames then took about 13 ms. This is
 software timing, excluding compilation, SDL/device buffers and physical latency.
 After warm-up, the 520,343-frame fixture differed by at most 3 signed-16 units on warmed reloads;

@@ -16,6 +16,7 @@ class LiveAudio {
   std::atomic<bool> cancelled{false}, paused{false}, finished{true};
   std::atomic<uint64_t> produced{0};
   int channels = 1;
+  SDL_AudioDeviceID selected_device = 0;
   mutable std::mutex mutex;
   std::string failure;
 
@@ -39,14 +40,17 @@ public:
   void start(std::function<size_t(float *, size_t)> read, int count = 1,
              SDL_AudioDeviceID device = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK) {
     stop();
-    if (stream)
+    if (stream && (channels != count || selected_device != device)) {
       SDL_DestroyAudioStream(stream);
-    stream = nullptr;
+      stream = nullptr;
+    }
     channels = count;
-    if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
+    selected_device = device;
+    if (!(SDL_WasInit(SDL_INIT_AUDIO)&SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO))
       throw std::runtime_error(SDL_GetError());
     SDL_AudioSpec spec{SDL_AUDIO_F32, channels, 48000};
-    stream = SDL_OpenAudioDeviceStream(device, &spec, nullptr, nullptr);
+    if (!stream)
+      stream = SDL_OpenAudioDeviceStream(device, &spec, nullptr, nullptr);
     if (!stream)
       throw std::runtime_error(SDL_GetError());
     cancelled = false;
