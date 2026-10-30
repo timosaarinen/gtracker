@@ -1,5 +1,12 @@
 # Current handoff
 
+Banner revision, 2026-10-30: replaced the requested artwork with a blue-background
+version showing pulse, sawtooth and triangle traces. Visually inspected generated
+output; measured dimensions 2172 x 724 and sampled background pixels. Generation
+does not reproduce #352879 exactly, so website CSS feathers all four edges into
+the page background. Updated intrinsic dimensions, cache-busting image URL and
+the exact reviewed artwork hash. Full edit prompt is in docs/assets/README.md.
+
 Website palette, 2026-10-30: replaced the cream background with dark C64-style
 blue (#352879), light text, lavender labels and peach accents. Code panels stay
 darker; button and footer colors were adjusted for readability. All six main

@@ -16,7 +16,7 @@ MAX_BYTES = 2 * 1024 * 1024
 # Explicitly requested README artwork. Only this reviewed image may bypass the
 # text-only/size rules; changing the file requires reviewing its digest again.
 APPROVED_ARTWORK = {
-    "docs/assets/gtracker-banner.png": "dd2f24cae14ffbccac27d79354af135ddfc24bee513494bee8799d518142dfd5",
+    "docs/assets/gtracker-banner.png": "294afa607001bfd687edf93d50e58474332a97ed2e6be212913dba7cc5b8913b",
 }
 FORBIDDEN_SUFFIXES = {
     ".mp4", ".prg", ".sid", ".wav", ".flac", ".mp3", ".aif", ".aiff", ".ogg", ".opus", ".m4a",
