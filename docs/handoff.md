@@ -1,5 +1,17 @@
 # Current handoff
 
+Initial release upload blocked, 2026-10-30: clean source `5645e74` built and
+passed package verification on Windows and Ubuntu WSL2 (all four exports, both
+dummy editor launches, complete manifest hashes, unchanged installation).
+Annotated tag `v0.5.0-rc.1` is pushed. GitHub release creation returned HTTP 403:
+the CLI's personal access token lacks release/Contents write permission even
+though SSH Git pushes work. No release or draft was created. Ready assets and
+notes are under `.local/releases/v0.5.0-rc.1/`: two platform ZIPs, SHA256SUMS.txt,
+verification.json (machine paths omitted), and notes.md. Resume `gh release create`
+with `--verify-tag --prerelease --notes-file` and those four assets after token
+access is fixed; verify uploaded assets before reporting publication. README/site
+versioned download links will resolve once that release is published.
+
 Initial release preparation, 2026-10-30: owner requested the first GitHub release.
 Version `v0.5.0-rc.1` follows CMake project version 0.5.0 and is explicitly a
 prerelease. Windows x64 and Linux x86_64 portable packages include original scores,
