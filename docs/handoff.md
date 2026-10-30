@@ -3,8 +3,11 @@
 GitHub Pages, 2026-10-30: added a static SID-first site in `docs/index.html` and
 `docs/site.css`, reusing the banner, with no emojis, scripts, analytics or external
 fonts. `docs/.nojekyll` serves these files directly. Publication uses GitHub's
-main-branch `/docs` Pages source; future pushes update it, independently of the
-manual native qualification workflow. README links to the site. Local HTML
+main-branch `/docs` Pages source; once enabled, future pushes update it independently
+of the manual native qualification workflow. Activation was blocked by GitHub
+HTTP 403 (token lacks Pages setting permission); GET still returns 404. Owner
+must select Settings > Pages > Deploy from a branch > main > /docs > Save.
+Expected URL: https://timosaarinen.github.io/gtracker/ . README links there. Local HTML
 structure, fragment/resource/manual links, image metadata, emoji scan and HTTP
 asset checks passed. Browser preview was unavailable (no connected browsers),
 so no visual desktop/mobile browser qualification is claimed. Mobile layout and
