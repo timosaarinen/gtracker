@@ -1,8 +1,8 @@
+![gtracker — Three voices. Still enough.](docs/assets/gtracker-banner.png)
+
 # GTracker
 
 **Do you remember C64? Did you feel the magic of SID music?**
-
-![gtracker — Three voices. Still enough.](docs/assets/gtracker-banner.png)
 
 ## The Ultimate SID Tracker
 
