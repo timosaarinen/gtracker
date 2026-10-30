@@ -59,6 +59,7 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
     result.append((root / "LICENSE", "LICENSE"))
+    result.append((root / "tools/setup_ffmpeg.ps1", "tools/setup_ffmpeg.ps1"))
     dependencies = root / ".local/build" / profile / "_deps"
     for source, target in [("gt_json-src/LICENSE.MIT", "json.txt"), ("gt_lua-src/src/lua.h", "lua-header.txt")]:
         result.append((dependencies / source, "licenses/" + target))

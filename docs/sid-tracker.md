@@ -158,8 +158,21 @@ The soundtrack is the normal SID mix with initialization and release tail.
 Visual high-pass/gain does not alter audio. Long titles wrap; glyph coverage
 uses the installed font.
 
-FFmpeg (libx264, AAC, drawtext, showwaves, showfreqs) must be on PATH, in sid-tools,
-or selected with GTRACKER_FFMPEG. It is not redistributed in the developer ZIP.
+On Windows, choose **More > Set up MP4 export**, then **Download FFmpeg**.
+The cancellable background helper downloads the pinned Gyan FFmpeg 9.0.2
+essentials build (about 110 MB), checks SHA-256, and installs the executable,
+license and upstream readme under `tools/ffmpeg` in your gtracker data folder.
+It needs no admin rights and leaves PATH unchanged. An interrupted download can
+be retried; an existing changed/incomplete installation is preserved and reported.
+Development uses `.local/dev`; packaged Windows defaults to
+`%APPDATA%/LustOfWar/gtracker`. `--data-dir` selects another location.
+
+Alternatively, FFmpeg (libx264, AAC, drawtext, showwaves, showfreqs) can be on PATH,
+in sid-tools, or selected with GTRACKER_FFMPEG. The explicit override takes priority,
+then the downloaded copy, sid-tools and PATH. Other platforms use manual setup.
+FFmpeg is not redistributed in the developer ZIP. Builds come from
+[Gyan](https://www.gyan.dev/ffmpeg/builds/), linked by the
+[FFmpeg download page](https://ffmpeg.org/download.html).
 GTRACKER_VIDEO_FONT optionally selects a Unicode TTF/OTF font. Windows defaults
 to Segoe UI. Text files with expansion disabled keep song text out of filter code.
 No shell, account access or automatic upload is involved.

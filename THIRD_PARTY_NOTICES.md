@@ -167,4 +167,8 @@ tool; it is not the application's runtime renderer or part of the bundle.
 The separate realtime helper `tools/sid_stream.cpp` is GPL-2.0-or-later and
 uses the same pinned libsidplayfp/reSIDfp libraries. Its source, recipe and
 corresponding library archives accompany the helper in packages. FFmpeg is an
-optional external executable for MP4 export and is not bundled.
+optional external executable for MP4 export and is not bundled. The Windows
+setup helper downloads Gyan's FFmpeg 9.0.2 essentials build on request, retaining
+its LICENSE and README.txt alongside the executable. This GPL build retains its
+upstream terms; gtracker's MIT license does not relicense it. Download provenance
+and hashes are recorded in download.json in the installation folder.

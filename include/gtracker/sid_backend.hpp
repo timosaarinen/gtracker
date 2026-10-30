@@ -33,6 +33,7 @@ Result prepare(const Song &song, const Backend &backend, const std::atomic<bool>
                bool loop = false, double limit_seconds = 0);
 Result export_file(const Song &song, const Backend &backend, const std::filesystem::path &output,
                    const std::string &format, const std::atomic<bool> &cancel);
+void setup_ffmpeg(const Backend &backend, const std::filesystem::path &script, const std::atomic<bool> &cancel);
 Result export_video(const Song &song, const Backend &backend, const std::filesystem::path &output,
                     const std::atomic<bool> &cancel);
 std::vector<unsigned char> runnable_prg(const std::vector<unsigned char> &sid);

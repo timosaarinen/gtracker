@@ -73,6 +73,7 @@ struct Editor::Impl {
          show_file = false, confirm_replace = false;
     std::string file_action = "save", export_format = "sid";
     std::string pending_action;
+    bool setup_prompt=false;
     bool selection = false, focus_grid = true;
     bool reveal_cursor = false;
     std::vector<std::vector<std::optional<Event>>> clipboard;
@@ -80,7 +81,7 @@ struct Editor::Impl {
     std::future<Result> job;
     std::atomic<bool> cancel{false};
     std::size_t job_generation = 0;
-    enum class Purpose { song, loop, audition, output };
+    enum class Purpose { song, loop, audition, output, setup };
     Purpose purpose = Purpose::song;
     std::optional<Result> prepared;
     std::size_t prepared_generation = 0;
@@ -361,12 +362,21 @@ struct Editor::Impl {
         });
         status = "Exporting " + target.u8string();
     }
+    void download_ffmpeg() {
+        if(busy())throw std::runtime_error("Wait for the current job or cancel it first");
+        cancel=false;job_generation=doc.generation;purpose=Purpose::setup;
+        const auto script=resources/"tools/setup_ffmpeg.ps1";
+        job=std::async(std::launch::async,[this,script]{setup_ffmpeg(backend,script,cancel);return Result{};});
+        status="Downloading and checking FFmpeg...";
+    }
     void poll() {
         if (job.valid() && job.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
             try {
                 auto r = job.get();
                 if (cancel || job_generation != doc.generation) {
                     status = "Discarded cancelled or stale SID job.";
+                } else if (purpose == Purpose::setup) {
+                    status="FFmpeg is ready. Choose More > Export MP4 Video.";
                 } else if (purpose == Purpose::output) {
                     status = "Export completed.";
                 } else if (purpose == Purpose::audition) {
@@ -978,7 +988,15 @@ struct Editor::Impl {
                     export_format = f.second;
                     file("export");
                 }
+            if(ImGui::Selectable("Set up MP4 export"))setup_prompt=true;
             ImGui::EndCombo();
+        }
+        if(setup_prompt){ImGui::OpenPopup("Download FFmpeg");setup_prompt=false;}
+        if(ImGui::BeginPopupModal("Download FFmpeg",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextUnformatted("Download FFmpeg 9.0.2 from Gyan's GitHub release?\nAbout 110 MB. SHA-256 verified. No admin rights needed.\nStored in your gtracker data folder; system PATH is unchanged.");
+            if(ImGui::Button("Download FFmpeg")){attempt([&]{download_ffmpeg();});ImGui::CloseCurrentPopup();}
+            ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
         }
         ImGui::SetNextItemWidth(gtracker::ui::pixels(220));
         if (ImGui::InputText("Title", title, sizeof(title), ImGuiInputTextFlags_EnterReturnsTrue) ||

@@ -37,8 +37,9 @@ python tools/dev.py package --profile desktop
 
 Builds and packages live under `.local/`. Package provenance records exact source
 fingerprints, hashes and platform. Include external helper sources, archives,
-build recipes and license texts. FFmpeg is currently a separately installed
-prerequisite for MP4 export, not a redistributed dependency.
+build recipes and license texts. FFmpeg is an optional external download for MP4
+export, not a redistributed dependency. Windows includes an opt-in, checksum-pinned
+download helper; other platforms use manual installation.
 
 Before publication, review the staged diff, run `python tools/repo_guard.py`,
 inspect tracked history for accidental private artifacts, and fetch the remote.

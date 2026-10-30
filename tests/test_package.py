@@ -33,6 +33,7 @@ class PackageTests(unittest.TestCase):
                  "examples/room.json", "scripts/soften.lua", "scripts/slide.lua", "scripts/retain.lua",
                  "schema/pattern.schema.json", "schema/pattern-v2.schema.json", "schema/take.schema.json", "schema/capture-result.schema.json",
                  "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "schema/render-cache.schema.json", "schema/note-proposals.schema.json", "schema/proposal-selection.schema.json", "docs/cache.md", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/retained.md", "docs/proposals.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md", "packaging/README.txt",
+                 "LICENSE", "tools/setup_ffmpeg.ps1",
                  ".local/build/headless/bin/gtracker_cli" + self.suffix,
                  ".local/build/headless/_deps/gt_json-src/LICENSE.MIT",
                  ".local/build/headless/_deps/gt_lua-src/src/lua.h", ".local/private.wav"]
@@ -51,6 +52,8 @@ class PackageTests(unittest.TestCase):
             self.assertEqual(manifest, stored)
             names = set(archive.namelist())
             self.assertIn("gtracker/THIRD_PARTY_NOTICES.md", names)
+            self.assertIn("gtracker/LICENSE", names)
+            self.assertIn("gtracker/tools/setup_ffmpeg.ps1", names)
             self.assertIn("gtracker/licenses/json.txt", names)
             self.assertIn("gtracker/licenses/lua-header.txt", names)
             self.assertNotIn("gtracker/gtracker_editor" + self.suffix, names)

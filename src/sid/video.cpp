@@ -25,6 +25,8 @@ std::filesystem::path ffmpeg_path(const Backend &backend) {
         throw std::runtime_error("GTRACKER_FFMPEG must name an FFmpeg executable");
     }
     const auto name = std::string("ffmpeg") + executable_suffix;
+    const auto downloaded=backend.jobs.parent_path().parent_path()/"tools/ffmpeg/bin"/name;
+    if(std::filesystem::is_regular_file(downloaded))return std::filesystem::absolute(downloaded);
     if (std::filesystem::is_regular_file(backend.tools / name))
         return std::filesystem::absolute(backend.tools / name);
     if (const auto *path = std::getenv("PATH")) {
@@ -39,7 +41,7 @@ std::filesystem::path ffmpeg_path(const Backend &backend) {
         }
     }
     throw std::runtime_error("MP4 export needs FFmpeg (libx264, AAC, drawtext, showwaves, showfreqs). "
-                             "Install it on PATH, put it in sid-tools, or set GTRACKER_FFMPEG to its executable.");
+                             "Choose More > Set up MP4 export, or install FFmpeg on PATH.");
 }
 std::filesystem::path video_font() {
     if (const auto *font = std::getenv("GTRACKER_VIDEO_FONT")) {
@@ -78,8 +80,10 @@ std::string wrap(const std::string &text, int columns) {
 std::string graph() {
     // Logarithmic FFT of the actual mix fills the canvas. A translucent grid,
     // three separately rendered voices and a fixed title sit in front of it.
+    // Pad visual inputs so FFT/window EOF cannot stall framesync in FFmpeg 9.
+    // The output duration bounds these branches; the soundtrack is unpadded.
     std::string g =
-        "[0:a]highpass=f=20,showfreqs=s=1920x1080:mode=bar:ascale=log:fscale=log:"
+        "[0:a]apad,highpass=f=20,showfreqs=s=1920x1080:mode=bar:ascale=log:fscale=log:"
         "win_size=4096:averaging=3:colors=0x19657c,fps=30,format=rgba,"
         "drawgrid=w=120:h=90:t=1:c=0x71b5c8@0.10,"
         "drawbox=x=0:y=0:w=iw:h=280:c=0x060d18@0.92:t=fill,"
@@ -90,7 +94,7 @@ std::string graph() {
     for (int voice = 0; voice < 3; ++voice) {
         const auto n = std::to_string(voice);
         const auto input = std::to_string(voice + 1);
-        g += "[" + input + ":a]highpass=f=20,volume=3,showwaves=s=1600x160:mode=p2p:"
+        g += "[" + input + ":a]apad,highpass=f=20,volume=3,showwaves=s=1600x160:mode=p2p:"
              "rate=30:draw=full:colors=" + colors[static_cast<std::size_t>(voice)] +
              ",format=rgba,colorkey=black:0.08:0.1,split[sharp" + n + "][blur" + n + "];";
         g += "[blur" + n + "]gblur=sigma=5[glow" + n + "];";
@@ -111,6 +115,27 @@ std::string graph() {
     return g;
 }
 } // namespace
+
+void setup_ffmpeg(const Backend &backend,const std::filesystem::path &script,const std::atomic<bool> &cancel) {
+#ifdef _WIN32
+    const auto* windows=std::getenv("WINDIR");
+    if(!windows)throw std::runtime_error("Windows system directory is unavailable");
+    if(!std::filesystem::is_regular_file(script))throw std::runtime_error("FFmpeg setup script is missing from resources");
+    const auto powershell=std::filesystem::u8path(windows)/"System32/WindowsPowerShell/v1.0/powershell.exe";
+    std::filesystem::create_directories(backend.jobs);
+    const auto job=std::filesystem::absolute(unique_sibling_path(backend.jobs/"ffmpeg-setup","job"));
+    std::filesystem::create_directories(job);
+    try {
+        run_process(powershell,{"-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",
+            std::filesystem::absolute(script).u8string(),"-DataDir",std::filesystem::absolute(backend.jobs.parent_path().parent_path()).u8string(),
+            "-WorkDir",job.u8string()},job,cancel);
+    }catch(...){std::error_code ignored;std::filesystem::remove_all(job,ignored);throw;}
+    std::error_code ignored;std::filesystem::remove_all(job,ignored);
+#else
+    (void)backend;(void)script;(void)cancel;
+    throw std::runtime_error("Automatic FFmpeg setup currently supports Windows. Install FFmpeg on PATH.");
+#endif
+}
 
 Result export_video(const Song &song, const Backend &backend, const std::filesystem::path &output,
                     const std::atomic<bool> &cancel) {
@@ -138,20 +163,22 @@ Result export_video(const Song &song, const Backend &backend, const std::filesys
     text_file(job / "title.txt", wrap(song.name.empty() ? "Untitled SID song" : song.name, 56));
     text_file(job / "author.txt", wrap(song.author, 100));
     text_file(job / "visualizer.ffgraph", graph());
-    text_file(job / "title.ffgraph",
+    const std::string title_graph =
         "color=c=0x060d18:s=1920x280,drawtext=fontfile=font.ttf:textfile=title.txt:expansion=none:"
         "fontcolor=white:fontsize=30:line_spacing=5:x=64:y=24,"
         "drawtext=fontfile=font.ttf:textfile=author.txt:expansion=none:"
-        "fontcolor=0x82c5d8:fontsize=16:line_spacing=3:x=64:y=216[out]");
+        "fontcolor=0x82c5d8:fontsize=16:line_spacing=3:x=64:y=216[out]";
+    text_file(job / "title.ffgraph", title_graph);
     run_process(ffmpeg, {"-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-                "-filter_complex_script", "title.ffgraph", "-map", "[out]", "-frames:v", "1", "header.png"}, job, cancel);
+                "-filter_complex", title_graph, "-map", "[out]", "-frames:v", "1", "header.png"}, job, cancel);
     const auto destination = std::filesystem::absolute(output);
     std::filesystem::create_directories(destination.parent_path());
     const auto temporary = unique_sibling_path(destination, "video");
     try {
         run_process(ffmpeg, {"-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i", std::filesystem::absolute(result.wav).u8string(),
-                    "-i", "voice1.wav", "-i", "voice2.wav", "-i", "voice3.wav", "-loop", "1", "-i", "header.png",
-                    "-filter_complex_threads", "2", "-filter_complex_script", "visualizer.ffgraph",
+                    "-i", "voice1.wav", "-i", "voice2.wav", "-i", "voice3.wav", "-loop", "1",
+                    "-t", std::to_string(result.seconds), "-i", "header.png",
+                    "-filter_complex_threads", "2", "-filter_complex", graph(),
                     "-map", "[out]", "-map", "0:a", "-t", std::to_string(result.seconds),
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-maxrate", "4500k",
                     "-bufsize", "9000k", "-pix_fmt", "yuv420p", "-r", "30",

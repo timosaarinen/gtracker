@@ -58,5 +58,7 @@ the generated/dummy capture checks do not establish them. Metadata analysis has
 no transcript; optional single-note proposals remain experimental.
 
 SID mode: launch gtracker_editor --sid, or open examples/sid/heavy-mellow.sidtrk.json.
-More > Export MP4 Video requires an external FFmpeg installation on PATH.
+For MP4 export on Windows, choose More > Set up MP4 export > Download FFmpeg.
+This verifies a pinned download and installs it in your gtracker data folder,
+without admin rights or PATH changes. An existing FFmpeg on PATH also works.
 See docs/realtime.md and docs/release.md for current qualification and limits.

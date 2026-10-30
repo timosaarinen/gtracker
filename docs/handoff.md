@@ -1,5 +1,21 @@
 # Current handoff
 
+FFmpeg setup, 2026-10-30, based on `65b7101`: Windows More > Set up MP4 export
+offers a cancellable, SHA-256-pinned Gyan 9.0.2 download into the data folder.
+No admin/PATH changes; fixed-path extraction retains upstream license/readme.
+Existing valid installs are reused and incomplete installs preserved. Package
+includes the setup script. Actual download/hash verification, repeat setup and
+incomplete-install preservation passed. FFmpeg 9 removed filter_complex_script
+and stalled at visual-input EOF; direct filter arguments and padded visualization
+branches fix both, with song duration bounding output and soundtrack unchanged.
+Actual 10.84-second exports passed with downloaded 9.0.2 (2,316,619 bytes) and
+existing 4.2.3 (2,172,797 bytes). Private-folder discovery worked without an override;
+the new video decoded and its title/scopes/FFT frame was inspected.
+Windows desktop build, SID dummy UI test and 20 Python tooling/package tests
+passed. Package fixtures now include the MIT license added in the prior commit.
+CI was not due. Evidence: `.local/sid/ffmpeg*`. No physical UI/network-cancel or
+listening qualification claimed. Next: macOS Intel/Apple Silicon and Linux release preparation.
+
 License decision, 2026-10-30: owner selected MIT for project code while preserving
 dependency licenses. LICENSE and public/package documentation now reflect it.
 Explicit GPL SID helper sources retain GPL-2.0-or-later. The clean `b72c9a4`

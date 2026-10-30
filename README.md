@@ -48,8 +48,10 @@ the toolbar scale button remembers your preferred size.
    MP4 video, or diagnostic GoatTracker SNG.
 
 MP4 export adds a permanent title, three voice oscilloscopes and a full-screen
-FFT spectrum. It produces 1080p H.264/AAC with fast-start metadata. Install
-FFmpeg on PATH, or set `GTRACKER_FFMPEG` to its executable. Exports stay local;
+FFT spectrum. It produces 1080p H.264/AAC with fast-start metadata. On Windows,
+choose **More > Set up MP4 export > Download FFmpeg** for a verified download
+into your gtracker data folder, without admin rights or PATH changes.
+Alternatively, install FFmpeg on PATH or set `GTRACKER_FFMPEG` to its executable. Exports stay local;
 you choose where to upload them.
 
 Read the [SID guide](docs/sid-tracker.md) for selection, undo, sections, recovery,
