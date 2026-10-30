@@ -205,6 +205,24 @@ class SourceAndEvidenceTests(GitFixture):
 
 
 class StagedGuardTests(GitFixture):
+    def test_only_exact_reviewed_artwork_bypasses_binary_and_size_rules(self):
+        import hashlib
+        name = "docs/assets/gtracker-banner.png"
+        path = self.directory / name
+        path.parent.mkdir(parents=True)
+        data = b"original artwork fixture\0"
+        path.write_bytes(data)
+        self.git("add", name)
+        with mock.patch.object(repo_guard, "APPROVED_ARTWORK", {name: hashlib.sha256(data).hexdigest()}):
+            self.assertEqual(repo_guard.inspect_staged(self.directory, max_bytes=16), (1, []))
+            path.write_bytes(data + b"changed")
+            self.git("add", name)
+            self.assertTrue(repo_guard.inspect_staged(self.directory)[1])
+        other = self.directory / "unapproved.png"
+        other.write_bytes(data)
+        self.git("add", "unapproved.png")
+        self.assertTrue(any(name == "unapproved.png" for name, _ in repo_guard.inspect_staged(self.directory)[1]))
+
     def test_guard_reads_staged_secret_even_if_worktree_was_cleaned(self):
         path = self.directory / "config.txt"
         key = "-----BEGIN " + "PRIVATE KEY-----\nfixture\n"

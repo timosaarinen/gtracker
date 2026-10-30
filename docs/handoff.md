@@ -1,5 +1,16 @@
 # Current handoff
 
+Public README, 2026-10-30: owner made the repository public and requested a
+musician-facing C64 SID introduction, the opening nostalgia questions, the
+unqualified "The Ultimate SID Tracker" headline, and an illustrated banner.
+Guitar authoring is now a secondary note for the owner's MMO, Lust of War.
+README keeps actual setup requirements in a disclosure and accurately notes
+that GitHub binary releases have not been published. Generated banner lives in
+`docs/assets/gtracker-banner.png`, with tool/prompt provenance beside it. The
+owner's explicit artwork request is a narrow exception to text-only assets:
+repo_guard permits only this exact reviewed SHA-256, capped at 4 MiB; regression
+coverage rejects altered or unrelated binaries. No application/audio changes.
+
 Pre-publication audit, 2026-10-30, based on `922371b`: read issue #1 and reviewed
 save/export, realtime, packaging and public documentation. Fixed SID Save As
 colliding with an active export destination (native regression), and reset

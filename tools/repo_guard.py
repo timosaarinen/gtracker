@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
@@ -12,6 +13,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BYTES = 2 * 1024 * 1024
+# Explicitly requested README artwork. Only this reviewed image may bypass the
+# text-only/size rules; changing the file requires reviewing its digest again.
+APPROVED_ARTWORK = {
+    "docs/assets/gtracker-banner.png": "dd2f24cae14ffbccac27d79354af135ddfc24bee513494bee8799d518142dfd5",
+}
 FORBIDDEN_SUFFIXES = {
     ".mp4", ".prg", ".sid", ".wav", ".flac", ".mp3", ".aif", ".aiff", ".ogg", ".opus", ".m4a",
     ".onnx", ".pt", ".pth", ".ckpt", ".safetensors", ".h5",
@@ -65,7 +71,12 @@ def inspect_staged(root: Path, max_bytes: int = MAX_BYTES) -> tuple[int, list[tu
             problems.append("submodule entry requires a deliberate repository policy change")
         else:
             size = int(git(root, "cat-file", "-s", ":" + name).strip())
-            if size > max_bytes:
+            artwork = APPROVED_ARTWORK.get(name)
+            if artwork and size <= 4 * 1024 * 1024:
+                data = git(root, "show", ":" + name)
+                if hashlib.sha256(data).hexdigest() != artwork:
+                    problems.append("artwork differs from the explicitly reviewed image")
+            elif size > max_bytes:
                 problems.append(f"staged blob exceeds {max_bytes} bytes ({size} bytes)")
             else:
                 data = git(root, "show", ":" + name)
