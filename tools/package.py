@@ -30,28 +30,18 @@ def sid_inputs(root: Path) -> list[tuple[Path, str]]:
         path=backend/name
         if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise RuntimeError("SID backend checksum mismatch: "+name)
         result.append((path,"sid-tools/"+name))
-    video=json.loads((backend/"video.json").read_text())
-    result.append((backend/"video.json","sid-tools/video.json"))
-    for name,digest in video["files"].items():
-        if Path(name).name != name or hashlib.sha256((backend/name).read_bytes()).hexdigest()!=digest:
-            raise RuntimeError("Invalid SID video helper: "+name)
-        result.append((backend/name,"sid-tools/"+name))
-    info=subprocess.run([str(dev.executable(root,"desktop","gtracker_cli")),"sid-backend-info","--sid-tools",str(backend),"--json"],cwd=root,encoding="utf-8",capture_output=True,check=True)
-    identity=json.loads(info.stdout)["cache_identity"]
-    atlas=root/".local/sid/auditions"/identity
-    receipt=json.loads((atlas/"atlas.json").read_text())
-    expected={f"{instrument}-{note}.wav" for instrument in range(1,12) for note in (range(24,96) if instrument<9 else [60])}
-    if set(receipt["files"])!=expected or receipt["cache_identity"]!=identity:raise RuntimeError("Incomplete or stale SID audition atlas; run tools/sid_backend.py auditions")
-    for name,digest in receipt["files"].items():
-        path=atlas/name
-        if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise RuntimeError("SID audition checksum mismatch: "+name)
-        result.append((path,"sid-auditions/"+identity+"/"+name))
-    result.append((atlas/"atlas.json","sid-auditions/"+identity+"/atlas.json"))
+    for manifest_name in ("video.json","stream.json"):
+        helper=json.loads((backend/manifest_name).read_text())
+        result.append((backend/manifest_name,"sid-tools/"+manifest_name))
+        for name,digest in helper["files"].items():
+            if Path(name).name != name or hashlib.sha256((backend/name).read_bytes()).hexdigest()!=digest:
+                raise RuntimeError("Invalid SID helper: "+name)
+            result.append((backend/name,"sid-tools/"+name))
     for name in ("goattracker-2.77.tar.xz","libsidplayfp-3.1.1.tar.gz","libresidfp-1.2.3.tar.gz","SDL-source.tar.gz"):
         result.append((root/".local/sid"/name,"sid-tools/source/"+name))
-    for name in ("sid_backend.py","sid_render.cpp"):
+    for name in ("sid_backend.py","sid_render.cpp","sid_stream.cpp","sid_configuration.hpp"):
         result.append((root/"tools"/name,"sid-tools/source/"+name))
-    for name in ("examples/sid/heavy-mellow.sidtrk.json","schema/sid-song.schema.json","docs/sid-tracker.md"):
+    for name in ("examples/sid/heavy-mellow.sidtrk.json","schema/sid-song.schema.json","docs/sid-tracker.md","docs/realtime.md","docs/release.md","CONTRIBUTING.md"):
         result.append((root/name,name))
     return result
 

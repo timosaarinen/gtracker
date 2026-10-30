@@ -564,7 +564,7 @@ def main(argv: list[str] | None = None) -> int:
                 operation = "check" if exists else "prepare"
                 code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), operation])["returncode"]
                 if code: return code
-                if os.name == "nt" and not (ROOT / ".local/sid/tools/video.json").is_file():
+                if os.name == "nt" and not (ROOT / ".local/sid/tools/stream.json").is_file():
                     code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), "prepare-video"])["returncode"]
                     if code: return code
             args.command = "editor"

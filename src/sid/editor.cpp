@@ -4,6 +4,8 @@
 #include "gtracker/sid_document.hpp"
 #include "gtracker/sid_editor.hpp"
 #include "gtracker/ui_scale.hpp"
+#include "gtracker/live_audio.hpp"
+#include "gtracker/sid_live.hpp"
 #include <SDL3/SDL.h>
 #include <algorithm>
 #include <atomic>
@@ -19,81 +21,25 @@
 namespace gtracker::sid {
 namespace {
 struct Transport {
-    SDL_AudioStream *stream = nullptr;
-    std::vector<float> pcm;
-    std::size_t cursor = 0, loop_start = 0, loop_end = 0;
-    int latency = 512;
-    bool active = false, paused = false;
-    ~Transport() {
-        if (stream)
-            SDL_DestroyAudioStream(stream);
-    }
-    static void SDLCALL feed(void *userdata, SDL_AudioStream *output, int additional, int) {
-        auto &t = *static_cast<Transport *>(userdata);
-        std::size_t count = static_cast<std::size_t>(std::max(0, additional)) / sizeof(float);
-        while (count && t.cursor < t.pcm.size()) {
-            const auto end = t.loop_end ? t.loop_end : t.pcm.size();
-            const auto n = std::min(count, end - t.cursor);
-            SDL_PutAudioStreamData(output, t.pcm.data() + t.cursor, static_cast<int>(n * sizeof(float)));
-            count -= n;
-            t.cursor += n;
-            if (t.loop_end && t.cursor == end)
-                t.cursor = t.loop_start;
-            if (!n)
-                break;
-        }
-    }
-    void stop() {
-        if (stream) {
-            SDL_PauseAudioStreamDevice(stream);
-            SDL_LockAudioStream(stream);
-            active = false;
-            paused = false;
-            cursor = 0;
-            SDL_ClearAudioStream(stream);
-            SDL_UnlockAudioStream(stream);
-        }
-    }
-    void play(std::vector<float> data, std::size_t start = 0, std::size_t ls = 0, std::size_t le = 0) {
-        stop();
-        if (!stream) {
-            if (!SDL_InitSubSystem(SDL_INIT_AUDIO))
-                throw std::runtime_error(SDL_GetError());
-            SDL_AudioSpec spec{SDL_AUDIO_F32, 1, 48000};
-            stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, feed, this);
-            if (!stream)
-                throw std::runtime_error(SDL_GetError());
-            SDL_AudioSpec device{};
-            SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream), &device, &latency);
-            if (device.freq > 0)
-                latency = latency * 48000 / device.freq;
-        }
-        SDL_LockAudioStream(stream);
-        pcm = std::move(data);
-        cursor = std::min(start, pcm.size());
-        loop_start = ls;
-        loop_end = le;
-        active = true;
-        paused = false;
-        SDL_UnlockAudioStream(stream);
-        SDL_ResumeAudioStreamDevice(stream);
-    }
-    void toggle() {
-        if (!stream || !active)
-            return;
-        paused = !paused;
-        if (paused)
-            SDL_PauseAudioStreamDevice(stream);
-        else
-            SDL_ResumeAudioStreamDevice(stream);
-    }
-    std::size_t position() {
-        if (!stream)
-            return 0;
-        SDL_LockAudioStream(stream);
-        auto p = cursor;
-        SDL_UnlockAudioStream(stream);
-        return p > static_cast<std::size_t>(latency) ? p - static_cast<std::size_t>(latency) : 0;
+    std::shared_ptr<LiveSynth> synth;
+    gtracker::LiveAudio live;
+    bool realtime=false, active=false, paused=false;
+    size_t realtime_start=0, loop_start=0, loop_end=0;
+    ~Transport(){stop();}
+    void warm(const std::filesystem::path& tools){if(!synth)synth=std::make_shared<LiveSynth>(tools);}
+    void stop(){live.stop();realtime=false;active=false;paused=false;}
+    void toggle(){if(!active)return;paused=!paused;live.toggle();}
+    size_t position()const{return realtime_start+live.position();}
+    void play_live(const Result& result,const Backend& backend,size_t start,bool loop=false){
+        stop();warm(backend.tools);realtime=true;realtime_start=start;active=true;
+        loop_start=0;loop_end=loop?static_cast<size_t>((result.seconds-3)*48000):0;
+        auto engine=synth;auto sid=result.sid;auto remaining=static_cast<size_t>(result.seconds*48000);
+        live.start([this,engine,sid,start,remaining,loop,loaded=false](float* out,size_t n)mutable->size_t{
+            if(!loaded){engine->load(sid);std::array<float,4096> discard{};size_t skip=start;
+                while(skip){if(live.stopping())return 0;auto count=std::min(skip,discard.size());engine->read_frames(discard.data(),count);skip-=count;}
+                remaining=remaining>start?remaining-start:0;loaded=true;}
+            if(!loop)n=std::min(n,remaining);if(!n)return 0;engine->read_frames(out,n);if(!loop)remaining-=n;return n;
+        });
     }
 };
 struct Occurrence {
@@ -152,6 +98,7 @@ struct Editor::Impl {
         backend = {resources / "sid-tools", data / "sid-cache/jobs"};
         if (!std::filesystem::exists(backend.tools))
             backend.tools = ".local/sid/tools";
+        try{transport.warm(backend.tools);}catch(const std::exception& e){status=e.what();}
         if (!source.empty()) {
             doc.opened(load(source));
             path = source;
@@ -327,13 +274,7 @@ struct Editor::Impl {
         if (loop) {
             const auto p = current();
             snapshot.patterns = {p};
-            snapshot.sections = {
-                {"loop", "Pattern audition", {{"l1", p.id}, {"l2", p.id}, {"l3", p.id}, {"l4", p.id}}}};
-            const double frames = 64 * snapshot.speed / frame_rate * 48000;
-            loop_first = static_cast<std::size_t>(
-                std::llround(((snapshot.speed + 3) / frame_rate) * 48000 + frames * 2));
-            loop_last = static_cast<std::size_t>(
-                std::llround(((snapshot.speed + 3) / frame_rate) * 48000 + frames * 3));
+            snapshot.sections = {{"loop", "Pattern audition", {{"l1", p.id}}}};
         } else if (!beginning) {
             const auto o = order(snapshot);
             if (o.empty() || occurrence >= static_cast<int>(o.size()) ||
@@ -345,16 +286,16 @@ struct Editor::Impl {
                              frame_rate * 48000));
         }
         if (!loop && prepared && prepared_generation == doc.generation) {
-            transport.play(prepared->audio.interleaved, seek_frame);
-            status = "Playing prepared song.";
+            transport.play_live(*prepared,backend,seek_frame);
+            status = "Playing realtime SID.";
             return;
         }
         cancel = false;
         job_generation = doc.generation;
         purpose = loop ? Purpose::loop : Purpose::song;
         job = std::async(std::launch::async,
-                         [this, snapshot, loop] { return prepare(snapshot, backend, cancel, true, loop); });
-        status = "Compiling and rendering exact SID in background...";
+                         [this, snapshot, loop] { return prepare(snapshot, backend, cancel, false, loop); });
+        status = "Preparing SID player...";
     }
     void audition(int note) {
         pending_audition = note;
@@ -364,40 +305,9 @@ struct Editor::Impl {
             return;
         }
         const auto bank = compile_audition(note, preset);
-        const auto identity = audition_identity(backend);
-        const auto name = std::to_string(preset) + "-" + std::to_string(note) + ".wav";
-        auto cached = resources / "sid-auditions" / identity / name;
-        if (!std::filesystem::exists(cached))
-            cached = resources / ".local/sid/auditions" / identity / name;
-        if (!std::filesystem::exists(cached))
-            cached = data / "sid-cache" / identity / name;
-        if (std::filesystem::exists(cached)) {
-            const auto start = std::chrono::steady_clock::now();
-            auto audio = load_pcm_wav(cached);
-            transport.play(std::move(audio.interleaved), static_cast<std::size_t>(7 / frame_rate * 48000));
-            status = "Cached audition queued in " +
-                     std::to_string(
-                         std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start)
-                             .count()) +
-                     " ms";
-            pending_audition = -1;
-            playing_audition = true;
-            return;
-        }
-        cancel = false;
-        job_generation = doc.generation;
-        purpose = Purpose::audition;
-        job = std::async(std::launch::async, [this, bank, cached] {
-            auto r = prepare(bank, backend, cancel, true, false, 3.1);
-            std::filesystem::create_directories(cached.parent_path());
-            if (!cancel)
-                write_binary_atomic(cached, [&](std::ostream &out) {
-                    std::ifstream input(r.wav, std::ios::binary);
-                    out << input.rdbuf();
-                });
-            return r;
-        });
-        status = "Preparing missing note audition in background...";
+        cancel=false;job_generation=doc.generation;purpose=Purpose::audition;
+        job=std::async(std::launch::async,[this,bank]{return prepare(bank,backend,cancel,false,false,3.1);});
+        status="Starting realtime audition...";
     }
     static Song compile_audition(int note, int instrument) {
         auto s = new_song();
@@ -451,8 +361,7 @@ struct Editor::Impl {
                 } else if (purpose == Purpose::output) {
                     status = "Export completed.";
                 } else if (purpose == Purpose::audition) {
-                    transport.play(std::move(r.audio.interleaved),
-                                   static_cast<std::size_t>(7 / frame_rate * 48000));
+                    transport.play_live(r,backend,static_cast<std::size_t>(7 / frame_rate * 48000));
                     playing_audition = true;
                     status = "Audition ready.";
                     pending_audition = -1;
@@ -461,17 +370,7 @@ struct Editor::Impl {
                         prepared = r;
                         prepared_generation = doc.generation;
                     }
-                    if (purpose == Purpose::loop && loop_first >= 128 &&
-                        loop_last <= r.audio.interleaved.size()) {
-                        // Preserve the complete loop length; blend the final 128 samples
-                        // toward the preceding context of its first sample (2.67 ms).
-                        for (std::size_t i = 0; i < 128; ++i) {
-                            const float t = static_cast<float>(i + 1) / 128;
-                            auto &sample = r.audio.interleaved[loop_last - 128 + i];
-                            sample = sample * (1 - t) + r.audio.interleaved[loop_first - 128 + i] * t;
-                        }
-                    }
-                    transport.play(std::move(r.audio.interleaved), seek_frame, loop_first, loop_last);
+                    transport.play_live(r,backend,seek_frame,purpose==Purpose::loop);
                     status = purpose == Purpose::loop ? "Pattern audition: cold first pass, warmed repeat."
                                                       : "Playing exact exported SID.";
                 }
@@ -978,8 +877,11 @@ struct Editor::Impl {
                 static_cast<double>(transport.position()) / 48000 * frame_rate - (doc.song.speed + 3);
             playback_order = static_cast<int>(std::max(0.0, ticks) / (64 * doc.song.speed));
         }
+        if (transport.active && transport.realtime && !transport.live.error().empty()) {
+            status="Realtime playback: "+transport.live.error();transport.stop();
+        }
         if (transport.active && !playing_loop &&
-            transport.position() + static_cast<std::size_t>(transport.latency) >= transport.pcm.size()) {
+            transport.live.done()) {
             transport.stop();
             playing_audition = false;
         }

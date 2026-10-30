@@ -3,8 +3,8 @@
 Start a blank SID song with `python tools/dev.py editor --sid`, or open
 `examples/sid/heavy-mellow.sidtrk.json`. The guitar screen has **New SID Song**;
 loading a `.sidtrk.json` selects SID mode automatically. **Guitar mode** returns
-to the preserved guitar document. The desktop ZIP includes backend tools and
-579 prepared auditions. Nothing is downloaded during note entry.
+to the preserved guitar document. The desktop ZIP includes the backend and
+realtime helper. Nothing is downloaded during note entry.
 
 ## Enter and arrange music
 
@@ -48,20 +48,18 @@ data/cache/recovery use application data or an explicit `--data-dir PATH`.
 
 ## Transport and export
 
-F5 plays the song from the beginning. Space starts at the selected order/row,
-then pauses/resumes. F7 starts at the selected occurrence/row. Seeking slices the
-full continuous PCM, preserving its real preceding SID history. F8 stops audio
-and cancels pending autoplay without moving the edit selection. Musical edits
-stop transport and invalidate prepared audio. Follow tracks current occurrences;
+F5 plays from the beginning; F7 or Space starts at the selected occurrence/row.
+Space then pauses/resumes. F8 stops and cancels pending autoplay. A persistent
+emulator supplies small PCM blocks; no complete WAV is prepared before playing.
+Seeking advances the real preceding SID state on a worker. Musical edits stop
+the current snapshot and invalidate its compiled SID. Follow tracks occurrences;
 navigation disables it so it cannot fight intentional movement.
 
-F6 loops the selected pattern from reset: a leading HOLD is silent on the cold
-first pass and can carry a voice on later passes. A warmed full-length iteration
-repeats, blending its last 128 samples toward the recorded preceding context of
-its first sample (2.67 ms). This smoothing changes only isolated audition, keeps
-the complete 64-row length, and leaves full-song playback/export untouched.
+F6 continuously loops the selected pattern in the C64 player. A leading HOLD is
+silent on the cold first pass and can carry a voice on later passes. Oscillator
+and envelope state continues across repeats, without splicing recorded PCM.
 
-The playhead uses samples supplied to SDL minus one negotiated device buffer;
+The playhead uses submitted samples minus queued application audio;
 physical output latency is a separate measurement. PAL uses 985248 cycles/s and
 19656 cycles/frame. Speed 4–12 is global, with four rows per beat; default 6 is
 ~125.31 BPM. Register traces locate first gate at play call `speed + 2`, first
@@ -69,7 +67,7 @@ pitched tick at `speed + 3`. Timeline/seek use the latter reference. Output WAV
 contains initialization, the authored duration and exactly three release seconds.
 
 **Export SID** produces one-subtune PSID v2, explicit PAL/6581 and VBI timing.
-More exports WAV, C64 Program or diagnostic GoatTracker SNG. The PRG has BASIC
+More exports MP4 Video, WAV, C64 Program or diagnostic GoatTracker SNG. The PRG has BASIC
 `10 SYS2061`, an IRQ launcher at $080d, and the same music payload at $1000.
 It masks CIA interrupts, maps RAM/I/O explicitly, preserves CPU registers and
 acknowledges a VIC raster IRQ once per frame. Music must fit below $a000.
@@ -107,7 +105,7 @@ avoids console configuration writes and fractional-duration rounding. It adds
 no custom SID synthesis and stays separate from the guitar core/application.
 
 Auditions use actual pitches through the same player/renderer, a short gate,
-OFF and release. Cache misses render asynchronously. Atlas identity binds bank,
+OFF and release. Auditions stream directly from the warmed emulator. The legacy prepared atlas remains optional compatibility material. Atlas identity binds bank,
 compiler/configuration and backend hashes. Full-song cache additionally binds
 canonical source, exact SID, native build and duration; complete PCM hashes are
 checked and corrupt entries regenerate. Jobs own their processes and discard
@@ -119,7 +117,6 @@ Developer setup requires MSYS2 i686 SDL/GCC and UCRT64 GCC/autotools:
 python tools/sid_backend.py prepare
 python tools/sid_backend.py check
 python tools/dev.py build --profile desktop
-python tools/sid_backend.py auditions
 python tools/dev.py sid-export examples/sid/heavy-mellow.sidtrk.json --output .local/song.sid --json
 python tools/dev.py sid-render examples/sid/heavy-mellow.sidtrk.json --output .local/song.wav --json
 python tools/dev.py sid-export-prg examples/sid/heavy-mellow.sidtrk.json --output .local/song.prg --json
@@ -145,7 +142,7 @@ finite outro, about 123 seconds at speed 6. Bass and drums share a physical voic
 `tools/sid_verify.py` tests real export, repeatability, 6502 registers at speeds
 4/6/12, A4 pitch, all presets/voices, HOLD and released ending gates. py65 is an
 authoring test dependency (development install: `.local/sid/python`). Native UI
-tests cover editing, persistence, modal focus, prepared PCM transport and stale
+tests cover editing, persistence, modal focus, streamed transport and stale
 jobs using synthetic input/dummy devices. Tail diagnostics measure last-half-
 second DC and DC-removed RMS, with a 0.005 (-46 dBFS) RMS limit; chip noise is not
 a stuck voice. Physical listening, real input and hardware remain separate from

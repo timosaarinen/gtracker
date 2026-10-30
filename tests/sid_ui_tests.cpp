@@ -110,8 +110,10 @@ struct EditorTest {
             s.backend.tools = real_tools;
             s.audition(60);
             std::cout << s.status << '\n';
+            const auto audition_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(3);
+            while(s.job.valid() && std::chrono::steady_clock::now()<audition_deadline){SDL_Delay(5);frame();}
             check(s.playing_audition && !s.job.valid(),
-                  "Prepared development audition should queue immediately");
+                  "Realtime audition should start without a complete render");
             s.stop();
             s.path.clear();
             s.doc.opened(new_song());
@@ -127,7 +129,9 @@ struct EditorTest {
                 frame();
             }
             check(!s.job.valid() && s.transport.active, "native song transport did not start");
-            SDL_Delay(50);
+            const auto sound_deadline=std::chrono::steady_clock::now()+std::chrono::seconds(2);
+            while(s.transport.position()==0 && std::chrono::steady_clock::now()<sound_deadline)SDL_Delay(5);
+            check(s.transport.live.error().empty(), "realtime producer failed");
             const auto consumed = s.transport.position();
             check(consumed > 0, "PCM callback did not advance");
             s.transport.toggle();
@@ -144,9 +148,7 @@ struct EditorTest {
             }
             check(s.transport.active && s.transport.loop_end > s.transport.loop_start,
                   "native pattern loop did not prepare");
-            const auto a = s.transport.loop_start, b = s.transport.loop_end;
-            std::cout << "Pattern loop boundary delta: "
-                      << std::abs(s.transport.pcm[a] - s.transport.pcm[b - 1]) << '\n';
+            check(s.transport.realtime, "pattern loop must synthesize live");
             s.stop();
             s.prepared.reset();
             s.start(false, true);

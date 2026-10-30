@@ -1,5 +1,6 @@
 // Standalone GPL-2.0-or-later renderer adapter, distributed separately from gtracker.
 // Uses libsidplayfp/reSIDfp; no synthesizer is reimplemented here.
+#include "sid_configuration.hpp"
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
@@ -29,24 +30,9 @@ int main(int argc, char **argv) {
             throw std::runtime_error(tune.statusString());
         tune.selectSong(1);
         ReSIDfpBuilder builder("gtracker pinned reSIDfp");
-        builder.filter6581Curve(0.5);
-        builder.filter6581Range(0.5);
-        builder.enableOld6581caps(false);
-        builder.offset6581(0);
-        builder.dacLeakage(1);
-        builder.combinedWaveformsStrength(SidConfig::AVERAGE);
         sidplayfp engine;
-        auto config = engine.config();
-        config.frequency = 48000;
-        config.defaultC64Model = SidConfig::PAL;
-        config.forceC64Model = true;
-        config.defaultSidModel = SidConfig::MOS6581;
-        config.forceSidModel = true;
-        config.powerOnDelay = 0;
-        config.sidEmulation = &builder;
-        config.samplingMethod = SidConfig::RESAMPLE_INTERPOLATE;
-        if (!engine.config(config) || !engine.load(&tune))
-            throw std::runtime_error(engine.error());
+        configure_sid(engine,builder);
+        if(!engine.load(&tune))throw std::runtime_error(engine.error());
         engine.initMixer(false);
         // Muting only changes output routing; all oscillators keep clocking.
         if (solo)

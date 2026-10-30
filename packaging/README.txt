@@ -1,13 +1,13 @@
 gtracker developer package
 
-This is a development build, not a qualified public release. The project has
+This is a release-candidate development build, not a qualified public release. The project has
 not selected its own distribution license. See THIRD_PARTY_NOTICES.md and the
 licenses directory for dependency notices; they do not license gtracker itself.
 
 Extract the whole gtracker folder. A headless package contains the CLI only.
 In a desktop package, on Windows double-click gtracker_editor.exe; on Linux/macOS
 run ./gtracker_editor. The editor opens an original built-in
-sketch. Render + Play generates its audio. See docs/editor.md for controls.
+sketch. Play starts realtime synthesis. See docs/editor.md for controls.
 Export WAV opens a background snapshot exporter in the inspector. Choose a
 writable .wav path; existing WAVs require Replace confirmation. Audio output
 selects the playback device for this session, independently of WAV export.
@@ -56,3 +56,7 @@ Patterns, script filenames and CLI JSON use UTF-8. The bundled UI font has limit
 glyph coverage. Microphone hardware and latency require separate qualification;
 the generated/dummy capture checks do not establish them. Metadata analysis has
 no transcript; optional single-note proposals remain experimental.
+
+SID mode: launch gtracker_editor --sid, or open examples/sid/heavy-mellow.sidtrk.json.
+More > Export MP4 Video requires an external FFmpeg installation on PATH.
+See docs/realtime.md and docs/release.md for current qualification and limits.

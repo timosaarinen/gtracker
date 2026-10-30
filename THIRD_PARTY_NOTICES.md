@@ -163,3 +163,8 @@ source archives, adapter source, recipes, checksum manifest and applicable licen
 texts under `sid-tools/`. No binaries, ROMs or generated audio are committed to
 Git. The optional upstream sidplayfp 3.2.1 console download is an investigation
 tool; it is not the application's runtime renderer or part of the bundle.
+
+The separate realtime helper `tools/sid_stream.cpp` is GPL-2.0-or-later and
+uses the same pinned libsidplayfp/reSIDfp libraries. Its source, recipe and
+corresponding library archives accompany the helper in packages. FFmpeg is an
+optional external executable for MP4 export and is not bundled.

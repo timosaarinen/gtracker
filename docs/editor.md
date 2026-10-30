@@ -148,11 +148,11 @@ original bytes; that is separate from physical-window or hard-power-loss testing
 editor remains available while that job runs. Its min/max waveform envelope is
 calculated on the worker as well, with at most 2,048 display bins.
 
-`Play` queues the current rendered mono/stereo floating-point PCM through SDL3's
-selected playback device (initially system default). When a current render is missing, the button reads
-`Render + Play`. Space performs the same action, or stops current playback.
-`Stop` clears queued playback and cancels the intent to play after a pending
-render; it does not cancel the renderer itself.
+`Play` starts continuous native synthesis immediately through the selected SDL3
+output, using the current score and production settings. Space plays/stops.
+No waveform render is required. **Audition notes** previews entered frets and
+selected plucks/body hits. Stop clears playback; Render is a separate waveform
+inspection operation. See [realtime playback](realtime.md).
 
 Every edit has an application-local generation independent of the saved document
 revision. A finished render from an older generation is discarded. An old

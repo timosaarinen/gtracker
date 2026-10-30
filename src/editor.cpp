@@ -7,6 +7,7 @@
 #include "gtracker/proposals.hpp"
 #include "gtracker/sid_editor.hpp"
 #include "gtracker/ui_scale.hpp"
+#include "gtracker/live_audio.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -273,6 +274,9 @@ struct Editor {
     SDL_AudioDeviceID audio_output = SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK;
     std::string audio_output_name = "System default";
     bool audio_outputs_queried = false, audio_output_available = true;
+    gtracker::LiveAudio live_audio;
+    bool live_playing=false;
+    bool audition_notes=true;
     SDL_AudioStream* audio_stream = nullptr;
     int audio_rate = 0;
     int audio_channels = 0;
@@ -381,6 +385,7 @@ struct Editor {
     }
 
     void stop() {
+        live_audio.stop();live_playing=false;
         if (audio_stream) {
             SDL_ClearAudioStream(audio_stream);
             SDL_PauseAudioStreamDevice(audio_stream);
@@ -726,6 +731,18 @@ struct Editor {
         return found;
     }
 
+    void audition_event(Event event) {
+        if(!audition_notes || event.type=="damp")return;
+        try {
+            close_audio_output();
+            if(!audio_output_available)throw std::runtime_error("Choose an available audio output");
+            auto snapshot=document.pattern();event.beat=0;snapshot.events={event};snapshot.gestures.clear();snapshot.length_beats=1;
+            auto renderer=std::make_shared<gtracker::NativeRenderer>(gtracker::pattern_renderer(snapshot));
+            live_audio.start([renderer](float* out,size_t n){return renderer->read(out,n);},renderer->channels(),audio_output);
+            audio_rate=48000;audio_channels=renderer->channels();live_playing=playing=true;
+        }catch(const std::exception& e){message(std::string("Audition: ")+e.what(),true);}
+    }
+
     void enter_fret(int digit, double time) {
         const auto& pattern = document.pattern();
         if (cursor_lane < 0 || cursor_lane >= static_cast<int>(pattern.tuning_midi.size())) throw std::runtime_error("Frets belong on string lanes. B adds a body hit.");
@@ -752,6 +769,7 @@ struct Editor {
         selected = index; selected_gesture = -1;
         fret_entry = {event.id,value,continuing ? 2 : 1,time,document.generation()};
         if (fret_entry.digits == 2) document.end_edit();
+        audition_event(event);
     }
 
     void enter_mark(bool body) {
@@ -779,6 +797,7 @@ struct Editor {
         commit(std::move(next), "Added event");
         selected_gesture = -1;
         selected = static_cast<int>(document.pattern().events.size()) - 1;
+        audition_event(document.pattern().events[static_cast<std::size_t>(selected)]);
     }
 
     void set_model(const char* model) {
@@ -1013,12 +1032,13 @@ struct Editor {
     }
 
     void play() {
-        if (!current_audio()) {
-            request_render(true);
-            return;
-        }
-        queue_audio(rendered.audio.samples.data(), rendered.audio.samples.size(), rendered.audio.sample_rate, rendered.audio.channels);
-        message("Playing rendered revision " + std::to_string(rendered_revision) + ".");
+        close_audio_output();end_fret_entry();document.end_edit();
+        if(!audio_output_available)throw std::runtime_error("Choose an available audio output");
+        auto renderer=std::make_shared<gtracker::NativeRenderer>(gtracker::pattern_renderer(document.pattern()));
+        live_audio.start([renderer](float* out,size_t n){return renderer->read(out,n);},renderer->channels(),audio_output);
+        audio_rate=48000;audio_channels=renderer->channels();
+        live_playing=playing=true;
+        message("Playing realtime synthesis.");
     }
 
     void play_source() {
@@ -1353,6 +1373,7 @@ void canvas(Editor& editor, ImVec2 size, const gtracker::TimelineGeometry* share
             editor.selected = hit;
             editor.selected_gesture = -1;
             const auto& event = editor.document.pattern().events[static_cast<std::size_t>(hit)];
+            if(!editor.playing)editor.audition_event(event);
             editor.cursor_beat = event.beat;
             editor.cursor_lane = event.type == "body_hit" ? strings : event.string_index;
         } else if (gesture_hit >= 0) {
@@ -1916,6 +1937,8 @@ void interface(Editor& editor) {
     if(ImGui::Button("New SID Song"))editor.sid_requested=true;
     toolbar_next(gtracker::ui::scale_label().c_str());
     gtracker::ui::scale_button();
+    toolbar_next("Audition notes");
+    ImGui::Checkbox("Audition notes",&editor.audition_notes);
     const auto title=editor.document.pattern().name+(editor.document.dirty() ? " *" : "")+"  |  r"+std::to_string(editor.document.pattern().revision);
     toolbar_next(title.c_str());
     const float title_width = ImGui::CalcTextSize(title.c_str()).x;
@@ -1971,14 +1994,11 @@ void interface(Editor& editor) {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip(slides_enabled ? "Add a continuous fret curve on the current string. It retains ringing vibration." : "Select the experimental contact model and v2 format. Undo restores the previous model; the original baseline remains selectable.");
     toolbar_next(editor.rendering() ? "Cancel render" : "Render",20);
     render_button(editor);
-    ImGui::BeginDisabled(editor.rendering());
-    const char* play_label = editor.source ? (editor.current_audio() ? "Play synth" : "Render + Play synth")
-                                           : (editor.current_audio() ? "Play" : "Render + Play");
+    const char* play_label = editor.source ? "Play synth" : "Play";
     toolbar_next(play_label);
     if (ImGui::Button(play_label)) {
         editor.attempt([&]() { editor.play(); });
     }
-    ImGui::EndDisabled();
     toolbar_next("Stop");
     if (ImGui::Button("Stop")) {
         editor.stop();
@@ -2276,9 +2296,10 @@ int run(const Arguments &args) {
         if (args.smoke && !sid_editor && editor.render_failed) {
             throw std::runtime_error(editor.status);
         }
-        if (editor.playing && editor.audio_stream && SDL_GetAudioStreamQueued(editor.audio_stream) == 0) {
+        if (editor.playing && (editor.live_playing ? editor.live_audio.done() : editor.audio_stream && SDL_GetAudioStreamQueued(editor.audio_stream) == 0)) {
             editor.playing = false;
-            editor.message("Playback finished.");
+            const auto error=editor.live_audio.error();
+            editor.message(error.empty()?"Playback finished.":"Playback: "+error,!error.empty());
         }
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
@@ -2369,7 +2390,7 @@ int main(int argc, char* argv[]) {
                          "The smoke test renders a pattern and draws at least N frames (default 8).\n"
                          "Use SDL_VIDEODRIVER=dummy SDL_RENDER_DRIVER=software for headless smoke.\n"
                          "Screenshots are BMP files. --screenshot implies --frames 8 if omitted.\n"
-                         "Space: render/play/stop. Ctrl/Cmd+S: save. Ctrl/Cmd+Z: undo. Delete: event.\n";
+                         "Space: play/stop. Ctrl/Cmd+S: save. Ctrl/Cmd+Z: undo. Delete: event.\n";
             return 0;
         }
         return run(args);

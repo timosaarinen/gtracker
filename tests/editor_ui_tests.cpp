@@ -139,13 +139,13 @@ void render_and_dummy_audio(const Arguments& args) {
     check_ui(editor.current_audio() && editor.document.generation() == generation,
              "no-op edit invalidated audio");
     editor.play();
-    check_ui(editor.playing && editor.audio_stream && SDL_GetAudioStreamQueued(editor.audio_stream) > 0,
+    check_ui(editor.playing && editor.live_playing && !editor.live_audio.done(),
              "dummy audio did not receive rendered PCM");
     editor.stop();
-    check_ui(!editor.playing && SDL_GetAudioStreamQueued(editor.audio_stream) == 0, "stop left audio queued");
+    check_ui(!editor.playing && editor.live_audio.done(), "stop left audio queued");
     editor.play();
     editor.undo();
-    check_ui(!editor.playing && !editor.current_audio() && SDL_GetAudioStreamQueued(editor.audio_stream) == 0,
+    check_ui(!editor.playing && !editor.current_audio() && editor.live_audio.done(),
              "undo did not stop/invalidate playback");
 }
 
@@ -161,7 +161,7 @@ void output_selection(Host& host,const Arguments& args) {
     check_ui(invalid && editor.audio_output == SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK && !editor.audio_stream,"invalid output changed the selection or opened audio");
     editor.select_audio_output(device);
     editor.request_render(); editor.pending.wait(); editor.poll_render(); editor.play();
-    check_ui(editor.playing && editor.audio_stream,"explicit dummy output did not receive synth audio");
+    check_ui(editor.playing && editor.live_playing,"explicit dummy output did not receive synth audio");
     const auto pcm = editor.rendered.audio.samples;
     editor.play_after_render = true;
     editor.select_audio_output(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK);
@@ -255,7 +255,7 @@ std::string file_bytes(const std::filesystem::path& path) {
 void export_workflow(Host& host,const Arguments& args) {
     Editor editor(args);
     const auto original = file_bytes(args.document);
-    const auto output = args.document.parent_path()/std::filesystem::u8path(u8"export-ääni-音.wav");
+    const auto output = args.document.parent_path()/std::filesystem::u8path(u8"export-Ã¤Ã¤ni-éŸ³.wav");
     const auto expected_path = args.document.parent_path()/"export-reference.wav";
     set_text(editor.export_path,output.u8string());
     const auto generation = editor.document.generation();
@@ -417,7 +417,7 @@ void source_workflow(Host& host, const Arguments& args, const std::filesystem::p
 
 void slide_authoring(Host& host, const Arguments& original) {
     Arguments args = original;
-    args.document = original.document.parent_path() / std::filesystem::u8path(u8"slide-滑音.gtrk.json");
+    args.document = original.document.parent_path() / std::filesystem::u8path(u8"slide-æ»‘éŸ³.gtrk.json");
     gtracker::save_pattern(gtracker::load_pattern(original.resource_dir / "examples/campfire.gtrk.json"), args.document);
     Editor editor(args);
     editor.set_model("contact_0_2");
@@ -925,7 +925,7 @@ int main(int argc, char** argv) {
         Arguments args;
         args.data_dir = directory / "data";
         args.resource_dir = std::filesystem::path(argv[1]);
-        args.document = directory / std::filesystem::u8path(u8"yö-音楽.gtrk.json");
+        args.document = directory / std::filesystem::u8path(u8"yÃ¶-éŸ³æ¥½.gtrk.json");
         std::filesystem::copy_file(std::filesystem::path(argv[1]) / "examples/campfire.gtrk.json", args.document,
                                    std::filesystem::copy_options::overwrite_existing);
         Host host;

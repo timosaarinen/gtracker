@@ -1,5 +1,25 @@
 # Current handoff
 
+Realtime/release preparation, 2026-10-30, based on `5605cf9`: SID song, loop
+and note playback now use a warmed persistent external emulator and bounded
+512-frame PCM blocks. Guitar playback and fret/click auditions use NativeRenderer
+on a bounded producer thread. Export and realtime SID share configuration source.
+All 31 Windows desktop tests passed; native dummy tests now cover the live path.
+`tools/sid_stream_verify.py` compares 520,343 frames across two warmed loads: max
+3 PCM16 units difference from offline, within an explicit 4-unit tolerance.
+Warm load/first-block ~12–13 ms; startup table warm-up ~327–450 ms. These exclude
+compilation/device latency. Logs: `.local/sid/realtime-{build,tests}.log` and
+`.local/sid/stream-verification/report.json`. No physical listening claim.
+Earlier tests expected complete queued PCM and were updated to assert streamed
+playback; initial comparison exposed retained emulator-state differences, now
+reported explicitly. SID seeking advances preceding state, and edits stop the
+running snapshot. The package uses helpers rather than the legacy 579-note atlas.
+README, contributing, realtime and release guides now describe current behavior.
+Full local CI passed at `.local/ci/runs/20261030T083730Z-d69d2ee3/report.json`
+(22 native, 105 Python with one platform skip). Historical audit inspected 474
+Git blobs with zero credential-pattern matches; this is a bounded scan, not a
+guarantee. Project license awaits the owner; release gates are in docs/release.md.
+
 MP4 export, 2026-10-30, based on `85b1df4`: native More > Export MP4 Video
 and CLI sid-export-mp4 use isolated SID voices, mixed FFT, fixed title/author
 plate and external FFmpeg H.264/AAC fast-start encoding. Windows desktop build,

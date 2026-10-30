@@ -70,6 +70,11 @@ def prepare_video(msys):
     command=['g++','-O2','-std=c++17','-I'+prefix+'/include',msys_path(ROOT/'tools/sid_render.cpp'),'-L'+prefix+'/lib','-lsidplayfp','-lresidfp','-static','-lwinpthread','-o',msys_path(tools/'gtracker_sidvisual.exe')]
     subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc','export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(command)],check=True)
     (tools/'video.json').write_text(json.dumps({'version':1,'source_sha256':hashlib.sha256((ROOT/'tools/sid_render.cpp').read_bytes()).hexdigest(),'files':{'gtracker_sidvisual.exe':hashlib.sha256((tools/'gtracker_sidvisual.exe').read_bytes()).hexdigest()}},indent=2)+'\n')
+    stream_command=command.copy()
+    stream_command[stream_command.index(msys_path(ROOT/'tools/sid_render.cpp'))]=msys_path(ROOT/'tools/sid_stream.cpp')
+    stream_command[-1]=msys_path(tools/'gtracker_sidstream.exe')
+    subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc','export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(stream_command)],check=True)
+    (tools/'stream.json').write_text(json.dumps({'version':1,'files':{'gtracker_sidstream.exe':hashlib.sha256((tools/'gtracker_sidstream.exe').read_bytes()).hexdigest()}},indent=2)+'\n')
     print('Isolated SID voice renderer prepared')
 
 def prepare(msys):

@@ -26,7 +26,7 @@ class DevelopmentLaunchTests(unittest.TestCase):
             manifest = root / ".local/sid/tools/backend.json"
             manifest.parent.mkdir(parents=True)
             manifest.write_text("{}")
-            (manifest.parent / "video.json").write_text("{}")
+            (manifest.parent / "stream.json").write_text("{}")
             editor = root / ".local/build/desktop/bin" / ("gtracker_editor.exe" if dev.os.name == "nt" else "gtracker_editor")
             editor.parent.mkdir(parents=True)
             editor.write_bytes(b"mock built executable")

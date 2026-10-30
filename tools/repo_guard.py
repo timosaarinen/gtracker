@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 MAX_BYTES = 2 * 1024 * 1024
 FORBIDDEN_SUFFIXES = {
-    ".wav", ".flac", ".mp3", ".aif", ".aiff", ".ogg", ".opus", ".m4a",
+    ".mp4", ".prg", ".sid", ".wav", ".flac", ".mp3", ".aif", ".aiff", ".ogg", ".opus", ".m4a",
     ".onnx", ".pt", ".pth", ".ckpt", ".safetensors", ".h5",
     ".exe", ".dll", ".so", ".dylib", ".o", ".obj", ".a", ".lib", ".pdb", ".pyc", ".pyo",
     ".zip", ".7z", ".tar", ".gz", ".bz2", ".xz",
