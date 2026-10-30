@@ -64,7 +64,7 @@ void buffer(char *out, std::size_t size, const std::string &value) {
 struct Editor::Impl {
     Document doc;
     Backend backend;
-    std::filesystem::path resources, data, path, recovery;
+    std::filesystem::path resources, data, path, recovery, export_destination;
     char filename[1024]{}, title[257]{}, author[257]{}, rename[257]{};
     std::string status = "Edit enabled. Select a voice and play the piano keys.";
     Cursor cursor, anchor;
@@ -221,6 +221,8 @@ struct Editor::Impl {
     void save_to(const std::filesystem::path &target) {
         if (target.empty())
             throw std::runtime_error("Choose a filename");
+        if (job.valid() && purpose == Purpose::output)
+            require_distinct_output(target, {export_destination});
         save(doc.song, target);
         path = target;
         doc.mark_saved();
@@ -356,6 +358,7 @@ struct Editor::Impl {
         cancel = false;
         job_generation = doc.generation;
         purpose = Purpose::output;
+        export_destination = std::filesystem::absolute(target);
         job = std::async(std::launch::async, [this, snapshot, target, format] {
             export_file(snapshot, backend, target, format, cancel);
             return Result{};
@@ -854,7 +857,8 @@ struct Editor::Impl {
         if (ImGui::BeginPopupModal("SID file", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("%s", file_action.c_str());
             ImGui::SetNextItemWidth(gtracker::ui::pixels(650));
-            ImGui::InputText("Path", filename, sizeof(filename));
+            if (ImGui::InputText("Path", filename, sizeof(filename)))
+                confirm_replace = false;
             ImGui::TextWrapped("%s", status.c_str());
             const auto target = std::filesystem::u8path(filename);
             if (confirm_replace)

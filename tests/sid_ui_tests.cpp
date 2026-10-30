@@ -92,6 +92,19 @@ struct EditorTest {
         s.doc.undo();
         s.save_to(s.data / "roundtrip.sidtrk.json");
         check(serialize(load(s.path)) == serialize(s.doc.song), "save/reopen lost musical data");
+        // A background export must not overwrite a newly saved editable song.
+        const auto protected_path = s.data / "pending-export.sidtrk.json";
+        s.export_destination = protected_path;
+        s.purpose = Editor::Impl::Purpose::output;
+        std::promise<Result> pending_export;
+        s.job = pending_export.get_future();
+        bool rejected = false;
+        try { s.save_to(protected_path); }
+        catch (const std::exception &) { rejected = true; }
+        check(rejected && !std::filesystem::exists(protected_path),
+              "save must reject an active export destination");
+        pending_export.set_value(Result{});
+        s.job.get();
         // A modal owns Escape; it must not toggle Edit in that frame.
         const bool edit_before = s.edit;
         s.file("save");

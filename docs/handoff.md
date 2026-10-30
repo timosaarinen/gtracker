@@ -1,5 +1,22 @@
 # Current handoff
 
+Pre-publication audit, 2026-10-30, based on `922371b`: read issue #1 and reviewed
+save/export, realtime, packaging and public documentation. Fixed SID Save As
+colliding with an active export destination (native regression), and reset
+overwrite confirmation on filename edits. Package verifier now validates complete
+manifest coverage and canonical unique regular-file paths before extraction;
+five new Python tests cover corruption, extra files, links and path ambiguity.
+Windows desktop build + all 31 native tests passed; all 110 Python tests passed
+with one platform skip. SID stream comparison: 520,343 frames twice, max PCM16
+difference 3; warm first block 13.1/13.2 ms, excluding compilation/device latency.
+WSL2 Ubuntu rebuilt desktop and passed two SID native + 10 package/tool tests.
+History scan: 548 reachable blobs, no audited credential-pattern hits, binary
+blobs or forbidden paths; no broken tracked Markdown local links. Evidence under
+`.local/prerelease-*`; WSL logs beside the isolated checkout. Public documentation
+now separates source publication from binary/device qualification. Physical
+listening, clean-machine qualification and Intel macOS remain outstanding;
+no repository visibility change or public binary release was performed.
+
 Linux preparation, 2026-10-30, based on `406c755`: added native pinned SID
 backend builds, Linux desktop bundle with executable launchers, cross-platform
 stream verifier, and reusable package verification. `bun run dev`/Python launcher

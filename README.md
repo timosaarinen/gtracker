@@ -24,7 +24,7 @@ Apple Silicon remains unqualified.
 bun run dev
 ```
 
-This configures and incrementally builds the editor, prepares missing Windows
+This configures and incrementally builds the editor, prepares missing Windows/Linux
 SID helpers, and opens a new SID song. No `bun install` is needed.
 Without Bun, run `python tools/dev.py dev`.
 

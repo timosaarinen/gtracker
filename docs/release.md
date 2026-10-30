@@ -1,7 +1,8 @@
 # Release readiness
 
 This document describes Windows/Linux release preparation, not a published release.
-The owner changes repository visibility. Project code is MIT, with explicit
+The source repository can be public while binary builds remain experimental
+prereleases. The owner changes repository visibility. Project code is MIT, with explicit
 GPL helper exceptions and preserved dependency licenses.
 
 ## Candidate scope
@@ -11,6 +12,31 @@ GPL helper exceptions and preserved dependency licenses.
 - Genuine SID, WAV, runnable C64 PRG and MP4 visualizer exports.
 - Original editable songs, CLI tools, schema and dependency notices.
 - 100–400% UI scaling with a 200% default on 4K displays.
+
+## Pre-publication audit, 2026-10-30
+
+Audited the implementation based on `922371b`, including issue #1, save/export
+paths, realtime transport, package contents, dependency notices and public docs.
+Fixed SID Save As colliding with an active export destination, and reset overwrite
+confirmation when the filename changes. Package verification now rejects unlisted
+payloads, case-colliding names, noncanonical paths, links and checksum mismatches
+before extraction or execution. Corrected outdated Windows-only setup claims.
+
+Windows 11 passed 31 native desktop tests and 110 Python tests (one POSIX-only
+skip). Realtime SID comparison again observed at most 3 PCM16 units difference
+over 520,343 frames, twice. Ubuntu 20.04.6 WSL2 rebuilt the desktop and passed both
+SID native tests and 10 package/verifier tests. These checks cover the working
+fixes; package manifests identify the exact packaged source revision separately.
+
+A scan of all 548 reachable historical Git blobs at the baseline found no matches
+for the audited credential patterns, binary blobs or forbidden artifact paths.
+All tracked Markdown local-file links resolved. This is a bounded audit, not a
+guarantee that every possible secret or defect has been detected. Local evidence:
+`.local/prerelease-history.json`, `.local/prerelease-{build,tests,python,stream}.log`;
+Linux evidence: `audit-{build,tests}.log` beside the isolated WSL checkout.
+
+The source is ready for public review as an experimental project. Binary builds
+remain prerelease candidates with the device and platform limits below.
 
 ## Remaining release gates
 
@@ -66,5 +92,6 @@ The interface includes sharp scaled fonts and a compact zoom control.
 
 Guitar realism and automatic transcription remain research work. SID presets are
 fixed bank 1, PAL/6581 only. Mid-play score edits stop the current snapshot. The
-backend build recipe is Windows-specific; this is not a cross-platform release
-qualification. There is no account integration or automatic social upload.
+backend build recipes support Windows and Linux; macOS is deferred. Automated
+checks do not establish physical-device qualification. There is no account
+integration or automatic social upload.
