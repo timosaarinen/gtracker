@@ -61,6 +61,17 @@ def download(url, expected, target):
     if hashlib.sha256(target.read_bytes()).hexdigest() != expected:
         raise RuntimeError(f'Checksum mismatch: {target}')
 
+def prepare_video(msys):
+    """Add isolated-voice rendering without invalidating the existing audition bank."""
+    tools=BASE/'tools'
+    prefix=msys_path(BASE/'native')
+    if not (BASE/'native/lib/libsidplayfp.a').is_file():
+        raise RuntimeError('Run tools/sid_backend.py prepare before prepare-video.')
+    command=['g++','-O2','-std=c++17','-I'+prefix+'/include',msys_path(ROOT/'tools/sid_render.cpp'),'-L'+prefix+'/lib','-lsidplayfp','-lresidfp','-static','-lwinpthread','-o',msys_path(tools/'gtracker_sidvisual.exe')]
+    subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc','export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(command)],check=True)
+    (tools/'video.json').write_text(json.dumps({'version':1,'source_sha256':hashlib.sha256((ROOT/'tools/sid_render.cpp').read_bytes()).hexdigest(),'files':{'gtracker_sidvisual.exe':hashlib.sha256((tools/'gtracker_sidvisual.exe').read_bytes()).hexdigest()}},indent=2)+'\n')
+    print('Isolated SID voice renderer prepared')
+
 def prepare(msys):
     if os.name != 'nt':
         raise RuntimeError('This backend build recipe currently targets Windows; no other platform qualification is implied.')
@@ -111,14 +122,16 @@ def prepare(msys):
         'renderer':{'adapter':1,'libsidplayfp':'3.1.1','libresidfp':'1.2.3','patch':'serial analogue table construction','sources':LIBRARIES},
         'files':{name:hashlib.sha256((tools/name).read_bytes()).hexdigest() for name in ['gt2reloc.exe','SDL.dll','libwinpthread-1.dll','gtracker_sidrender.exe','GoatTracker-COPYING.txt','GoatTracker-readme.txt','libsidplayfp-COPYING.txt','libresidfp-COPYING.txt','SDL-COPYING.txt','winpthreads-COPYING.txt']}}, indent=2)+'\n')
     print(tools)
+    prepare_video(msys)
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['prepare','check','auditions'])
+    parser.add_argument('command', choices=['prepare','prepare-video','check','auditions'])
     parser.add_argument('--profile',default='desktop',choices=['headless','desktop'])
     parser.add_argument('--msys',type=Path,default=Path('C:/msys64'))
     args=parser.parse_args()
     if args.command=='prepare': prepare(args.msys)
+    elif args.command=='prepare-video': prepare_video(args.msys)
     elif args.command=='check':
         tools=BASE/'tools'
         manifest=json.loads((tools/'backend.json').read_text())

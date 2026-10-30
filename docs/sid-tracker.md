@@ -150,3 +150,30 @@ jobs using synthetic input/dummy devices. Tail diagnostics measure last-half-
 second DC and DC-removed RMS, with a 0.005 (-46 dBFS) RMS limit; chip noise is not
 a stuck voice. Physical listening, real input and hardware remain separate from
 signal/register/dummy evidence. The handoff records actual checks and limits.
+
+## MP4 sharing export
+
+Choose **More > Export MP4 Video**. Background export supports cancellation and
+atomic replacement. Output is 1080p/30 fps H.264/yuv420p, AAC 160 kb/s stereo,
+with fast-start metadata. A permanent title/author plate overlays three isolated
+SID voice scopes and a full-screen logarithmic FFT, bass left and treble right.
+The soundtrack is the normal SID mix with initialization and release tail.
+Visual high-pass/gain does not alter audio. Long titles wrap; glyph coverage
+uses the installed font.
+
+FFmpeg (libx264, AAC, drawtext, showwaves, showfreqs) must be on PATH, in sid-tools,
+or selected with GTRACKER_FFMPEG. It is not redistributed in the developer ZIP.
+GTRACKER_VIDEO_FONT optionally selects a Unicode TTF/OTF font. Windows defaults
+to Segoe UI. Text files with expansion disabled keep song text out of filter code.
+No shell, account access or automatic upload is involved.
+
+Windows `bun run dev` prepares the separate voice helper if missing. Manual setup:
+
+```sh
+python tools/sid_backend.py prepare-video
+python tools/dev.py sid-export-mp4 examples/sid/heavy-mellow.sidtrk.json --output .local/song.mp4 --json
+```
+
+The helper uses the existing pinned SID libraries without invalidating the
+playback audition cache. Packaging includes the helper. Jobs retain PCM/filter
+files and logs under the configured cache directory. Encoding is CPU-based.

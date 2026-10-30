@@ -30,6 +30,12 @@ def sid_inputs(root: Path) -> list[tuple[Path, str]]:
         path=backend/name
         if hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise RuntimeError("SID backend checksum mismatch: "+name)
         result.append((path,"sid-tools/"+name))
+    video=json.loads((backend/"video.json").read_text())
+    result.append((backend/"video.json","sid-tools/video.json"))
+    for name,digest in video["files"].items():
+        if Path(name).name != name or hashlib.sha256((backend/name).read_bytes()).hexdigest()!=digest:
+            raise RuntimeError("Invalid SID video helper: "+name)
+        result.append((backend/name,"sid-tools/"+name))
     info=subprocess.run([str(dev.executable(root,"desktop","gtracker_cli")),"sid-backend-info","--sid-tools",str(backend),"--json"],cwd=root,encoding="utf-8",capture_output=True,check=True)
     identity=json.loads(info.stdout)["cache_identity"]
     atlas=root/".local/sid/auditions"/identity

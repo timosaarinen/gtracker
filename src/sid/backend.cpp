@@ -283,6 +283,8 @@ std::vector<unsigned char> runnable_prg(const Bytes &sid) {
 }
 Result export_file(const Song &song, const Backend &backend, const std::filesystem::path &output,
                    const std::string &format, const std::atomic<bool> &cancel) {
+    if (format == "mp4")
+        return export_video(song, backend, output, cancel);
     if (format == "sng") {
         const auto c = compile(song);
         write(output, c.sng);

@@ -16,8 +16,11 @@ void le(std::ostream &out, std::uint32_t value, int bytes) {
 }
 int main(int argc, char **argv) {
     try {
-        if (argc != 4)
-            throw std::runtime_error("gtracker_sidrender SID WAV FRAMES");
+        if (argc != 4 && argc != 5)
+            throw std::runtime_error("gtracker_sidrender SID WAV FRAMES [SOLO_VOICE_1_TO_3]");
+        const int solo = argc == 5 ? std::stoi(argv[4]) : 0;
+        if (argc == 5 && (solo < 1 || solo > 3))
+            throw std::runtime_error("Solo voice must be 1, 2 or 3");
         const auto frames = std::stoul(argv[3]);
         if (frames > 32 * 1024 * 1024 || !frames)
             throw std::runtime_error("Render sample bound exceeded");
@@ -45,6 +48,10 @@ int main(int argc, char **argv) {
         if (!engine.config(config) || !engine.load(&tune))
             throw std::runtime_error(engine.error());
         engine.initMixer(false);
+        // Muting only changes output routing; all oscillators keep clocking.
+        if (solo)
+            for (unsigned voice = 0; voice < 3; ++voice)
+                engine.mute(0, voice, voice + 1 != static_cast<unsigned>(solo));
         std::ofstream out(argv[2], std::ios::binary);
         out.write("RIFF", 4);
         le(out, 36 + frames * 2, 4);

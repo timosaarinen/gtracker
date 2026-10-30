@@ -110,7 +110,7 @@ if(GT_BUILD_TOOLS)
   target_link_libraries(gtracker_project PUBLIC gtracker_renderer)
   gt_warnings(gtracker_project)
 
-  add_library(gtracker_sid STATIC src/sid/song.cpp src/sid/compiler.cpp src/sid/backend.cpp src/sid/document.cpp)
+  add_library(gtracker_sid STATIC src/sid/song.cpp src/sid/compiler.cpp src/sid/backend.cpp src/sid/document.cpp src/sid/video.cpp)
   target_include_directories(gtracker_sid PUBLIC include PRIVATE "${gt_json_SOURCE_DIR}/single_include")
   target_link_libraries(gtracker_sid PUBLIC gtracker_project Threads::Threads)
   gt_warnings(gtracker_sid)

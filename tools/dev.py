@@ -473,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
         editor.add_argument("--screenshot")
         editor.add_argument("--data-dir", default=".local/dev" if launch == "dev" else ".local")
         editor.add_argument("--resource-dir", default=str(ROOT))
-    for operation in ("sid-validate", "sid-info", "sid-export", "sid-render", "sid-export-prg", "sid-export-sng"):
+    for operation in ("sid-validate", "sid-info", "sid-export", "sid-render", "sid-export-prg", "sid-export-sng", "sid-export-mp4"):
         sid = commands.add_parser(operation)
         sid.add_argument("file")
         sid.add_argument("--output")
@@ -564,6 +564,9 @@ def main(argv: list[str] | None = None) -> int:
                 operation = "check" if exists else "prepare"
                 code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), operation])["returncode"]
                 if code: return code
+                if os.name == "nt" and not (ROOT / ".local/sid/tools/video.json").is_file():
+                    code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), "prepare-video"])["returncode"]
+                    if code: return code
             args.command = "editor"
         if args.command == "configure":
             command = ["cmake", "--preset", args.profile]

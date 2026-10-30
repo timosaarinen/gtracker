@@ -1061,7 +1061,7 @@ struct Editor::Impl {
             ImGui::NewLine();
         if (ImGui::BeginCombo("##export", "More")) {
             for (const auto &f : std::vector<std::pair<const char *, const char *>>{
-                     {"Export WAV", "wav"}, {"Export C64 Program", "prg"}, {"Export SNG", "sng"}})
+                     {"Export MP4 Video", "mp4"}, {"Export WAV", "wav"}, {"Export C64 Program", "prg"}, {"Export SNG", "sng"}})
                 if (ImGui::Selectable(f.first)) {
                     export_format = f.second;
                     file("export");

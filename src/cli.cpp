@@ -73,7 +73,7 @@ void help() {
         "Usage:\n"
         "  gtracker_cli validate PATTERN [--json]\n"
         "  gtracker_cli sid-validate|sid-info SONG [--json]\n"
-        "  gtracker_cli sid-export|sid-render|sid-export-prg|sid-export-sng SONG --output FILE [--sid-tools DIR] [--json]\n"
+        "  gtracker_cli sid-export|sid-render|sid-export-prg|sid-export-sng|sid-export-mp4 SONG --output FILE [--sid-tools DIR] [--json]\n"
         "  gtracker_cli render PATTERN --output WAV [--sample-rate HZ] [--tail SECONDS]\n"
         "                       [--script LUA] [--production JSON] [--bypass-production] [--json]\n"
         "                       [--stream] [--progress-json] [--cancel-file PATH]\n"
@@ -273,7 +273,7 @@ int cli_main(int argc, char** argv) {
             gtracker::write_binary_atomic(output,[&](std::ostream& out){std::ifstream in(r.wav,std::ios::binary);out<<in.rdbuf();});
             std::cout<<nlohmann::json{{"ok",true},{"bank_sha256",r.bank_hash},{"cache_identity",gtracker::sid::audition_identity(backend)},{"output",output.u8string()}}.dump()<<'\n';return 0;
         }
-        if (command == "sid-export" || command == "sid-render" || command == "sid-export-prg" || command == "sid-export-sng") {
+        if (command == "sid-export" || command == "sid-render" || command == "sid-export-prg" || command == "sid-export-sng" || command == "sid-export-mp4") {
             if(argc<3) throw std::runtime_error("A SID song path is required");
             const auto input=std::filesystem::u8path(argv[2]);
             std::filesystem::path output;
@@ -283,7 +283,7 @@ int cli_main(int argc, char** argv) {
             if(output.empty())throw std::runtime_error("SID export requires --output");
             gtracker::require_distinct_output(output,{input});
             const auto song=gtracker::sid::load(input);const std::atomic<bool> cancel{false};
-            const auto sid_result=gtracker::sid::export_file(song,backend,output,command=="sid-render"?"wav":command=="sid-export-prg"?"prg":command=="sid-export-sng"?"sng":"sid",cancel);
+            const auto sid_result=gtracker::sid::export_file(song,backend,output,command=="sid-render"?"wav":command=="sid-export-prg"?"prg":command=="sid-export-sng"?"sng":command=="sid-export-mp4"?"mp4":"sid",cancel);
             std::cout<<nlohmann::json{{"ok",true},{"command",command},{"source_revision",song.revision},{"output",output.u8string()},{"size_bytes",std::filesystem::file_size(output)},{"source_sha256",gtracker::sha256_file(input)},{"output_sha256",gtracker::sha256_file(output)},{"bank_sha256",sid_result.bank_hash},{"instrument_bank_version",1},{"target","pal/6581"},{"patterns",song.patterns.size()},{"orders",gtracker::sid::order_count(song)},{"backend",{{"goattracker","2.77"},{"sidplayfp","3.2.1"},{"libsidplayfp","3.1.1"}}},{"sid_sha256",sid_result.sid_hash},{"load_address",sid_result.load},{"init_address",sid_result.init},{"play_address",sid_result.play},{"preroll_ticks",sid_result.preroll_ticks},{"rendered_seconds",sid_result.seconds},{"warnings",sid_result.warnings},{"authored_seconds",gtracker::sid::duration(song)}}.dump(2)<<'\n';return 0;
         }
         if (command == "sid-validate" || command == "sid-info") {

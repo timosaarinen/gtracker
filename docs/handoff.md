@@ -1,5 +1,18 @@
 # Current handoff
 
+MP4 export, 2026-10-30, based on `85b1df4`: native More > Export MP4 Video
+and CLI sid-export-mp4 use isolated SID voices, mixed FFT, fixed title/author
+plate and external FFmpeg H.264/AAC fast-start encoding. Windows desktop build,
+five focused native cases and four launcher tests passed. An actual 10.84-second
+export decoded to 325 frames, all with title pixels; moov preceded mdat. The
+bass-only intro had zero AC RMS in voices 1/2 and 2340 PCM units in voice 3.
+Output: 2,169,351 bytes. Evidence under `.local/sid/`: video-test.mp4,
+video-test.log, video-final.png, video-build.log. Early checks caught reversed
+mute documentation and transient title drawing, corrected before final checks.
+No Facebook upload, listening or other-platform qualification is claimed.
+FFmpeg remains external; see the SID guide. Next requested work: replace
+prerendered playback/auditions with low-latency realtime synthesis throughout.
+
 UI scale follow-up, 2026-10-30: 4K displays now default to maximized 200%.
 The scale selector is a normal toolbar button with a popup in both editor modes;
 the dedicated menu row is removed. Saved choices and CLI overrides still apply.
