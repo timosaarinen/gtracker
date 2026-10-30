@@ -1,5 +1,11 @@
 # Current handoff
 
+License decision, 2026-10-30: owner selected MIT for project code while preserving
+dependency licenses. LICENSE and public/package documentation now reflect it.
+Explicit GPL SID helper sources retain GPL-2.0-or-later. The clean `b72c9a4`
+84-file candidate passed relocation, exports, dummy launch, helper RPC and all
+manifest hashes; final ZIP refresh adds the MIT license and current docs.
+
 Release-candidate follow-up: implementation `d2f435d` is pushed. Its clean
 82-file package passed all manifest hashes, Unicode/space relocation with a
 restricted PATH, SID/PRG/WAV/MP4 export, dummy editor launch and live helper RPC;
@@ -27,7 +33,8 @@ README, contributing, realtime and release guides now describe current behavior.
 Full local CI passed at `.local/ci/runs/20261030T083730Z-d69d2ee3/report.json`
 (22 native, 105 Python with one platform skip). Historical audit inspected 474
 Git blobs with zero credential-pattern matches; this is a bounded scan, not a
-guarantee. Project license awaits the owner; release gates are in docs/release.md.
+guarantee. The later MIT decision supersedes the pending-license note; remaining gates are
+in docs/release.md.
 
 MP4 export, 2026-10-30, based on `85b1df4`: native More > Export MP4 Video
 and CLI sid-export-mp4 use isolated SID voices, mixed FFT, fixed title/author

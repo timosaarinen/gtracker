@@ -1,8 +1,8 @@
 # Third-party notices
 
 The native dependencies are fetched from pinned source archives; their terms are
-reproduced below. Preserve the applicable notices when packaging binaries. These
-notices do not select a distribution license for gtracker itself.
+reproduced below. Preserve the applicable notices when packaging binaries. Project code is MIT (see LICENSE), except explicitly licensed external helper
+sources. These notices preserve the separate dependency terms.
 
 ## SDL 3.2.28
 

@@ -8,8 +8,7 @@ phrases, hear notes as you enter them, and export audio or shareable videos.
 It began as a music-authoring tool for *Lust of War*.
 
 **Status: Windows release candidate.** Realtime synthesis and exports have native
-and automated coverage. Physical device/listening qualification and the project
-license decision remain release gates; see [release readiness](docs/release.md).
+and automated coverage. Physical device/listening qualification remains a release gate; see [release readiness](docs/release.md).
 
 ## Start from the repository
 
@@ -113,7 +112,9 @@ system and source revision. Keep personal recordings and credentials out of Git.
 
 ## Distribution and licenses
 
-The project license is awaiting the owner's decision. Public repository
-visibility alone does not grant an open-source license. Dependencies and external
-helpers retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
-No downloaded binaries, ROMs, model weights or recordings are committed.
+gtracker's own code is available under the [MIT License](LICENSE), except files
+that explicitly carry a different license. The external SID helper sources
+(`tools/sid_render.cpp`, `tools/sid_stream.cpp`, `tools/sid_configuration.hpp`)
+remain GPL-2.0-or-later. Dependencies retain their respective licenses; see
+[third-party notices](THIRD_PARTY_NOTICES.md). No downloaded binaries, ROMs,
+model weights or recordings are committed.

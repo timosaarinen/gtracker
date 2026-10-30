@@ -58,6 +58,7 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
                  "schema/alignment-result.schema.json", "schema/production.schema.json", "schema/song.schema.json", "schema/render-cache.schema.json", "schema/note-proposals.schema.json", "schema/proposal-selection.schema.json", "docs/cache.md", "docs/song.md", "docs/production.md", "docs/rendering.md", "docs/runtime.md", "docs/editor.md", "docs/synthesis.md", "docs/gestures.md", "docs/retained.md", "docs/proposals.md", "docs/takes.md", "docs/capture.md", "docs/alignment.md", "THIRD_PARTY_NOTICES.md"):
         result.append((root / name, name))
     result.append((root / "packaging/README.txt", "README.txt"))
+    result.append((root / "LICENSE", "LICENSE"))
     dependencies = root / ".local/build" / profile / "_deps"
     for source, target in [("gt_json-src/LICENSE.MIT", "json.txt"), ("gt_lua-src/src/lua.h", "lua-header.txt")]:
         result.append((dependencies / source, "licenses/" + target))

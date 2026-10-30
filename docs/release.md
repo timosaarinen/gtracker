@@ -1,7 +1,8 @@
 # Release readiness
 
 This document describes the Windows release candidate, not a published release.
-The owner changes repository visibility and decides the project license.
+The owner changes repository visibility. Project code is MIT, with explicit
+GPL helper exceptions and preserved dependency licenses.
 
 ## Candidate scope
 
@@ -13,15 +14,13 @@ The owner changes repository visibility and decides the project license.
 
 ## Remaining release gates
 
-1. Choose and add the project license. External GPL/LGPL helpers and libraries
-   retain their own license and corresponding-source requirements.
-2. On a real Windows device, listen through note entry, full playback, looping,
+1. On a real Windows device, listen through note entry, full playback, looping,
    pause/resume, stop, output changes and exports. Measure input-to-sound latency
    if making a numerical latency claim. Confirm no clicks or underruns.
-3. Test the package on a clean Windows machine with the documented VC++ runtime.
+2. Test the package on a clean Windows machine with the documented VC++ runtime.
    Exercise save/reopen, recovery, Unicode paths and an unwritable installation.
-4. Upload an MP4 manually to the intended service and check its transcode.
-5. Only claim Linux/macOS support after running the current candidate there.
+3. Upload an MP4 manually to the intended service and check its transcode.
+4. Only claim Linux/macOS support after running the current candidate there.
 
 ## Reproducible candidate build
 

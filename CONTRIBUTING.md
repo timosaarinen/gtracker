@@ -1,8 +1,9 @@
 # Contributing
 
 Start with the README and the guide for the subsystem you want to change.
-The project license is pending; contact the owner before contributing code
-whose licensing would depend on a project-wide license grant.
+Project contributions use MIT unless a file explicitly states another license.
+Preserve dependency notices and the GPL-2.0-or-later license of the external SID
+helper sources. See LICENSE and THIRD_PARTY_NOTICES.md.
 
 ## Development
 

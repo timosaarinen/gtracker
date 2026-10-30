@@ -1,8 +1,7 @@
 gtracker developer package
 
-This is a release-candidate development build, not a qualified public release. The project has
-not selected its own distribution license. See THIRD_PARTY_NOTICES.md and the
-licenses directory for dependency notices; they do not license gtracker itself.
+This is a release-candidate development build, not a qualified public release. Project code is MIT (LICENSE). External GPL helper sources and dependencies
+retain their separate licenses; see THIRD_PARTY_NOTICES.md and licenses/.
 
 Extract the whole gtracker folder. A headless package contains the CLI only.
 In a Windows desktop package, double-click Start SID Tracker.cmd or
