@@ -2,6 +2,8 @@
 
 # GTracker - The Ultimate SID Tracker
 
+[Website](https://timosaarinen.github.io/gtracker/) · [SID manual](docs/sid-tracker.md)
+
 **Do you remember C64? Did you feel the magic of SID music?**
 
 Sometimes the best part of a C64 game was leaving the title screen running.

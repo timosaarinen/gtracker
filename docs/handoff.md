@@ -1,5 +1,15 @@
 # Current handoff
 
+GitHub Pages, 2026-10-30: added a static SID-first site in `docs/index.html` and
+`docs/site.css`, reusing the banner, with no emojis, scripts, analytics or external
+fonts. `docs/.nojekyll` serves these files directly. Publication uses GitHub's
+main-branch `/docs` Pages source; future pushes update it, independently of the
+manual native qualification workflow. README links to the site. Local HTML
+structure, fragment/resource/manual links, image metadata, emoji scan and HTTP
+asset checks passed. Browser preview was unavailable (no connected browsers),
+so no visual desktop/mobile browser qualification is claimed. Mobile layout and
+reduced-motion styles are included. No native application changes.
+
 Public README, 2026-10-30: owner made the repository public and requested a
 musician-facing C64 SID introduction, the opening nostalgia questions, the
 unqualified "The Ultimate SID Tracker" headline, and an illustrated banner.
