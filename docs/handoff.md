@@ -1,5 +1,11 @@
 # Current handoff
 
+Website palette, 2026-10-30: replaced the cream background with dark C64-style
+blue (#352879), light text, lavender labels and peach accents. Code panels stay
+darker; button and footer colors were adjusted for readability. All six main
+text/background combinations checked above 4.5:1 contrast. CSS/theme metadata
+only; browser visual checking remains unavailable in this session.
+
 Release published, 2026-10-30: after the owner corrected token access,
 `v0.5.0-rc.1` was published as a prerelease with Windows/Linux portable ZIPs,
 SHA256SUMS.txt and verification.json. GitHub-reported asset digests match the
