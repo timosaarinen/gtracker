@@ -1,5 +1,14 @@
 # Current handoff
 
+SID PDF manual, 2026-10-30: added `tools/manual_pdf.py`, an optional ReportLab
+authoring tool that preserves the SID guide and adds a branded cover and shortcut
+table. Outputs stay under `.local/`; the PDF is a release asset, not a Git binary.
+Six A4 pages were rasterized and visually reviewed, with text bounds and link
+checks. Rendering used PyMuPDF because Poppler was unavailable. Source manual
+now names Windows/Linux prerequisites accurately and clarifies license terms.
+README/site link to the PDF alongside the editable source manual. Rebuild with
+`python tools/manual_pdf.py` in an environment with ReportLab installed.
+
 Banner revision, 2026-10-30: replaced the requested artwork with a blue-background
 version showing pulse, sawtooth and triangle traces. Visually inspected generated
 output; measured dimensions 2172 x 724 and sampled background pixels. Generation

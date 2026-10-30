@@ -2,7 +2,7 @@
 
 # GTracker - The Ultimate SID Tracker
 
-[Website](https://timosaarinen.github.io/gtracker/) · [SID manual](docs/sid-tracker.md)
+[Website](https://timosaarinen.github.io/gtracker/) · [SID manual (PDF)](https://github.com/timosaarinen/gtracker/releases/download/v0.5.0-rc.1/gtracker-sid-manual.pdf) · [Online manual](docs/sid-tracker.md)
 
 **Do you remember C64? Did you feel the magic of SID music?**
 

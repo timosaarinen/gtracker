@@ -111,7 +111,9 @@ canonical source, exact SID, native build and duration; complete PCM hashes are
 checked and corrupt entries regenerate. Jobs own their processes and discard
 stale/cancelled autoplay after editing, loading or undoing.
 
-Developer setup requires MSYS2 i686 SDL/GCC and UCRT64 GCC/autotools:
+Windows developer setup requires MSYS2 i686 SDL/GCC and UCRT64 GCC/autotools.
+Linux prerequisites and native helper setup are in the
+[Linux guide](https://github.com/timosaarinen/gtracker/blob/main/docs/linux.md).
 
 ```sh
 python tools/sid_backend.py prepare
@@ -130,7 +132,7 @@ checksums, licenses, source archives and build/patch recipe. To reconstruct
 backend build inputs, copy all helper `.cpp`/`.hpp` sources and `sid_backend.py` from `sid-tools/source`
 to `ROOT/tools/` and archives to `ROOT/.local/sid/`, then run the recipe with the
 documented build prerequisites. GPL backend executables remain external; this
-does not select gtracker's own license.
+does not change gtracker's MIT license or the helpers' GPL terms.
 
 ## Demonstration and evidence
 
@@ -177,7 +179,7 @@ GTRACKER_VIDEO_FONT optionally selects a Unicode TTF/OTF font. Windows defaults
 to Segoe UI. Text files with expansion disabled keep song text out of filter code.
 No shell, account access or automatic upload is involved.
 
-Windows `bun run dev` prepares the separate voice helper if missing. Manual setup:
+`bun run dev` prepares the separate voice helper if missing on Windows/Linux. Manual setup:
 
 ```sh
 python tools/sid_backend.py prepare-video
