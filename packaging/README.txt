@@ -5,8 +5,9 @@ retain their separate licenses; see THIRD_PARTY_NOTICES.md and licenses/.
 
 Extract the whole gtracker folder. A headless package contains the CLI only.
 In a Windows desktop package, double-click Start SID Tracker.cmd or
-Start Guitar Editor.cmd. On Linux/macOS
-run ./gtracker_editor. The editor opens an original built-in
+Start Guitar Editor.cmd. On Linux, run ./start-sid.sh or ./start-guitar.sh.
+macOS packages are deferred pending native verification.
+The guitar editor opens an original built-in
 sketch. Play starts realtime synthesis. See docs/editor.md for controls.
 Export WAV opens a background snapshot exporter in the inspector. Choose a
 writable .wav path; existing WAVs require Replace confirmation. Audio output
@@ -49,6 +50,7 @@ It does not recognize chords/articulations or recover actual played strings.
 Platform runtime libraries are prerequisites, not bundled here. Windows builds
 using MSVC/Clang require the Microsoft Visual C++ 2015-2022 x64 runtime. Linux
 desktop builds require the system windowing/audio libraries used by their build.
+Linux SID also requires the SDL 1.2 ABI (Ubuntu: libsdl1.2debian); see docs/linux.md.
 The package manifest records native build identity, source fingerprint and build platform; that is
 provenance, not evidence that another operating system or physical device passed.
 

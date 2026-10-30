@@ -988,7 +988,9 @@ struct Editor::Impl {
                     export_format = f.second;
                     file("export");
                 }
+#ifdef _WIN32
             if(ImGui::Selectable("Set up MP4 export"))setup_prompt=true;
+#endif
             ImGui::EndCombo();
         }
         if(setup_prompt){ImGui::OpenPopup("Download FFmpeg");setup_prompt=false;}

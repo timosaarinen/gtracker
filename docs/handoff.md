@@ -1,5 +1,26 @@
 # Current handoff
 
+Linux preparation, 2026-10-30, based on `406c755`: added native pinned SID
+backend builds, Linux desktop bundle with executable launchers, cross-platform
+stream verifier, and reusable package verification. `bun run dev`/Python launcher
+can prepare Linux SID tools. Windows helper compilation was checked separately
+under `.local/sid/windows-recipe-check`, leaving installed helpers intact.
+Windows build, SID dummy test and nine package/launcher tests passed.
+Ubuntu 20.04.6 WSL2 x86_64 (GCC 9.4, CMake 4.3.3, Python 3.10.14) in the isolated
+`/home/tims/.local/share/gtracker-release/repo` checkout passed all 31 desktop
+tests, then local CI (22 native, 105 Python; report
+`.local/ci/runs/20261030T092327Z-902917b4/report.json`). Initial headless CI exposed
+tests assuming an already-built editor; fixed executable fixtures and proper
+skip detection. Real stream verification compared 520,343 frames twice with
+max difference 3 PCM16 units. Warm first block ~11.7 ms, helper startup ~299 ms,
+excluding compilation/device latency. Relocated Linux package exported all four
+formats, launched SID/guitar with dummy devices and left installation unchanged.
+Logs live in `/home/tims/.local/share/gtracker-release/`; package evidence under
+the checkout's `.local/package-checks/`. Manual hosted workflow now prepares and
+checks Linux packages; Windows packaging stays local with MSYS2. No hosted run
+or physical-device qualification claimed. macOS release is explicitly postponed
+for the owner's Intel MBP16; Apple Silicon remains unqualified.
+
 FFmpeg setup, 2026-10-30, based on `65b7101`: Windows More > Set up MP4 export
 offers a cancellable, SHA-256-pinned Gyan 9.0.2 download into the data folder.
 No admin/PATH changes; fixed-path extraction retains upstream license/readme.

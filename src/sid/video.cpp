@@ -41,7 +41,11 @@ std::filesystem::path ffmpeg_path(const Backend &backend) {
         }
     }
     throw std::runtime_error("MP4 export needs FFmpeg (libx264, AAC, drawtext, showwaves, showfreqs). "
+#ifdef _WIN32
                              "Choose More > Set up MP4 export, or install FFmpeg on PATH.");
+#else
+                             "Install FFmpeg on PATH, or set GTRACKER_FFMPEG to its executable.");
+#endif
 }
 std::filesystem::path video_font() {
     if (const auto *font = std::getenv("GTRACKER_VIDEO_FONT")) {

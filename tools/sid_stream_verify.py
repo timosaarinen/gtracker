@@ -1,4 +1,5 @@
-"""Verify the actual persistent SID helper against the offline renderer (Windows)."""
+"""Verify the actual persistent SID helper against the offline renderer."""
+import os
 import json
 import pathlib
 import struct
@@ -9,7 +10,8 @@ import wave
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 folder=ROOT/'.local/sid/stream-verification'
 folder.mkdir(parents=True,exist_ok=True)
-cli=ROOT/'.local/build/desktop/bin/gtracker_cli.exe'
+executable_suffix='.exe' if os.name=='nt' else ''
+cli=ROOT/('.local/build/desktop/bin/gtracker_cli'+executable_suffix)
 tools=ROOT/'.local/sid/tools'
 score=json.loads((ROOT/'examples/sid/heavy-mellow.sidtrk.json').read_text())
 score['sections']=score['sections'][:1]
@@ -21,7 +23,7 @@ for operation,suffix in [('sid-export','sid'),('sid-render','wav')]:
 with wave.open(str(folder/'song.wav')) as wav:
     expected=wav.readframes(wav.getnframes())
 started=time.perf_counter()
-process=subprocess.Popen([str(tools/'gtracker_sidstream.exe')],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
+process=subprocess.Popen([str(tools/('gtracker_sidstream'+executable_suffix))],stdin=subprocess.PIPE,stdout=subprocess.PIPE)
 def word():
     value=process.stdout.read(4)
     assert len(value)==4,'helper terminated'

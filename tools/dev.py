@@ -559,12 +559,10 @@ def main(argv: list[str] | None = None) -> int:
             needs_sid = args.sid or bool(args.file and args.file.endswith(".sidtrk.json"))
             if needs_sid:
                 exists = (ROOT / ".local/sid/tools/backend.json").is_file()
-                if not exists and os.name != "nt":
-                    raise RuntimeError("Prepare SID backend tools under .local/sid/tools first; automatic backend setup currently targets Windows. Use --guitar for guitar mode.")
                 operation = "check" if exists else "prepare"
                 code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), operation])["returncode"]
                 if code: return code
-                if os.name == "nt" and not (ROOT / ".local/sid/tools/stream.json").is_file():
+                if not (ROOT / ".local/sid/tools/stream.json").is_file():
                     code = run_command(ROOT, [sys.executable, str(ROOT / "tools/sid_backend.py"), "prepare-video"])["returncode"]
                     if code: return code
             args.command = "editor"

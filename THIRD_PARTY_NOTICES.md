@@ -164,6 +164,11 @@ texts under `sid-tools/`. No binaries, ROMs or generated audio are committed to
 Git. The optional upstream sidplayfp 3.2.1 console download is an investigation
 tool; it is not the application's runtime renderer or part of the bundle.
 
+Linux packages include the pinned GoatTracker and emulator source archives,
+helper sources, recipes and license texts. The packer uses the distribution's
+replaceable SDL 1.2 ABI library; that system library is not bundled. Consult the
+distribution package for its corresponding source and notices.
+
 The separate realtime helper `tools/sid_stream.cpp` is GPL-2.0-or-later and
 uses the same pinned libsidplayfp/reSIDfp libraries. Its source, recipe and
 corresponding library archives accompany the helper in packages. FFmpeg is an

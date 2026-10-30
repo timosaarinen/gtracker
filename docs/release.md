@@ -1,6 +1,6 @@
 # Release readiness
 
-This document describes the Windows release candidate, not a published release.
+This document describes Windows/Linux release preparation, not a published release.
 The owner changes repository visibility. Project code is MIT, with explicit
 GPL helper exceptions and preserved dependency licenses.
 
@@ -14,13 +14,25 @@ GPL helper exceptions and preserved dependency licenses.
 
 ## Remaining release gates
 
+Local Linux evidence (2026-10-30): Ubuntu 20.04.6 x86_64 under WSL2, GCC 9.4,
+CMake 4.3.3 and Python 3.10.14. The desktop suite passed 31 tests; local CI passed
+22 native and 105 Python tests. Persistent SID output matched offline output
+within the documented 4-unit PCM16 tolerance (observed maximum 3 over 520,343
+frames, twice). The relocated package exported SID/PRG/WAV/MP4, launched both
+editors with dummy devices, and retained unchanged installation hashes.
+This is automated candidate evidence, not a physical listening qualification.
+
 1. On a real Windows device, listen through note entry, full playback, looping,
    pause/resume, stop, output changes and exports. Measure input-to-sound latency
    if making a numerical latency claim. Confirm no clicks or underruns.
 2. Test the package on a clean Windows machine with the documented VC++ runtime.
    Exercise save/reopen, recovery, Unicode paths and an unwritable installation.
 3. Upload an MP4 manually to the intended service and check its transcode.
-4. Only claim Linux/macOS support after running the current candidate there.
+4. Linux qualification uses a separate Ubuntu WSL2 checkout and the
+   [Linux package checks](linux.md). WSL2 dummy tests cannot establish native
+   desktop device quality or compatibility with every distribution.
+5. macOS release is postponed. Verify on the owner's Intel MBP16 before preparing
+   an Intel candidate; Apple Silicon requires its own native qualification.
 
 ## Reproducible candidate build
 

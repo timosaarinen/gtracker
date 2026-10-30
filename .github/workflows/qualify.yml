@@ -18,7 +18,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15-intel]
+        # macOS release work is deferred until native Intel MBP qualification.
+        os: [ubuntu-22.04, windows-latest]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -35,7 +36,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxrender-dev libxss-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libgl1-mesa-dev
+          sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool libsdl1.2-dev ffmpeg fonts-dejavu-core pkg-config libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxrender-dev libxss-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libgl1-mesa-dev
+      - name: Prepare pinned Linux SID backend
+        if: runner.os == 'Linux'
+        run: python tools/sid_backend.py prepare
       - name: Inspect toolchain
         run: python tools/dev.py doctor
       - name: Run headless local qualification suite
@@ -48,8 +52,15 @@ jobs:
         run: python tools/dev.py test --profile desktop
       - name: Check authoring integration with generated captures
         run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Assemble local developer package
+      - name: Verify Linux realtime SID against offline output
+        if: runner.os == 'Linux'
+        run: python tools/sid_stream_verify.py
+      - name: Assemble Linux candidate (Windows packages use the local MSYS2 recipe)
+        if: runner.os == 'Linux'
         run: python tools/dev.py package --profile desktop
+      - name: Verify Linux package relocation and exports
+        if: runner.os == 'Linux'
+        run: python tools/verify_package.py .local/packages/gtracker-desktop-Linux-x86_64.zip
       - name: Preserve qualification evidence and example render
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -59,6 +70,9 @@ jobs:
             .local/ci/
             .local/demo.wav
             .local/packages/*.zip
+            .local/package-checks/**/report.json
+            .local/package-checks/**/*.log
+            .local/sid/stream-verification/report.json
             .local/build/desktop/Testing/Temporary/LastTest.log
             .local/build/desktop/editor-smoke.bmp
             .local/build/desktop/editor-unsaved-dialog.bmp

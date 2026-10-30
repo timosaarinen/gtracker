@@ -7,7 +7,7 @@ acoustic-guitar pattern editor. Compose with the keyboard, arrange reusable
 phrases, hear notes as you enter them, and export audio or shareable videos.
 It began as a music-authoring tool for *Lust of War*.
 
-**Status: Windows release candidate.** Realtime synthesis and exports have native
+**Status: Windows and Linux release preparation.** Realtime synthesis and exports have native
 and automated coverage. Physical device/listening qualification remains a release gate; see [release readiness](docs/release.md).
 
 ## Start from the repository
@@ -16,6 +16,9 @@ Install Python 3.10+, CMake 3.25+, Ninja, Bun (optional), and a C++17 toolchain.
 On Windows, use a Visual Studio developer terminal with the Windows SDK.
 The SID backend also needs MSYS2 at `C:/msys64`, with i686 GCC/SDL and UCRT64
 GCC/autotools. First setup downloads checksum-pinned dependencies.
+For Linux prerequisites, packages and WSL2 checks, see the [Linux guide](docs/linux.md).
+macOS release work is postponed until native verification on an Intel Mac;
+Apple Silicon remains unqualified.
 
 ```sh
 bun run dev

@@ -10,8 +10,8 @@ import unittest
 from tools import dev
 
 ROOT=Path(__file__).resolve().parents[1]
-EDITOR=Path(os.environ.get("GTRACKER_TEST_EDITOR",dev.executable(ROOT,"desktop","gtracker_editor")))
-CLI=Path(os.environ.get("GTRACKER_TEST_CLI",dev.executable(ROOT,"headless","gtracker_cli")))
+EDITOR=Path(os.environ.get("GTRACKER_TEST_EDITOR",dev.executable(ROOT,"desktop","gtracker_editor",require=False)))
+CLI=Path(os.environ.get("GTRACKER_TEST_CLI",dev.executable(ROOT,"headless","gtracker_cli",require=False)))
 
 
 @unittest.skipUnless(EDITOR.is_file() and CLI.is_file(),"Desktop editor/CLI not built")

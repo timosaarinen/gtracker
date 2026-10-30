@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned external SID tools under ignored .local/sid/tools (Windows)."""
+"""Prepare pinned external SID tools under ignored .local/sid/tools (Windows/Linux)."""
 from pathlib import Path
 import argparse
 import hashlib
@@ -12,6 +12,14 @@ import urllib.request
 import zipfile
 import concurrent.futures
 import shlex
+import sys
+
+def build_command(command, msys, cwd=None, env=None):
+    if msys is None:
+        subprocess.run(command, cwd=cwd, env=env, check=True)
+    else:
+        script='export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(command)
+        subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc',script],cwd=cwd,check=True)
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE = ROOT / '.local/sid'
@@ -42,8 +50,18 @@ def prepare_renderer(msys, tools):
                 if marker!=-1:
                     end=content.index('\n}',marker)
                     file.write_text(content[:marker]+' '.join(f+'();' for f in functions)+'\n'+content[end:])
-        configure=['./configure','--host=x86_64-w64-mingw32','--disable-shared','--enable-static','--prefix='+prefix]
+        configure=['./configure','--disable-shared','--enable-static','--prefix='+prefix]
+        if msys is not None: configure.append('--host=x86_64-w64-mingw32')
         if name=='libsidplayfp':configure+=['--without-exsid','--without-usbsid']
+        if msys is None:
+            env=os.environ.copy()
+            env['RESIDFP_CFLAGS']='-I'+prefix+'/include'
+            env['RESIDFP_LIBS']='-L'+prefix+'/lib -lresidfp'
+            if not (source/'Makefile').exists(): build_command(configure,None,cwd=source,env=env)
+            build_command(['make','-j8'],None,cwd=source,env=env)
+            build_command(['make','install'],None,cwd=source,env=env)
+            shutil.copy2(source/'COPYING',tools/f'{name}-COPYING.txt')
+            continue
         script='export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '
         if name=='libsidplayfp':script+='export RESIDFP_CFLAGS='+shlex.quote('-I'+prefix+'/include')+'; export RESIDFP_LIBS='+shlex.quote('-L'+prefix+'/lib -lresidfp')+'; '
         script+='cd '+shlex.quote(msys_path(source))+' && '
@@ -51,8 +69,8 @@ def prepare_renderer(msys, tools):
         script+='make -j8 && make install'
         subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc',script],check=True)
         shutil.copy2(source/'COPYING',tools/f'{name}-COPYING.txt')
-    command=['g++','-O2','-std=c++17','-I'+prefix+'/include',msys_path(ROOT/'tools/sid_render.cpp'),'-L'+prefix+'/lib','-lsidplayfp','-lresidfp','-static','-lwinpthread','-o',msys_path(tools/'gtracker_sidrender.exe')]
-    subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc','export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(command)],check=True)
+    command=helper_command(msys,tools,'sid_render.cpp','gtracker_sidrender')
+    build_command(command,msys)
     shutil.copy2(ROOT/'tools/sid_render.cpp',tools/'sid_render.cpp')
 
 def download(url, expected, target):
@@ -61,25 +79,29 @@ def download(url, expected, target):
     if hashlib.sha256(target.read_bytes()).hexdigest() != expected:
         raise RuntimeError(f'Checksum mismatch: {target}')
 
+def helper_command(msys,tools,source,name):
+    prefix=msys_path(BASE/'native')
+    suffix='.exe' if msys is not None else ''
+    flags=['-static','-lwinpthread'] if msys is not None else ['-pthread']
+    return ['g++','-O2','-std=c++17','-I'+prefix+'/include',msys_path(ROOT/'tools'/source),
+            '-L'+prefix+'/lib','-lsidplayfp','-lresidfp',*flags,'-o',msys_path(tools/(name+suffix))]
+
 def prepare_video(msys):
     """Add isolated-voice rendering without invalidating the existing audition bank."""
     tools=BASE/'tools'
     prefix=msys_path(BASE/'native')
     if not (BASE/'native/lib/libsidplayfp.a').is_file():
         raise RuntimeError('Run tools/sid_backend.py prepare before prepare-video.')
-    command=['g++','-O2','-std=c++17','-I'+prefix+'/include',msys_path(ROOT/'tools/sid_render.cpp'),'-L'+prefix+'/lib','-lsidplayfp','-lresidfp','-static','-lwinpthread','-o',msys_path(tools/'gtracker_sidvisual.exe')]
-    subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc','export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(command)],check=True)
-    (tools/'video.json').write_text(json.dumps({'version':1,'source_sha256':hashlib.sha256((ROOT/'tools/sid_render.cpp').read_bytes()).hexdigest(),'files':{'gtracker_sidvisual.exe':hashlib.sha256((tools/'gtracker_sidvisual.exe').read_bytes()).hexdigest()}},indent=2)+'\n')
-    stream_command=command.copy()
-    stream_command[stream_command.index(msys_path(ROOT/'tools/sid_render.cpp'))]=msys_path(ROOT/'tools/sid_stream.cpp')
-    stream_command[-1]=msys_path(tools/'gtracker_sidstream.exe')
-    subprocess.run([str(msys/'usr/bin/bash.exe'),'-lc','export PATH='+shlex.quote(msys_path(msys/'ucrt64/bin'))+':/usr/bin; '+shlex.join(stream_command)],check=True)
-    (tools/'stream.json').write_text(json.dumps({'version':1,'files':{'gtracker_sidstream.exe':hashlib.sha256((tools/'gtracker_sidstream.exe').read_bytes()).hexdigest()}},indent=2)+'\n')
+    for manifest,source,name in [('video.json','sid_render.cpp','gtracker_sidvisual'),('stream.json','sid_stream.cpp','gtracker_sidstream')]:
+        command=helper_command(msys,tools,source,name)
+        build_command(command,msys)
+        binary=Path(command[-1]).name
+        (tools/manifest).write_text(json.dumps({'version':1,'files':{binary:hashlib.sha256((tools/binary).read_bytes()).hexdigest()}},indent=2)+'\n')
     print('Isolated SID voice renderer prepared')
 
 def prepare(msys):
     if os.name != 'nt':
-        raise RuntimeError('This backend build recipe currently targets Windows; no other platform qualification is implied.')
+        return prepare_linux()
     BASE.mkdir(parents=True, exist_ok=True)
     goat = BASE / 'goattracker-2.77.tar.xz'
     player = BASE / 'sidplayfp.zip'
@@ -129,6 +151,40 @@ def prepare(msys):
     print(tools)
     prepare_video(msys)
 
+def prepare_linux():
+    if not sys.platform.startswith('linux'):
+        raise RuntimeError('macOS backend preparation is deferred pending native qualification.')
+    for tool in ('make','gcc','g++','sdl-config','pkg-config'):
+        if shutil.which(tool) is None: raise RuntimeError('Missing Linux build dependency: '+tool)
+    BASE.mkdir(parents=True,exist_ok=True)
+    tools=BASE/'tools'
+    tools.mkdir(exist_ok=True)
+    goat=BASE/'goattracker-2.77.tar.xz'
+    download(GOAT_URL,GOAT_HASH,goat)
+    source=BASE/'build-goat'
+    source.mkdir(exist_ok=True)
+    with tarfile.open(goat) as archive: archive.extractall(source,filter='data')
+    src=source/'goattracker-2.77+ds/src'
+    for stale in src.rglob('*.o'): stale.unlink()
+    output=src.parent/'linux'
+    output.mkdir(exist_ok=True)
+    cflags=subprocess.check_output(['sdl-config','--cflags'],text=True).strip()
+    libs=subprocess.check_output(['sdl-config','--libs'],text=True).strip()
+    subprocess.run(['make','-f','makefile.common','PREFIX=../linux/','SUFFIX=',
+        'CC=gcc','CXX=g++','CFLAGS=-Ibme -Iasm -O2 -fcommon '+cflags,
+        'LIBS='+libs,'../linux/gt2reloc','-j8'],cwd=src,check=True)
+    shutil.copy2(output/'gt2reloc',tools/'gt2reloc')
+    shutil.copy2(src.parent/'copying',tools/'GoatTracker-COPYING.txt')
+    shutil.copy2(src.parent/'readme.txt',tools/'GoatTracker-readme.txt')
+    prepare_renderer(None,tools)
+    names=['gt2reloc','gtracker_sidrender','GoatTracker-COPYING.txt','GoatTracker-readme.txt',
+           'libsidplayfp-COPYING.txt','libresidfp-COPYING.txt']
+    (tools/'backend.json').write_text(json.dumps({'goattracker':{'version':'2.77','source':GOAT_URL,'sha256':GOAT_HASH},
+        'renderer':{'adapter':1,'libsidplayfp':'3.1.1','libresidfp':'1.2.3','patch':'serial analogue table construction','sources':LIBRARIES},
+        'system_dependencies':['SDL 1.2 ABI (distribution package)'],
+        'files':{name:hashlib.sha256((tools/name).read_bytes()).hexdigest() for name in names}},indent=2)+'\n')
+    prepare_video(None)
+
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['prepare','prepare-video','check','auditions'])
@@ -136,7 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--msys',type=Path,default=Path('C:/msys64'))
     args=parser.parse_args()
     if args.command=='prepare': prepare(args.msys)
-    elif args.command=='prepare-video': prepare_video(args.msys)
+    elif args.command=='prepare-video': prepare_video(args.msys if os.name=='nt' else None)
     elif args.command=='check':
         tools=BASE/'tools'
         manifest=json.loads((tools/'backend.json').read_text())

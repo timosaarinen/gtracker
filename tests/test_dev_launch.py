@@ -8,6 +8,13 @@ from tools import dev
 
 
 class DevelopmentLaunchTests(unittest.TestCase):
+    def setUp(self):
+        # A mocked successful build needs a corresponding executable path even
+        # in a clean headless checkout; do not depend on a developer's binaries.
+        patch=mock.patch.object(dev,"executable",return_value=Path("mock-editor"))
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def test_ui_scale_is_forwarded_to_native_editor(self):
         with mock.patch.object(dev,"run_command",return_value={"returncode":0}) as run:
             self.assertEqual(dev.main(["dev","--guitar","--ui-scale","4"]),0)

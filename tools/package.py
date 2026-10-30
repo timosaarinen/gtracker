@@ -37,11 +37,13 @@ def sid_inputs(root: Path) -> list[tuple[Path, str]]:
             if Path(name).name != name or hashlib.sha256((backend/name).read_bytes()).hexdigest()!=digest:
                 raise RuntimeError("Invalid SID helper: "+name)
             result.append((backend/name,"sid-tools/"+name))
-    for name in ("goattracker-2.77.tar.xz","libsidplayfp-3.1.1.tar.gz","libresidfp-1.2.3.tar.gz","SDL-source.tar.gz"):
+    archives=["goattracker-2.77.tar.xz","libsidplayfp-3.1.1.tar.gz","libresidfp-1.2.3.tar.gz"]
+    if os.name == 'nt': archives.append('SDL-source.tar.gz')
+    for name in archives:
         result.append((root/".local/sid"/name,"sid-tools/source/"+name))
     for name in ("sid_backend.py","sid_render.cpp","sid_stream.cpp","sid_configuration.hpp"):
         result.append((root/"tools"/name,"sid-tools/source/"+name))
-    for name in ("examples/sid/heavy-mellow.sidtrk.json","schema/sid-song.schema.json","docs/sid-tracker.md","docs/realtime.md","docs/release.md","CONTRIBUTING.md"):
+    for name in ("examples/sid/heavy-mellow.sidtrk.json","schema/sid-song.schema.json","docs/sid-tracker.md","docs/realtime.md","docs/release.md","docs/linux.md","CONTRIBUTING.md"):
         result.append((root/name,name))
     return result
 
@@ -73,10 +75,14 @@ def inputs(root: Path, profile: str) -> list[tuple[Path, str]]:
         for notice in sorted(sdl_source.rglob("LICENSE*")):
             if notice.is_file():
                 result.append((notice, "licenses/sdl-vendored/" + notice.relative_to(sdl_source).as_posix()))
-    if profile=="desktop" and os.name=="nt":
+    if profile=="desktop" and (os.name=="nt" or sys.platform.startswith('linux')):
         result.extend(sid_inputs(root))
+    if profile=="desktop" and os.name=="nt":
         result.extend([(root/"packaging/start-sid.cmd","Start SID Tracker.cmd"),
                        (root/"packaging/start-guitar.cmd","Start Guitar Editor.cmd")])
+    elif profile=="desktop" and sys.platform.startswith('linux'):
+        result.extend([(root/"packaging/start-sid.sh","start-sid.sh"),
+                       (root/"packaging/start-guitar.sh","start-guitar.sh")])
     for path, _ in result:
         if not path.is_file():
             raise RuntimeError(f"Package input is missing: {path}. Configure/build the {profile} profile first.")
@@ -93,7 +99,9 @@ def write_package(root: Path, profile: str, output: Path, source: dict, renderer
         raise ValueError("Developer package output must end in .zip.")
     payloads = []
     for path, name in inputs(root, profile):
-        payloads.append((name, path.read_bytes(), path.stat().st_mode))
+        mode=path.stat().st_mode
+        if name in ('start-sid.sh','start-guitar.sh'): mode=0o100755
+        payloads.append((name, path.read_bytes(), mode))
     build_directory = root / ".local/build" / profile
     build_options = {}
     cache = build_directory / "CMakeCache.txt"
