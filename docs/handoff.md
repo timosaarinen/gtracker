@@ -1,5 +1,17 @@
 # Current handoff
 
+UI scale follow-up, 2026-10-30: 4K displays now default to maximized 200%.
+The scale selector is a normal toolbar button with a popup in both editor modes;
+the dedicated menu row is removed. Saved choices and CLI overrides still apply.
+Windows desktop editor build and four focused CTest cases (SID/guitar UI plus
+two generated fixtures) passed; the synthetic 4K 200% capture was inspected.
+No physical display/input qualification is claimed. The first due CI attempt
+passed 22 native and 105 Python tests (one POSIX-only skip), but correctly rejected
+its receipt because source changed while it ran. The stable-source rerun passed;
+its log is `.local/sid/scale-toolbar-ci.log` (before this documentation update).
+Tested source: the working change based on `bea19f9`, Windows 11 / Clang 18.1.8.
+Restart through `bun run dev` to use the rebuilt editor.
+
 4K UI follow-up, 2026-10-29: the editor now uses separately rasterized 16/24/32/48/64
 pixel fonts and matching style/layout sizes. A 4K monitor defaults to maximized
 400%; high-DPI desktop scaling otherwise selects 200%. The top UI scale menu

@@ -80,7 +80,7 @@ For everyday development from the repository, run:
 bun run dev
 bun run dev --guitar
 bun run dev examples/sid/heavy-mellow.sidtrk.json
-bun run dev --ui-scale 4
+bun run dev --ui-scale 2
 ```
 
 This configures and incrementally builds the native desktop editor, then launches
@@ -92,7 +92,7 @@ prepares missing Windows backend tools; later launches check existing tools.
 Audition cache misses prepare asynchronously in the editor; the full packaged
 audition bank is optional for repository development.
 
-The editor starts maximized at 400% on 4K displays. The **UI scale** menu changes
+The editor starts maximized at 200% on 4K displays. The **UI scale** toolbar button changes
 text, controls and tracker row sizes from 100% to 400% and remembers the choice
 in the data directory. `--ui-scale 1`, `1.5`, `2`, `3` or `4` overrides it for a
 launch. Save your song and restart the editor to pick up a rebuilt application.

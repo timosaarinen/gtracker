@@ -905,8 +905,8 @@ void layout_review(Host& host,const Arguments& args,const std::filesystem::path&
 void sid_four_k_scale(Host& host,const Arguments& args) {
     SDL_SetWindowSize(host.window,3840,2160);
     gtracker::sid::Editor editor(args.resource_dir/"examples/sid/heavy-mellow.sidtrk.json",args.resource_dir,args.data_dir/"sid-scale");
-    const auto draw=[&]{gtracker::ui::scale_menu();editor.draw();};
-    {Editor guitar(args);host.apply_scale(4);const auto guitar_draw=[&]{gtracker::ui::scale_menu();interface(guitar);};frame(host,guitar_draw);frame(host,guitar_draw);host.screenshot(std::filesystem::current_path()/"editor-guitar-4k-400.bmp");}
+    const auto draw=[&]{editor.draw();};
+    {Editor guitar(args);host.apply_scale(4);const auto guitar_draw=[&]{interface(guitar);};frame(host,guitar_draw);frame(host,guitar_draw);host.screenshot(std::filesystem::current_path()/"editor-guitar-4k-400.bmp");}
     host.apply_scale(4);frame(host,draw);frame(host,draw);
     check_ui(ImGui::GetFontSize()==64 && gtracker::ui::pixels(22)==88,"4x scale must enlarge text and tracker rows together");
     host.screenshot(std::filesystem::current_path()/"editor-sid-4k-400.bmp");

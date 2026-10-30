@@ -1914,6 +1914,8 @@ void interface(Editor& editor) {
     ImGui::TextDisabled(" /  ACOUSTIC PATTERN EDITOR");
     ImGui::SameLine();
     if(ImGui::Button("New SID Song"))editor.sid_requested=true;
+    toolbar_next(gtracker::ui::scale_label().c_str());
+    gtracker::ui::scale_button();
     const auto title=editor.document.pattern().name+(editor.document.dirty() ? " *" : "")+"  |  r"+std::to_string(editor.document.pattern().revision);
     toolbar_next(title.c_str());
     const float title_width = ImGui::CalcTextSize(title.c_str()).x;
@@ -2172,7 +2174,7 @@ struct Host {
         }
         SDL_SetWindowMinimumSize(window, 980, 680);
         const auto* display=SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(window));
-        const float automatic=display && std::max(display->w,display->h)>=3800 && std::min(display->w,display->h)>=2000?4.0f:
+        const float automatic=display && std::max(display->w,display->h)>=3800 && std::min(display->w,display->h)>=2000?2.0f:
             (SDL_GetWindowDisplayScale(window)>=1.5f?2.0f:1.0f);
         const float initial=requested_scale>0?requested_scale:automatic;
         if(initial>1)SDL_MaximizeWindow(window);
@@ -2285,7 +2287,6 @@ int run(const Arguments &args) {
         else
             ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         ImGui::NewFrame();
-        gtracker::ui::scale_menu();
         SDL_SetWindowTitle(host.window,sid_editor ? "gtracker - SID tracker" : "gtracker - acoustic pattern editor");
         if (sid_editor) {
             sid_editor->draw();

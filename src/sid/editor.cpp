@@ -1012,6 +1012,10 @@ struct Editor::Impl {
         ImGui::SameLine();
         button("Stop [F8]", [&] { stop(); });
         ImGui::SameLine();
+        if (ImGui::GetCursorPosX() + ImGui::CalcTextSize(gtracker::ui::scale_label().c_str()).x + gtracker::ui::pixels(24) > ImGui::GetWindowWidth())
+            ImGui::NewLine();
+        gtracker::ui::scale_button();
+        ImGui::SameLine();
         ImGui::Checkbox("Edit", &edit);
         ImGui::SameLine();
         ImGui::Checkbox("Follow", &follow);
